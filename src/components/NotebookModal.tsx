@@ -14,6 +14,7 @@ import {
 import { AppNotebook, CoverType } from '../lib/types';
 import { PRESET_COVERS, getCoverById } from '../lib/covers';
 import { storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface NotebookModalProps {
   isOpen: boolean;
@@ -80,7 +81,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
     try {
       setIsUploading(true);
       setErrorMsg(null);
-      const res = await storage.uploadFile(file, 'notebooks/covers');
+      const res = await r2Storage.uploadFile(file, 'notebooks/covers');
       setCustomCoverUrl(res.url);
       setCoverType('custom');
     } catch (err: any) {

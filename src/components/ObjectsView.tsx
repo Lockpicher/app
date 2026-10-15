@@ -13,11 +13,15 @@ import {
   FolderKanban,
   Edit2
 } from 'lucide-react';
-import { AppObject, AppProject } from '../lib/types';
+import { AppObject, AppProject, AppAttachment } from '../lib/types';
+import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 
 interface ObjectsViewProps {
   objects: AppObject[];
   projects: AppProject[];
+  attachments?: AppAttachment[];
+  onAttachmentCreated?: (attachment: AppAttachment) => void;
+  onAttachmentDeleted?: (id: string, path: string) => void;
   onCreateObject: (obj: Partial<AppObject>) => Promise<void>;
   onUpdateObject: (id: string, updates: Partial<AppObject>) => Promise<void>;
   onDeleteObject: (id: string) => Promise<void>;
@@ -26,6 +30,9 @@ interface ObjectsViewProps {
 export const ObjectsView: React.FC<ObjectsViewProps> = ({
   objects,
   projects,
+  attachments = [],
+  onAttachmentCreated = () => {},
+  onAttachmentDeleted = () => {},
   onCreateObject,
   onUpdateObject,
   onDeleteObject
@@ -204,6 +211,15 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                         ))}
                       </div>
                     )}
+
+                    {/* R2 Attachments for this Object */}
+                    <EntityAttachmentsSection
+                      entityId={obj.id}
+                      entityType="object"
+                      attachments={attachments}
+                      onAttachmentCreated={onAttachmentCreated}
+                      onAttachmentDeleted={onAttachmentDeleted}
+                    />
                   </div>
 
                   {/* Footer */}

@@ -15,6 +15,7 @@ import {
   FileText 
 } from 'lucide-react';
 import { storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface AudioRecorderModalProps {
   isOpen: boolean;
@@ -167,11 +168,11 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       setIsProcessing(true);
       setErrorMessage(null);
 
-      // 1. Upload to InsForge Storage
-      setProcessingStep('Subiendo audio a InsForge Storage...');
+      // 1. Upload to Cloudflare R2 / Storage
+      setProcessingStep('Subiendo audio a Cloudflare R2...');
       const fileName = `voice_${Date.now()}.${audioBlob.type.includes('mp4') ? 'mp4' : 'webm'}`;
-      const uploadResult = await storage.uploadFile(audioBlob, 'audio', fileName);
-      console.log('Audio subido exitosamente a Storage:', uploadResult.url);
+      const uploadResult = await r2Storage.uploadFile(audioBlob, 'audio', fileName);
+      console.log('Audio subido exitosamente:', uploadResult.url);
 
       // 2. Trigger server-side transcription with ElevenLabs
       setProcessingStep('Transcribiendo con ElevenLabs Scribe IA...');

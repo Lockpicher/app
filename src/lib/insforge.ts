@@ -7,6 +7,8 @@ import {
   AppObject, 
   AppLink, 
   AppAttachment,
+  AppFolder,
+  AppFileRelation,
   AppReminder,
   ProductCatalogItem,
   TaskCategory,
@@ -304,9 +306,10 @@ export const db = {
   },
 
   async updateTask(id: string, updates: Partial<AppTask>): Promise<AppTask | null> {
+    const { id: _ignored, ...cleanUpdates } = updates;
     const { data, error } = await insforge.database
       .from('app_tasks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select();
     if (error) {
@@ -652,15 +655,170 @@ export const db = {
       .insert(linksToInsert);
   },
 
-  // Adjuntos (Archivos, Imágenes y Enlaces)
-  async getAttachments(entityId?: string): Promise<AppAttachment[]> {
-    let query = insforge.database.from('app_attachments').select().order('created_at', { ascending: false });
+  // Carpetas lógicas de Archivos (Cloudflare R2 / InsForge)
+  async getFileFolders(): Promise<AppFolder[]> {
+    const { data, error } = await insforge.database
+      .from('app_folders')
+      .select('*')
+      .order('name', { ascending: true });
+    if (error) console.error('Error fetching file folders:', error);
+    return (data as unknown as AppFolder[]) || [];
+  },
+
+  async createFileFolder(folder: Partial<AppFolder>): Promise<AppFolder | null> {
+    const { data, error } = await insforge.database
+      .from('app_folders')
+      .insert([folder])
+      .select();
+    if (error) {
+      console.error('Error creating file folder:', error);
+      throw error;
+    }
+    return (data as unknown as AppFolder[])?.[0] || null;
+  },
+
+  async updateFileFolder(id: string, updates: Partial<AppFolder>): Promise<AppFolder | null> {
+    const { data, error } = await insforge.database
+      .from('app_folders')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select();
+    if (error) {
+      console.error('Error updating file folder:', error);
+      throw error;
+    }
+    return (data as unknown as AppFolder[])?.[0] || null;
+  },
+
+  async deleteFileFolder(id: string): Promise<boolean> {
+    // Unlink files in this folder before deleting
+    await insforge.database
+      .from('app_attachments')
+      .update({ folder_id: null })
+      .eq('folder_id', id);
+
+    const { error } = await insforge.database
+      .from('app_folders')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting file folder:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // Relaciones explícitas de archivos
+  async getFileRelations(fileId?: string, entityId?: string): Promise<AppFileRelation[]> {
+    let query = insforge.database.from('app_file_relations').select('*');
+    if (fileId) {
+      query = query.eq('file_id', fileId);
+    }
     if (entityId) {
       query = query.eq('entity_id', entityId);
     }
     const { data, error } = await query;
-    if (error) console.error('Error fetching attachments:', error);
-    return (data as unknown as AppAttachment[]) || [];
+    if (error) console.error('Error fetching file relations:', error);
+    return (data as unknown as AppFileRelation[]) || [];
+  },
+
+  async addFileRelation(fileId: string, entityId: string, entityType: string): Promise<AppFileRelation | null> {
+    // Check if relation already exists
+    const { data: existing } = await insforge.database
+      .from('app_file_relations')
+      .select('id')
+      .eq('file_id', fileId)
+      .eq('entity_id', entityId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return existing[0] as unknown as AppFileRelation;
+    }
+
+    const { data, error } = await insforge.database
+      .from('app_file_relations')
+      .insert([{
+        file_id: fileId,
+        entity_id: entityId,
+        entity_type: entityType
+      }])
+      .select();
+
+    if (error) {
+      console.error('Error adding file relation:', error);
+      throw error;
+    }
+    return (data as unknown as AppFileRelation[])?.[0] || null;
+  },
+
+  async removeFileRelation(relationId: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_file_relations')
+      .delete()
+      .eq('id', relationId);
+    if (error) {
+      console.error('Error removing file relation:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // Adjuntos (Archivos, Imágenes y Enlaces)
+  async getAttachments(options?: string | { 
+    entityId?: string; 
+    folderId?: string | null; 
+    isFavorite?: boolean;
+    storageProvider?: string;
+  }): Promise<AppAttachment[]> {
+    let query = insforge.database.from('app_attachments').select('*').order('created_at', { ascending: false });
+    
+    if (typeof options === 'string') {
+      query = query.eq('entity_id', options);
+    } else if (options?.entityId) {
+      query = query.eq('entity_id', options.entityId);
+    }
+    if (typeof options === 'object') {
+      if (options.folderId !== undefined) {
+        if (options.folderId === null) {
+          query = query.is('folder_id', null);
+        } else {
+          query = query.eq('folder_id', options.folderId);
+        }
+      }
+      if (options.isFavorite !== undefined) {
+        query = query.eq('is_favorite', options.isFavorite);
+      }
+      if (options.storageProvider) {
+        query = query.eq('storage_provider', options.storageProvider);
+      }
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error fetching attachments:', error);
+      return [];
+    }
+    
+    const attachments = (data as unknown as AppAttachment[]) || [];
+    
+    // Fetch relations for all retrieved files
+    try {
+      const { data: relations } = await insforge.database.from('app_file_relations').select('*');
+      if (relations && relations.length > 0) {
+        const relMap = new Map<string, AppFileRelation[]>();
+        for (const r of (relations as unknown as AppFileRelation[])) {
+          if (!relMap.has(r.file_id)) relMap.set(r.file_id, []);
+          relMap.get(r.file_id)!.push(r);
+        }
+        for (const att of attachments) {
+          att.relations = relMap.get(att.id) || [];
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load relations for attachments:', e);
+    }
+
+    return attachments;
   },
 
   async recordAttachment(attachment: Partial<AppAttachment>): Promise<AppAttachment | null> {
@@ -672,7 +830,18 @@ export const db = {
       console.error('Error recording attachment:', error);
       throw error;
     }
-    return (data as unknown as AppAttachment[])?.[0] || null;
+    const created = (data as unknown as AppAttachment[])?.[0] || null;
+    
+    // If entity_id is specified and valid, register explicit relation
+    if (created && created.entity_id && created.entity_id !== '00000000-0000-0000-0000-000000000000') {
+      try {
+        await this.addFileRelation(created.id, created.entity_id, created.entity_type);
+      } catch (e) {
+        console.warn('Auto file relation creation failed:', e);
+      }
+    }
+
+    return created;
   },
 
   async updateAttachment(id: string, updates: Partial<AppAttachment>): Promise<AppAttachment | null> {
@@ -689,6 +858,12 @@ export const db = {
   },
 
   async deleteAttachment(id: string): Promise<boolean> {
+    // Delete associated relations first
+    await insforge.database
+      .from('app_file_relations')
+      .delete()
+      .eq('file_id', id);
+
     const { error } = await insforge.database
       .from('app_attachments')
       .delete()
@@ -704,61 +879,12 @@ export const db = {
 // === STORAGE API ===
 
 /**
- * Optimiza y comprime imágenes del lado del cliente antes de enviarlas a Storage.
- * Si el archivo supera 500 KB y es una imagen raster compatible (JPG, PNG, WebP),
- * se reescala proporcionalmente a un máximo de 1920x1920 px y se comprime en WebP/JPEG (calidad 0.85).
- * Reduce archivos de 5-15MB a ~200-400KB en menos de 100ms, evitando timeouts y consumo excesivo de ancho de banda.
+ * REGLA OBLIGATORIA: Conservar bytes originales.
+ * No comprime, recomprime, redimensiona ni transforma los archivos multimedia.
  */
 export async function optimizeImageBeforeUpload(
-  file: File | Blob,
-  maxDimension = 1920,
-  quality = 0.85
+  file: File | Blob
 ): Promise<{ blob: Blob; mime: string }> {
-  const mime = file.type || '';
-  const isRasterImage = mime.startsWith('image/') && !mime.includes('svg') && !mime.includes('gif');
-  
-  if (!isRasterImage || file.size < 500 * 1024 || typeof window === 'undefined') {
-    return { blob: file, mime: file.type || 'application/octet-stream' };
-  }
-
-  try {
-    const bitmap = await createImageBitmap(file);
-    let { width, height } = bitmap;
-
-    if (width > maxDimension || height > maxDimension) {
-      if (width > height) {
-        height = Math.round((height * maxDimension) / width);
-        width = maxDimension;
-      } else {
-        width = Math.round((width * maxDimension) / height);
-        height = maxDimension;
-      }
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      bitmap.close();
-      return { blob: file, mime };
-    }
-
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close();
-
-    const targetMime = 'image/webp';
-    const compressedBlob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), targetMime, quality);
-    });
-
-    if (compressedBlob && compressedBlob.size < file.size) {
-      return { blob: compressedBlob, mime: targetMime };
-    }
-  } catch (err) {
-    console.warn('Compresión previa omitida, subiendo imagen original:', err);
-  }
-
   return { blob: file, mime: file.type || 'application/octet-stream' };
 }
 
@@ -788,11 +914,6 @@ export const storage = {
 
     const timestamp = Date.now();
     let cleanName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
-    if (optimized.mime === 'image/webp' && !cleanName.endsWith('.webp') && !cleanName.includes('.')) {
-      cleanName = cleanName + '.webp';
-    } else if (optimized.mime === 'image/webp' && !cleanName.endsWith('.webp')) {
-      cleanName = cleanName.replace(/\.[^/.]+$/, '') + '.webp';
-    }
 
     // Organización por usuario y entidad: users/${userId}/${folder}/${timestamp}_${cleanName}
     const objectPath = `users/${currentUser.id}/${folder}/${timestamp}_${cleanName}`;

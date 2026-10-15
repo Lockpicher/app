@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { r2Middleware } from './src/lib/r2VitePlugin';
 
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'cloudflare-r2-api-server',
+      configureServer(server) {
+        server.middlewares.use(r2Middleware);
+      }
+    },
     {
       name: 'elevenlabs-stt-server',
       configureServer(server) {

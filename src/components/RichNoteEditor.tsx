@@ -80,6 +80,7 @@ import {
   AppAttachment 
 } from '../lib/types';
 import { db, storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 import { AudioRecorderModal } from './AudioRecorderModal';
 
 interface RichNoteEditorProps {
@@ -260,7 +261,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const handleInsertImage = async (file: File) => {
     try {
       setIsUploadingImage(true);
-      const res = await storage.uploadFile(file, `notes/${note.id}/images`);
+      const res = await r2Storage.uploadFile(file, `notes/${note.id}/images`);
       if (editor) {
         editor
           .chain()
@@ -274,11 +275,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         entity_id: note.id,
         entity_type: 'note',
         file_name: res.name,
+        display_name: file.name,
         file_url: res.url,
-        file_path: res.path,
-        bucket_name: 'app-storage',
+        file_path: res.r2Key,
+        r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+        bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+        storage_provider: res.provider,
         file_size: res.size,
-        mime_type: res.mime
+        mime_type: res.mime,
+        migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
       });
       loadAttachments();
     } catch (e: any) {
@@ -394,17 +399,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       if (file.type.startsWith('image/')) {
         await handleInsertImage(file);
       } else {
-        // Upload document or other file
-        const res = await storage.uploadFile(file, `notes/${note.id}/files`);
+        // Upload document or other file to R2
+        const res = await r2Storage.uploadFile(file, `notes/${note.id}/files`);
         await db.recordAttachment({
           entity_id: note.id,
           entity_type: 'note',
           file_name: res.name,
+          display_name: file.name,
           file_url: res.url,
-          file_path: res.path,
-          bucket_name: 'app-storage',
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
           file_size: res.size,
-          mime_type: res.mime
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
         });
         if (editor) {
           editor.chain().focus().insertContent(`<p>📎 <a href="${res.url}" target="_blank">${res.name}</a> (${(res.size / 1024).toFixed(1)} KB)</p>`).run();

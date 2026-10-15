@@ -50,6 +50,7 @@ import {
   KubbonetList
 } from '../lib/types';
 import { db, storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -262,17 +263,30 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   // Subtasks actions
   const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSubtaskTitle.trim()) return;
+    const cleanSub = newSubtaskTitle.trim();
+    if (!cleanSub) return;
 
     if (!task?.id) {
-      alert('Guarda la tarea principal primero antes de añadir subtareas.');
+      // Tarea nueva sin guardar: mantener en estado local pendiente
+      const tempSub: AppTask = {
+        id: `temp_sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        title: cleanSub,
+        status: 'todo',
+        priority: priority,
+        parent_task_id: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setSubtasks(prev => [...prev, tempSub]);
+      setNewSubtaskTitle('');
+      setHasUnsavedChanges(true);
       return;
     }
 
     try {
       const created = await db.createSubtask({
         parent_task_id: task.id,
-        title: newSubtaskTitle.trim(),
+        title: cleanSub,
         status: 'todo',
         priority: priority
       });
@@ -287,6 +301,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleToggleSubtask = async (sub: AppTask) => {
     const nextStatus: TaskStatus = sub.status === 'completed' ? 'todo' : 'completed';
+    if (sub.id.startsWith('temp_')) {
+      setSubtasks(prev => prev.map(s => s.id === sub.id ? { ...s, status: nextStatus } : s));
+      setHasUnsavedChanges(true);
+      return;
+    }
     const updated = await db.updateTask(sub.id, {
       status: nextStatus,
       completed_at: nextStatus === 'completed' ? new Date().toISOString() : null
@@ -297,34 +316,62 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const handleDeleteSubtask = async (subId: string) => {
+    if (subId.startsWith('temp_')) {
+      setSubtasks(prev => prev.filter(s => s.id !== subId));
+      setHasUnsavedChanges(true);
+      return;
+    }
     await db.deleteTask(subId);
     setSubtasks(prev => prev.filter(s => s.id !== subId));
   };
 
   // Attachments upload action
   const handleUploadNewAttachment = async (file: File) => {
-    if (!task?.id) {
-      alert('Por favor guarda la tarea antes de adjuntar archivos.');
-      return;
-    }
     try {
       setIsUploadingAttachment(true);
-      const res = await storage.uploadFile(file, 'tasks');
+      const res = await r2Storage.uploadFile(file, 'tasks');
+      
+      if (!task?.id) {
+        // Tarea nueva sin guardar: registrar adjunto pendiente y persistir enlace al guardar la tarea
+        const tempAtt: AppAttachment = {
+          id: `temp_att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          entity_id: '',
+          entity_type: 'task',
+          file_name: res.name,
+          display_name: file.name,
+          file_url: res.url,
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
+          file_size: res.size,
+          mime_type: res.mime,
+          created_at: new Date().toISOString()
+        };
+        setAttachments(prev => [tempAtt, ...prev]);
+        setHasUnsavedChanges(true);
+        return;
+      }
+
       const recorded = await db.recordAttachment({
         entity_id: task.id,
         entity_type: 'task',
         file_name: res.name,
+        display_name: file.name,
         file_url: res.url,
-        file_path: res.path,
-        bucket_name: 'app-storage',
+        file_path: res.r2Key,
+        r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+        bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+        storage_provider: res.provider,
         file_size: res.size,
-        mime_type: res.mime
+        mime_type: res.mime,
+        migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
       });
       if (recorded) {
         setAttachments(prev => [recorded, ...prev]);
       }
     } catch (e: any) {
-      alert('Error subiendo adjunto: ' + e.message);
+      alert('Error subiendo adjunto a R2: ' + e.message);
     } finally {
       setIsUploadingAttachment(false);
     }
@@ -333,7 +380,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const handleDeleteAttachment = async (attId: string, path: string) => {
     if (!confirm('¿Eliminar este adjunto?')) return;
     await storage.deleteFile(path);
-    await db.deleteAttachment(attId);
+    if (!attId.startsWith('temp_')) {
+      await db.deleteAttachment(attId);
+    }
     setAttachments(prev => prev.filter(a => a.id !== attId));
   };
 
@@ -386,7 +435,44 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         }
       };
 
-      await onSave(taskData);
+      const savedTask = await onSave(taskData);
+      const finalTaskId = task?.id || (savedTask as any)?.id;
+
+      // Si la tarea era nueva, persistir subtareas y adjuntos pendientes
+      if (finalTaskId) {
+        const pendingSubs = subtasks.filter(s => s.id.startsWith('temp_'));
+        for (const s of pendingSubs) {
+          try {
+            await db.createSubtask({
+              parent_task_id: finalTaskId,
+              title: s.title,
+              status: s.status,
+              priority: s.priority
+            });
+          } catch (errSub) {
+            console.error('Error guardando subtarea pendiente:', errSub);
+          }
+        }
+
+        const pendingAtts = attachments.filter(a => a.id.startsWith('temp_'));
+        for (const a of pendingAtts) {
+          try {
+            await db.recordAttachment({
+              entity_id: finalTaskId,
+              entity_type: 'task',
+              file_name: a.file_name,
+              file_url: a.file_url,
+              file_path: a.file_path,
+              bucket_name: a.bucket_name,
+              file_size: a.file_size,
+              mime_type: a.mime_type
+            });
+          } catch (errAtt) {
+            console.error('Error guardando adjunto pendiente:', errAtt);
+          }
+        }
+      }
+
       setHasUnsavedChanges(false);
       onClose();
     } catch (err: any) {

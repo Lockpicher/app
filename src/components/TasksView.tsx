@@ -52,7 +52,7 @@ interface TasksViewProps {
   projects: AppProject[];
   notes: AppNote[];
   categories: TaskCategory[];
-  onCreateTask: (task: Partial<AppTask>) => Promise<void>;
+  onCreateTask: (task: Partial<AppTask>) => Promise<AppTask | null | void>;
   onUpdateTask: (id: string, updates: Partial<AppTask>) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
   onNavigateToNote: (noteId: string) => void;
@@ -835,10 +835,11 @@ export const TasksView: React.FC<TasksViewProps> = ({
         onSave={async (taskData) => {
           if (modalTask) {
             await onUpdateTask(modalTask.id, taskData);
+            return modalTask;
           } else {
-            await onCreateTask(taskData);
+            const created = await onCreateTask(taskData);
+            return (created as any) || undefined;
           }
-          setIsModalOpen(false);
         }}
         onDelete={async (id) => {
           await onDeleteTask(id);

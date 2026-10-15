@@ -272,18 +272,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={() => onSelectView('storage')}
+          onClick={() => onSelectView('files')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
-            currentView === 'storage'
-              ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
+            currentView === 'files'
+              ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
               : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
           }`}
         >
           <span className="flex items-center gap-2.5">
             <HardDrive className="w-4 h-4 text-cyan-400" />
-            Almacenamiento (Storage)
+            <span className="font-semibold">Archivos</span>
           </span>
-          <span className="text-[10px] bg-cyan-950/60 text-cyan-300 border border-cyan-800/40 px-1 rounded">
+          <span className="text-[10px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 px-1.5 py-0.5 rounded font-mono font-medium">
+            R2
+          </span>
+        </button>
+
+        <button
+          onClick={() => onSelectView('storage')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'storage'
+              ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
+              : 'text-gray-400 hover:bg-[#1c1c24] hover:text-gray-300'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Database className="w-4 h-4 text-gray-400" />
+            InsForge Storage (Legacy)
+          </span>
+          <span className="text-[10px] bg-gray-900 text-gray-400 border border-gray-800 px-1 rounded">
             app-storage
           </span>
         </button>

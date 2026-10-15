@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { AppProject, AppTask, AppNote, AppAttachment } from '../lib/types';
 import { db, storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -194,23 +195,27 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       const isImg = file.type.startsWith('image/');
       const folder = `projects/${project.id}/${isImg ? 'images' : 'documents'}`;
       
-      const res = await storage.uploadFile(file, folder);
+      const res = await r2Storage.uploadFile(file, folder);
 
       // Record in app_attachments table
       const recorded = await db.recordAttachment({
         entity_id: project.id,
         entity_type: 'project',
         file_name: res.name,
+        display_name: file.name,
         file_url: res.url,
-        file_path: res.path,
-        bucket_name: 'app-storage',
+        file_path: res.r2Key,
+        r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+        bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+        storage_provider: res.provider,
         file_size: res.size,
-        mime_type: res.mime
+        mime_type: res.mime,
+        migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
       });
 
       if (recorded) {
         setAttachments(prev => [recorded, ...prev]);
-        setSuccessMessage(`Archivo "${res.name}" subido correctamente.`);
+        setSuccessMessage(`Archivo "${res.name}" subido a ${res.provider === 'r2' ? 'Cloudflare R2' : 'Storage'}.`);
         setTimeout(() => setSuccessMessage(null), 3000);
       }
     } catch (err: any) {

@@ -10,6 +10,7 @@ import { ProjectsView } from './components/ProjectsView';
 import { ObjectsView } from './components/ObjectsView';
 import { GraphView } from './components/GraphView';
 import { StorageView } from './components/StorageView';
+import { FilesManagerView } from './components/FilesManagerView';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
@@ -22,6 +23,7 @@ import {
   AppObject, 
   AppLink, 
   AppAttachment, 
+  AppFolder,
   TaskCategory,
   ViewMode 
 } from './lib/types';
@@ -40,6 +42,7 @@ export function App() {
   const [objects, setObjects] = useState<AppObject[]>([]);
   const [links, setLinks] = useState<AppLink[]>([]);
   const [attachments, setAttachments] = useState<AppAttachment[]>([]);
+  const [folders, setFolders] = useState<AppFolder[]>([]);
   const [categories, setCategories] = useState<TaskCategory[]>([]);
 
   // Selection & Editor States
@@ -56,7 +59,7 @@ export function App() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [nbs, n, rems, p, t, o, l, a, cats] = await Promise.all([
+      const [nbs, n, rems, p, t, o, l, a, flds, cats] = await Promise.all([
         db.getNotebooks(),
         db.getNotes(),
         db.getReminders(),
@@ -65,6 +68,7 @@ export function App() {
         db.getObjects(),
         db.getLinks(),
         db.getAttachments(),
+        db.getFileFolders(),
         db.getTaskCategories()
       ]);
 
@@ -91,6 +95,7 @@ export function App() {
       setObjects(o);
       setLinks(l);
       setAttachments(a);
+      setFolders(flds);
       setCategories(cats);
 
       if (n.length > 0 && !selectedNoteId) {
@@ -336,11 +341,12 @@ export function App() {
   // ==========================================
   // TASKS ACTIONS
   // ==========================================
-  const handleCreateTask = async (task: Partial<AppTask>) => {
+  const handleCreateTask = async (task: Partial<AppTask>): Promise<AppTask | null> => {
     const created = await db.createTask(task);
     if (created) {
       setTasks(prev => [created, ...prev]);
     }
+    return created;
   };
 
   const handleCreateTaskFromNote = async (title: string, noteId: string) => {
@@ -434,17 +440,23 @@ export function App() {
     setObjects(prev => prev.filter(o => o.id !== id));
   };
 
-  // ==========================================
-  // ATTACHMENTS ACTIONS
-  // ==========================================
   const handleAttachmentCreated = (attachment: AppAttachment) => {
     setAttachments(prev => [attachment, ...prev]);
+  };
+
+  const handleAttachmentUpdated = (updated: AppAttachment) => {
+    setAttachments(prev => prev.map(a => a.id === updated.id ? updated : a));
   };
 
   const handleAttachmentDeleted = async (id: string, path: string) => {
     await storage.deleteFile(path);
     await db.deleteAttachment(id);
     setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleFoldersChanged = async () => {
+    const flds = await db.getFileFolders();
+    setFolders(flds);
   };
 
   // ==========================================
@@ -643,6 +655,9 @@ export function App() {
               <ObjectsView
                 objects={objects}
                 projects={projects}
+                attachments={attachments}
+                onAttachmentCreated={handleAttachmentCreated}
+                onAttachmentDeleted={handleAttachmentDeleted}
                 onCreateObject={handleCreateObject}
                 onUpdateObject={handleUpdateObject}
                 onDeleteObject={handleDeleteObject}
@@ -661,7 +676,20 @@ export function App() {
               />
             )}
 
-            {/* Storage View */}
+            {/* Files View (Cloudflare R2 + InsForge) */}
+            {currentView === 'files' && (
+              <FilesManagerView
+                attachments={attachments}
+                folders={folders}
+                onAttachmentCreated={handleAttachmentCreated}
+                onAttachmentUpdated={handleAttachmentUpdated}
+                onAttachmentDeleted={handleAttachmentDeleted}
+                onFoldersChanged={handleFoldersChanged}
+                onNavigateToEntity={handleNavigateToEntity}
+              />
+            )}
+
+            {/* Storage View (Legacy) */}
             {currentView === 'storage' && (
               <StorageView
                 attachments={attachments}

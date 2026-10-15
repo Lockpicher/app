@@ -199,16 +199,45 @@ export interface AppLink {
   created_at: string;
 }
 
+export interface AppFolder {
+  id: string;
+  name: string;
+  parent_id?: string | null;
+  color?: string;
+  icon?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AppFileRelation {
+  id: string;
+  file_id: string;
+  entity_id: string;
+  entity_type: 'note' | 'task' | 'project' | 'object' | string;
+  created_at: string;
+}
+
 export interface AppAttachment {
   id: string;
   entity_id: string;
   entity_type: 'note' | 'task' | 'project' | 'object' | 'storage_library' | 'notebook' | string;
   file_name: string;
+  display_name?: string;
   file_url: string;
   file_path: string;
+  r2_key?: string;
   bucket_name: string;
+  storage_provider?: 'r2' | 'insforge' | 'external';
+  folder_id?: string | null;
   file_size?: number;
   mime_type?: string;
+  etag?: string;
+  is_favorite?: boolean;
+  tags?: string[];
+  migration_status?: 'pending' | 'migrated' | 'verified' | 'failed';
+  verified_at?: string | null;
+  metadata?: Record<string, any>;
+  relations?: AppFileRelation[];
   created_at: string;
 }
 
@@ -225,8 +254,10 @@ export type ViewMode =
   | 'all_notes'    // Todas las notas
   | 'favorites'    // Notas favoritas
   | 'reminders'    // Recordatorios
-  | 'tasks'        // Tareas (Kanban)
+  | 'calendar'     // Calendario Central Integrado
+  | 'tasks'        // Tareas (ClickUp / Kanban)
   | 'projects'     // Proyectos
   | 'objects'      // Objetos & Entidades
   | 'graph'        // Vista de Red
-  | 'storage';     // Almacenamiento
+  | 'files'        // Nueva sección central Archivos (Cloudflare R2)
+  | 'storage';     // Almacenamiento (compatibilidad)
