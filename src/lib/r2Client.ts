@@ -8,6 +8,26 @@ export interface R2Status {
   publicUrl: string | null;
 }
 
+export interface R2ConnectionTest {
+  connected: boolean;
+  bucket: string;
+  endpoint: string;
+  error?: string;
+}
+
+export interface R2MigrationResult {
+  success: boolean;
+  progress: {
+    totalObjects: number;
+    migratedCount: number;
+    skippedCount: number;
+    failedCount: number;
+    bytesMigrated: number;
+    logs: string[];
+  };
+  errors: Array<{ bucket: string; key: string; error: string }>;
+}
+
 export const r2Storage = {
   /**
    * Consulta el estado de configuración de Cloudflare R2 en el backend
@@ -22,6 +42,39 @@ export const r2Storage = {
     } catch {
       return { configured: false, bucket: '', hasPublicUrl: false, publicUrl: null };
     }
+  },
+
+  /**
+   * Ejecuta una prueba de conexión en vivo con Cloudflare R2
+   */
+  async testConnection(): Promise<R2ConnectionTest> {
+    try {
+      const res = await fetch('/api/r2/test-connection', { method: 'POST' });
+      return await res.json();
+    } catch (err: any) {
+      return {
+        connected: false,
+        bucket: '',
+        endpoint: '',
+        error: err.message || 'Error de red contactando al servidor Vite'
+      };
+    }
+  },
+
+  /**
+   * Inicia la sincronización y migración de archivos existentes a Cloudflare R2
+   */
+  async runMigration(dryRun = false): Promise<R2MigrationResult> {
+    const res = await fetch('/api/r2/migrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dryRun })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al ejecutar sincronización');
+    }
+    return data;
   },
 
   /**

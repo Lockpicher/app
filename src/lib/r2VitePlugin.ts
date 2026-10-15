@@ -6,7 +6,8 @@ import {
   deleteR2Object, 
   headR2Object,
   uploadBufferToR2,
-  getR2Client
+  getR2Client,
+  testR2Connection
 } from './r2Server';
 
 async function parseJsonBody(req: IncomingMessage): Promise<any> {
@@ -57,6 +58,21 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
       hasPublicUrl: Boolean(publicUrl),
       publicUrl: publicUrl ? publicUrl.replace(/\/$/, '') : null
     });
+  }
+
+  // 1.1 Test connection endpoint
+  if (pathname === '/api/r2/test-connection' && (req.method === 'GET' || req.method === 'POST')) {
+    testR2Connection()
+      .then((testRes) => {
+        sendJson(res, 200, testRes);
+      })
+      .catch((err) => {
+        sendJson(res, 500, {
+          connected: false,
+          error: err.message || 'Error probando conexión a R2'
+        });
+      });
+    return;
   }
 
   // 2. Presigned upload URL

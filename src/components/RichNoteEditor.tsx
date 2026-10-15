@@ -247,13 +247,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     }
   };
 
-  // Auto-save debounce
+  // Auto-save debounce (800ms for fast responsiveness without freezing)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (saveStatus === 'dirty') {
         handleSave();
       }
-    }, 1500);
+    }, 800);
     return () => clearTimeout(timer);
   }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, tagsInput]);
 

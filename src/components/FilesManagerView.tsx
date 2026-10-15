@@ -29,7 +29,10 @@ import {
   FolderOpen,
   ArrowUpDown,
   MoreVertical,
-  Plus
+  Plus,
+  AlertCircle,
+  CheckCircle2,
+  ShieldAlert
 } from 'lucide-react';
 import { AppAttachment, AppFolder } from '../lib/types';
 import { db } from '../lib/insforge';
@@ -89,6 +92,59 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   // Tags editing
   const [editingTagsFile, setEditingTagsFile] = useState<AppAttachment | null>(null);
   const [tagInput, setTagInput] = useState('');
+
+  // Sincronización y Prueba de Conexión R2
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResultModal, setSyncResultModal] = useState<{
+    open: boolean;
+    type: 'connection' | 'sync';
+    connected?: boolean;
+    bucket?: string;
+    endpoint?: string;
+    error?: string;
+    details?: any;
+  }>({ open: false, type: 'connection' });
+
+  const handleTestAndSync = async () => {
+    setIsSyncing(true);
+    try {
+      // 1. Probar conectividad con Cloudflare R2
+      const testRes = await r2Storage.testConnection();
+      if (!testRes.connected) {
+        setSyncResultModal({
+          open: true,
+          type: 'connection',
+          connected: false,
+          bucket: testRes.bucket,
+          endpoint: testRes.endpoint,
+          error: testRes.error
+        });
+        return;
+      }
+
+      // 2. Ejecutar sincronización y migración si está conectado
+      const migrationRes = await r2Storage.runMigration(false);
+      setSyncResultModal({
+        open: true,
+        type: 'sync',
+        connected: true,
+        bucket: testRes.bucket,
+        endpoint: testRes.endpoint,
+        details: migrationRes
+      });
+      // Recargar archivos
+      onFoldersChanged();
+    } catch (err: any) {
+      setSyncResultModal({
+        open: true,
+        type: 'sync',
+        connected: false,
+        error: err.message || 'Error durante la sincronización'
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -323,6 +379,20 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
               }
             }}
           />
+
+          <button
+            onClick={handleTestAndSync}
+            disabled={isSyncing}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition ${
+              isSyncing 
+                ? 'bg-amber-950/60 text-amber-300 border-amber-700/50 cursor-wait'
+                : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-700/50 hover:border-emerald-600 shadow-sm'
+            }`}
+            title="Verificar conexión con Cloudflare R2 y sincronizar archivos existentes"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : 'text-emerald-400'}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar R2'}</span>
+          </button>
 
           <button
             onClick={() => {
@@ -1008,6 +1078,111 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                 className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white"
               >
                 Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync & Connection Test Diagnosis Modal */}
+      {syncResultModal.open && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1b1b26] border border-[#2c2c3d] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                {syncResultModal.connected ? (
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-red-400" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {syncResultModal.connected
+                      ? 'Cloudflare R2: Conexión Exitosa'
+                      : 'Error de Sincronización con Cloudflare R2'}
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Diagnóstico en vivo de credenciales y bucket
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSyncResultModal(prev => ({ ...prev, open: false }))}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error or Success details */}
+            {syncResultModal.error && (
+              <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-800/50 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-red-300">
+                  <ShieldAlert className="w-4 h-4 text-red-400" />
+                  Detalle del Error Detectado:
+                </div>
+                <p className="text-xs text-red-200/90 font-mono bg-black/40 p-2.5 rounded-lg break-words">
+                  {syncResultModal.error}
+                </p>
+              </div>
+            )}
+
+            {/* Connection configuration summary */}
+            <div className="bg-[#14141e] border border-[#242436] rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-gray-400">
+                <span>Bucket Configurado:</span>
+                <span className="font-mono text-cyan-300 font-semibold">
+                  {syncResultModal.bucket || '(no definido)'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-gray-400">
+                <span>Endpoint R2:</span>
+                <span className="font-mono text-gray-200 truncate max-w-[260px]">
+                  {syncResultModal.endpoint || '(no definido)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Sync Progress / Migration logs if successful */}
+            {syncResultModal.details && (
+              <div className="bg-[#14141e] border border-emerald-900/50 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex justify-between text-emerald-300 font-semibold">
+                  <span>Archivos Migrados a R2:</span>
+                  <span>{syncResultModal.details.progress?.migratedCount || 0}</span>
+                </div>
+                <div className="flex justify-between text-gray-400">
+                  <span>Archivos Ya en R2 (Omitidos):</span>
+                  <span>{syncResultModal.details.progress?.skippedCount || 0}</span>
+                </div>
+                {syncResultModal.details.progress?.logs && (
+                  <div className="mt-2 max-h-36 overflow-y-auto font-mono text-[11px] text-gray-400 bg-black/40 p-2 rounded">
+                    {syncResultModal.details.progress.logs.map((log: string, idx: number) => (
+                      <div key={idx}>{log}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!syncResultModal.connected && (
+              <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-[11px] text-amber-200 space-y-1">
+                <p className="font-semibold text-amber-300">💡 Instrucciones para solucionar:</p>
+                <p>1. Crea o abre el archivo <code className="bg-black/50 px-1 py-0.5 rounded text-amber-100">.env</code> en <code className="bg-black/50 px-1 py-0.5 rounded text-amber-100">C:\Antigravity</code>.</p>
+                <p>2. Define <code className="text-white">R2_ENDPOINT</code> (o <code className="text-white">R2_ACCOUNT_ID</code>), <code className="text-white">R2_ACCESS_KEY_ID</code>, <code className="text-white">R2_SECRET_ACCESS_KEY</code> y <code className="text-white">R2_BUCKET_NAME</code>.</p>
+                <p>3. Vuelve a hacer clic en <strong>Sincronizar R2</strong>.</p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setSyncResultModal(prev => ({ ...prev, open: false }))}
+                className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-white"
+              >
+                Entendido
               </button>
             </div>
           </div>
