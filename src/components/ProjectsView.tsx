@@ -149,6 +149,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </p>
                   )}
 
+                  {/* Project Tags */}
+                  {project.tags && project.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {project.tags.map((tag, idx) => (
+                        <span 
+                          key={idx} 
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-[#161622] text-indigo-300 border border-indigo-500/20 font-medium"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Progress Bar */}
                   <div className="space-y-1.5 mb-4">
                     <div className="flex items-center justify-between text-[11px] text-gray-400">

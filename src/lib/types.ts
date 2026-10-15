@@ -9,6 +9,7 @@ export interface AppProject {
   start_date?: string;
   due_date?: string;
   progress: number;
+  tags?: string[];
   properties?: Record<string, any>;
   created_at: string;
   updated_at: string;

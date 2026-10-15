@@ -134,6 +134,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   // Drag & drop file overlay
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [lightboxImgUrl, setLightboxImgUrl] = useState<string | null>(null);
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
 
   // TipTap Editor initialization
@@ -484,16 +485,9 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              setSaveStatus('dirty');
-            }}
-            placeholder="Título de la nota..."
-            className="flex-1 bg-transparent text-base font-bold text-white outline-none placeholder-gray-500 font-sans"
-          />
+          <span className="text-xs font-semibold text-gray-400 truncate max-w-[200px] sm:max-w-xs">
+            {title || 'Nota sin título'}
+          </span>
         </div>
 
         {/* Notebook & Project Selectors */}
@@ -898,38 +892,63 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
       {/* Main Content Area + Collapsible Inspector Sidebar */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Editor Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 max-w-4xl mx-auto w-full">
-          {/* Note Tags and Category Header */}
-          <div className="mb-4 flex items-center justify-between text-xs text-gray-400 pb-2 border-b border-[#20202d] flex-wrap gap-2">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-              <Tag className="w-3.5 h-3.5 text-gray-500" />
-              <input
-                type="text"
-                value={tagsInput}
-                onChange={(e) => {
-                  setTagsInput(e.target.value);
-                  setSaveStatus('dirty');
-                }}
-                placeholder="Etiquetas separadas por coma..."
-                className="bg-transparent text-xs text-gray-300 outline-none w-full placeholder-gray-600"
-              />
-            </div>
-            <span className="font-mono text-[10px] text-gray-500">
-              {new Date(note.updated_at).toLocaleDateString()}
-            </span>
-          </div>
+        {/* Editor Body - Centered Document Layout (Notion / Craft style) */}
+        <div 
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            if (target && target.tagName === 'IMG') {
+              const src = target.getAttribute('src');
+              if (src) setLightboxImgUrl(src);
+            }
+          }}
+          className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 sm:py-10"
+        >
+          {/* Centered Document Column (840px max width) */}
+          <div className="max-w-[840px] mx-auto w-full space-y-6">
+            {/* Note Title inside the document column */}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setSaveStatus('dirty');
+              }}
+              placeholder="Título de la nota..."
+              className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-white outline-none placeholder-gray-600 font-sans tracking-tight leading-tight"
+            />
 
-          {/* TipTap Rich Text Area */}
-          <div 
-            onClick={() => {
-              if (editor && !editor.isFocused) {
-                editor.commands.focus('end');
-              }
-            }}
-            className="w-full min-h-[500px] text-gray-100 cursor-text pb-40"
-          >
-            <EditorContent editor={editor} className="outline-none" />
+            {/* Note Tags, Date and Metadata Header aligned with title axis */}
+            <div className="flex items-center justify-between text-xs text-gray-400 pb-3 border-b border-[#222232] flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <Tag className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value);
+                    setSaveStatus('dirty');
+                  }}
+                  placeholder="Añadir etiquetas separadas por coma..."
+                  className="bg-transparent text-xs text-gray-300 outline-none w-full placeholder-gray-600 focus:placeholder-gray-500"
+                />
+              </div>
+              <div className="flex items-center gap-2 font-mono text-[11px] text-gray-400">
+                <Calendar className="w-3 h-3 text-gray-400" />
+                <span>{new Date(note.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              </div>
+            </div>
+
+            {/* TipTap Rich Text Area */}
+            <div 
+              onClick={() => {
+                if (editor && !editor.isFocused) {
+                  editor.commands.focus('end');
+                }
+              }}
+              className="w-full min-h-[500px] text-gray-100 cursor-text pb-40"
+            >
+              <EditorContent editor={editor} className="outline-none" />
+            </div>
           </div>
         </div>
 
@@ -1072,33 +1091,92 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
               {/* Attachments Tab */}
               {sidebarTab === 'attachments' && (
-                <div className="space-y-3">
-                  <p className="text-[11px] text-gray-400">
-                    Archivos subidos a InsForge Storage para esta nota:
-                  </p>
-                  {attachments.map(att => (
-                    <div
-                      key={att.id}
-                      className="p-2.5 rounded-lg bg-[#161622] border border-[#252538] flex items-center justify-between text-xs"
-                    >
-                      <div className="overflow-hidden pr-2">
-                        <p className="text-white font-medium truncate">{att.file_name}</p>
-                        <span className="text-[10px] text-gray-400 font-mono">
-                          {((att.file_size || 0) / 1024).toFixed(1)} KB
-                        </span>
-                      </div>
-                      <a
-                        href={att.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 text-cyan-400 hover:text-cyan-300"
-                        title="Abrir archivo"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
-                  ))}
-                </div>
+                  <div className="space-y-3">
+                    <p className="text-[11px] text-gray-400">
+                      Archivos subidos a Cloudflare R2 / Storage para esta nota:
+                    </p>
+                    {attachments.map(att => {
+                      const isImg = att.mime_type?.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(att.file_name);
+                      return (
+                        <div
+                          key={att.id}
+                          className="p-2.5 rounded-lg bg-[#161622] border border-[#252538] flex flex-col gap-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 overflow-hidden pr-2">
+                              {isImg ? (
+                                <img
+                                  src={att.file_url}
+                                  alt=""
+                                  onClick={() => setLightboxImgUrl(att.file_url)}
+                                  className="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 border border-[#2b2b3e] flex-shrink-0"
+                                />
+                              ) : (
+                                <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              )}
+                              <div className="overflow-hidden">
+                                <p className="text-white font-medium truncate text-xs">{att.display_name || att.file_name}</p>
+                                <span className="text-[10px] text-gray-400 font-mono">
+                                  {((att.file_size || 0) / 1024).toFixed(1)} KB
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={att.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 text-cyan-400 hover:text-cyan-300"
+                                title="Abrir archivo original"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Quick Action: Insert in note content */}
+                          {isImg ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editor) {
+                                  editor
+                                    .chain()
+                                    .focus()
+                                    .setImage({ src: att.file_url, alt: att.display_name || att.file_name })
+                                    .insertContent('<p></p>')
+                                    .run();
+                                  setSaveStatus('dirty');
+                                }
+                              }}
+                              className="w-full py-1 px-2 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-medium transition flex items-center justify-center gap-1.5"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Insertar en la nota
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editor) {
+                                  editor
+                                    .chain()
+                                    .focus()
+                                    .insertContent(`<p>📎 <a href="${att.file_url}" target="_blank">${att.display_name || att.file_name}</a></p>`)
+                                    .run();
+                                  setSaveStatus('dirty');
+                                }
+                              }}
+                              className="w-full py-1 px-2 rounded bg-[#20202e] hover:bg-[#28283a] text-gray-300 border border-[#2b2b3e] text-[11px] font-medium transition flex items-center justify-center gap-1.5"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Insertar enlace en nota
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
               )}
             </div>
           </div>
@@ -1123,6 +1201,41 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           }
         }}
       />
+
+      {/* Lightbox Modal for Embedded Images */}
+      {lightboxImgUrl && (
+        <div 
+          onClick={() => setLightboxImgUrl(null)}
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn cursor-zoom-out"
+        >
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center">
+            <button
+              onClick={() => setLightboxImgUrl(null)}
+              className="absolute -top-10 right-0 text-white/80 hover:text-white p-1 rounded-lg bg-black/50"
+            >
+              ✕ Cerrar
+            </button>
+            <img 
+              src={lightboxImgUrl} 
+              alt="Vista previa" 
+              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()} 
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <a
+                href={lightboxImgUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1.5 transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Ver tamaño completo
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

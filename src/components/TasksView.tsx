@@ -637,6 +637,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                 </a>
                               )}
 
+                              {/* Task Tags */}
+                              {t.tags && t.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {t.tags.map((tag, idx) => (
+                                    <span 
+                                      key={idx} 
+                                      className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1e2c] text-indigo-300 border border-indigo-500/20 font-medium"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
                               {/* Footer Metadata */}
                               <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-[#232332]">
                                 {/* Subtasks Counter Pill */}
@@ -775,6 +789,23 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                     >
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
+                                  )}
+
+                                  {/* Tags */}
+                                  {t.tags && t.tags.length > 0 && (
+                                    <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+                                      {t.tags.slice(0, 3).map((tag, idx) => (
+                                        <span 
+                                          key={idx} 
+                                          className="text-[9px] px-1.5 py-0.2 rounded bg-[#1e1e2c] text-indigo-300 border border-indigo-500/20 font-medium"
+                                        >
+                                          #{tag}
+                                        </span>
+                                      ))}
+                                      {t.tags.length > 3 && (
+                                        <span className="text-[9px] text-gray-500">+{t.tags.length - 3}</span>
+                                      )}
+                                    </div>
                                   )}
 
                                   {/* Subtasks Count Badge */}

@@ -104,6 +104,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [dueDate, setDueDate] = useState<string>('');
   const [taskUrl, setTaskUrl] = useState<string>('');
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
+  const [tagsInput, setTagsInput] = useState<string>('');
   
   // Markdown Editor / Preview Mode
   const [descViewMode, setDescViewMode] = useState<'edit' | 'preview'>('edit');
@@ -136,6 +137,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setDueDate(task.due_date ? task.due_date.slice(0, 16) : '');
         setTaskUrl(task.url || '');
         setThumbnailUrl(task.thumbnail_url || '');
+        setTagsInput((task.tags || []).join(', '));
 
         // Fetch subtasks and attachments for existing task
         loadSubtasks(task.id);
@@ -155,6 +157,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setDueDate('');
         setTaskUrl('');
         setThumbnailUrl('');
+        setTagsInput('');
         setSubtasks([]);
         setAttachments([]);
       }
@@ -430,6 +433,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      const parsedTags = tagsInput
+        .split(',')
+        .map(t => t.trim().replace(/^#/, ''))
+        .filter(Boolean);
+
       const taskData: Partial<AppTask> = {
         title: cleanTitle,
         description: description.trim() || undefined,
@@ -443,6 +451,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         product_id: task?.product_id || null,
         url: taskUrl.trim() || null,
         thumbnail_url: thumbnailUrl.trim() || null,
+        tags: parsedTags,
         scheduled_date: scheduledDate || null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         completed_at: status === 'completed' ? new Date().toISOString() : null,
@@ -882,6 +891,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     </label>
                   </div>
                 </div>
+              </div>
+
+              {/* Etiquetas / Tags */}
+              <div className="bg-[#14141c] p-4 rounded-xl border border-[#252535] space-y-1.5">
+                <label className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                  Etiquetas (separadas por coma)
+                </label>
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="ej. diseño, backend, urgente, sprint-3..."
+                  className="w-full px-3 py-2 bg-[#101015] border border-[#2a2a3b] focus:border-indigo-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none transition"
+                />
               </div>
 
               {/* Fechas: Planificar Día y Fecha Límite */}

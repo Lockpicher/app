@@ -137,7 +137,7 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 md:gap-8">
+          <div className="flex flex-wrap gap-6 items-start">
             {filteredNotebooks.map((nb) => {
               const nbNotes = notes.filter(n => n.notebook_id === nb.id && !n.is_archived);
               const preset = getCoverById(nb.cover_url);
@@ -146,10 +146,10 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
                 <div
                   key={nb.id}
                   onClick={() => onOpenNotebook(nb)}
-                  className="flex flex-col items-center group cursor-pointer select-none"
+                  className="w-[144px] flex flex-col items-center group cursor-pointer select-none"
                 >
-                  {/* 3:4 Aspect Ratio Cover Card with Notebook Texture */}
-                  <div className="w-full aspect-[3/4] rounded-2xl shadow-lg relative overflow-hidden transition-all duration-300 transform group-hover:-translate-y-2 group-hover:shadow-2xl border border-white/10 group-hover:border-blue-500/50 flex flex-col justify-between p-4">
+                  {/* 144px x 200px Dimension Notebook Cover Card */}
+                  <div className="w-[144px] h-[200px] rounded-2xl shadow-lg relative overflow-hidden transition-all duration-300 transform group-hover:-translate-y-2 group-hover:shadow-2xl border border-white/10 group-hover:border-blue-500/50 flex flex-col justify-between p-3.5 flex-shrink-0">
                     {/* Background: custom image, solid color, or preset gradient */}
                     {nb.cover_type === 'custom' && nb.cover_url ? (
                       <img

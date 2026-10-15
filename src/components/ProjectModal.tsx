@@ -63,6 +63,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [progress, setProgress] = useState(0);
+  const [tagsInput, setTagsInput] = useState('');
 
   // Attachments State
   const [attachments, setAttachments] = useState<AppAttachment[]>([]);
@@ -95,6 +96,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setStartDate(project.start_date ? project.start_date.slice(0, 10) : '');
         setDueDate(project.due_date ? project.due_date.slice(0, 10) : '');
         setProgress(project.progress ?? 0);
+        setTagsInput((project.tags || []).join(', '));
         loadAttachments(project.id);
       } else {
         setTitle('');
@@ -105,6 +107,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setStartDate('');
         setDueDate('');
         setProgress(0);
+        setTagsInput('');
         setAttachments([]);
       }
       setHasUnsavedChanges(false);
@@ -152,6 +155,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setIsSubmitting(true);
       setErrorMessage(null);
 
+      const parsedTags = tagsInput
+        .split(',')
+        .map(t => t.trim().replace(/^#/, ''))
+        .filter(Boolean);
+
       const projectData: Partial<AppProject> = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -160,7 +168,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         color,
         start_date: startDate || undefined,
         due_date: dueDate || undefined,
-        progress: Number(progress) || 0
+        progress: Number(progress) || 0,
+        tags: parsedTags
       };
 
       await onSave(projectData);
@@ -603,6 +612,23 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Tags / Etiquetas */}
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                  Etiquetas (separadas por coma)
+                </label>
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="ej. marketing, diseño, urgente, sprint-1"
+                  className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
+                />
               </div>
 
               {/* Progress Slider */}
