@@ -918,66 +918,47 @@ export const storage = {
     // Organización por usuario y entidad: users/${userId}/${folder}/${timestamp}_${cleanName}
     const objectPath = `users/${currentUser.id}/${folder}/${timestamp}_${cleanName}`;
 
-    // 3. Intento A: Subida estándar a través del SDK de InsForge
+    // Subida directa de alta resiliencia vía PUT con FormData, Bearer Token y timeout de 120s
     let uploadSuccess = false;
     let uploadedKey = objectPath;
     let rawUrl = '';
 
+    console.log('Ejecutando subida directa a Storage:', objectPath);
+    const formData = new FormData();
+    formData.append('file', fileToUpload, cleanName);
+
+    const targetEndpoint = `${INSFORGE_BASE_URL}/api/storage/buckets/${STORAGE_BUCKET}/objects/${encodeURIComponent(objectPath)}`;
+    const controller = new AbortController();
+    const directTimer = setTimeout(() => controller.abort(), 120000); // 120 segundos para archivos grandes
+
     try {
-      const { data, error } = await insforge.storage
-        .from(STORAGE_BUCKET)
-        .upload(objectPath, fileToUpload);
+      const response = await fetch(targetEndpoint, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${activeToken}`,
+          'apikey': INSFORGE_ANON_KEY
+        },
+        body: formData,
+        signal: controller.signal
+      });
+      clearTimeout(directTimer);
 
-      if (!error && data) {
-        uploadSuccess = true;
-        uploadedKey = data.key || objectPath;
-        rawUrl = data.url;
-      } else if (error) {
-        console.warn('InsForge SDK storage.upload devolvió error, activando subida directa:', error.message);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Error del servidor de Storage (${response.status}): ${errText}`);
       }
-    } catch (sdkErr: any) {
-      console.warn('InsForge SDK storage.upload lanzó excepción, activando subida directa:', sdkErr?.message || sdkErr);
-    }
 
-    // 4. Intento B: Fallback directo de alta resiliencia vía PUT con FormData y Bearer Token
-    if (!uploadSuccess) {
-      console.log('Ejecutando subida directa de respaldo para:', objectPath);
-      const formData = new FormData();
-      formData.append('file', fileToUpload, cleanName);
-
-      const targetEndpoint = `${INSFORGE_BASE_URL}/api/storage/buckets/${STORAGE_BUCKET}/objects/${encodeURIComponent(objectPath)}`;
-      const controller = new AbortController();
-      const directTimer = setTimeout(() => controller.abort(), 60000); // 60 segundos de timeout para la llamada directa
-
-      try {
-        const response = await fetch(targetEndpoint, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${activeToken}`,
-            'apikey': INSFORGE_ANON_KEY
-          },
-          body: formData,
-          signal: controller.signal
-        });
-        clearTimeout(directTimer);
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Error del servidor de Storage (${response.status}): ${errText}`);
-        }
-
-        const resJson = await response.json().catch(() => null);
-        uploadedKey = resJson?.key || objectPath;
-        rawUrl = resJson?.url || targetEndpoint;
-        uploadSuccess = true;
-      } catch (directErr: any) {
-        clearTimeout(directTimer);
-        console.error('Error definitivo subiendo archivo a Storage:', directErr);
-        if (directErr.name === 'AbortError') {
-          throw new Error('La subida de la imagen tardó más de 60s en completarse. Comprueba tu velocidad de conexión a Internet.');
-        }
-        throw new Error(directErr.message || 'Error desconocido al subir archivo a Storage');
+      const resJson = await response.json().catch(() => null);
+      uploadedKey = resJson?.key || objectPath;
+      rawUrl = resJson?.url || targetEndpoint;
+      uploadSuccess = true;
+    } catch (directErr: any) {
+      clearTimeout(directTimer);
+      console.error('Error subiendo archivo a Storage:', directErr);
+      if (directErr.name === 'AbortError') {
+        throw new Error('La subida tardó más de 120s en completarse. Comprueba tu conexión a Internet o el tamaño del archivo.');
       }
+      throw new Error(directErr.message || 'Error desconocido al subir archivo a Storage');
     }
 
     const finalRawUrl = rawUrl || `${INSFORGE_BASE_URL}/api/storage/buckets/${STORAGE_BUCKET}/objects/${encodeURIComponent(uploadedKey)}`;
