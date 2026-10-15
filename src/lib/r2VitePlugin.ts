@@ -205,6 +205,49 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
     return;
   }
 
+  // 7. Direct server proxy upload (fail-safe for restrictive browser CORS/network environments)
+  if (pathname === '/api/r2/upload-proxy' && req.method === 'POST') {
+    if (!isR2Configured()) {
+      return sendJson(res, 400, { error: 'Cloudflare R2 no configurado' });
+    }
+
+    const chunks: Buffer[] = [];
+    req.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    req.on('end', async () => {
+      try {
+        const fullBuffer = Buffer.concat(chunks);
+        const folder = url.searchParams.get('folder') || 'uploads';
+        const originalName = url.searchParams.get('filename') || `file_${Date.now()}`;
+        const contentType = req.headers['content-type'] || 'application/octet-stream';
+
+        const cleanName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const r2Key = `uploads/${folder}/${Date.now()}_${cleanName}`;
+
+        const uploadRes = await uploadBufferToR2(r2Key, fullBuffer, contentType);
+
+        let downloadUrl = '';
+        const { publicUrl } = getR2Client();
+        if (publicUrl) {
+          downloadUrl = `${publicUrl.replace(/\/$/, '')}/${r2Key}`;
+        } else {
+          downloadUrl = await createPresignedDownloadUrl(r2Key, 86400);
+        }
+
+        return sendJson(res, 200, {
+          url: downloadUrl,
+          r2Key,
+          name: cleanName,
+          size: fullBuffer.length,
+          mime: contentType,
+          etag: uploadRes.etag
+        });
+      } catch (err: any) {
+        return sendJson(res, 500, { error: err.message || 'Error en proxy de subida a R2' });
+      }
+    });
+    return;
+  }
+
   // Fallback 404
   sendJson(res, 404, { error: 'Endpoint R2 no encontrado' });
 }

@@ -120,25 +120,53 @@ export const r2Storage = {
 
         const { uploadUrl, r2Key, downloadUrl, cleanName } = await presignRes.json();
 
-        // 2. Subida directa a R2 vía HTTP PUT con los bytes exactos
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'PUT',
+        let uploadSuccess = false;
+        try {
+          const uploadRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': mime
+            },
+            body: file
+          });
+
+          if (uploadRes.ok) {
+            uploadSuccess = true;
+            return {
+              url: downloadUrl,
+              r2Key,
+              name: cleanName || rawName,
+              size,
+              mime,
+              provider: 'r2'
+            };
+          }
+        } catch (directPutErr) {
+          console.warn('Subida directa vía PUT desde el navegador bloqueada por red/CORS, activando stream proxy R2 del servidor...');
+        }
+
+        // Si el PUT directo en navegador encuentra restricción CORS o bloqueo, subir a través del proxy del servidor
+        const proxyUrl = `/api/r2/upload-proxy?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(cleanName || rawName)}`;
+        const proxyRes = await fetch(proxyUrl, {
+          method: 'POST',
           headers: {
             'Content-Type': mime
           },
           body: file
         });
 
-        if (!uploadRes.ok) {
-          throw new Error(`Error en la carga a R2 (${uploadRes.status}): ${uploadRes.statusText}`);
+        if (!proxyRes.ok) {
+          const proxyErr = await proxyRes.json().catch(() => ({}));
+          throw new Error(proxyErr.error || `Error en proxy de subida a R2 (${proxyRes.status})`);
         }
 
+        const proxyData = await proxyRes.json();
         return {
-          url: downloadUrl,
-          r2Key,
-          name: cleanName || rawName,
-          size,
-          mime,
+          url: proxyData.url,
+          r2Key: proxyData.r2Key,
+          name: proxyData.name,
+          size: proxyData.size,
+          mime: proxyData.mime,
           provider: 'r2'
         };
       } catch (r2Err: any) {
