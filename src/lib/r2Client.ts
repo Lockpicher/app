@@ -142,20 +142,12 @@ export const r2Storage = {
           provider: 'r2'
         };
       } catch (r2Err: any) {
-        console.warn('Subida a R2 falló o no pudo completarse, usando fallback de InsForge:', r2Err.message);
+        console.error('Error cargando archivo a Cloudflare R2:', r2Err);
+        throw new Error(`Fallo al subir a Cloudflare R2: ${r2Err.message || 'Error de red'}`);
       }
     }
 
-    // Fallback: InsForge storage
-    const fallbackRes = await storage.uploadFile(file, folder, rawName);
-    return {
-      url: fallbackRes.url,
-      r2Key: fallbackRes.path,
-      name: fallbackRes.name,
-      size: fallbackRes.size,
-      mime: fallbackRes.mime,
-      provider: 'insforge'
-    };
+    throw new Error('Cloudflare R2 no está activo o configurado. Comprueba tus credenciales en el archivo .env.');
   },
 
   /**

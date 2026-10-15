@@ -288,22 +288,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
         </button>
 
-        <button
-          onClick={() => onSelectView('storage')}
-          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
-            currentView === 'storage'
-              ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-              : 'text-gray-400 hover:bg-[#1c1c24] hover:text-gray-300'
-          }`}
-        >
-          <span className="flex items-center gap-2.5">
-            <Database className="w-4 h-4 text-gray-400" />
-            InsForge Storage (Legacy)
-          </span>
-          <span className="text-[10px] bg-gray-900 text-gray-400 border border-gray-800 px-1 rounded">
-            app-storage
-          </span>
-        </button>
+
 
         {/* Pinned Notes List */}
         {pinnedNotes.length > 0 && (
