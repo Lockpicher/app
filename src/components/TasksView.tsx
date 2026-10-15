@@ -30,7 +30,8 @@ import {
   MoreVertical,
   ExternalLink,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Link2
 } from 'lucide-react';
 import { 
   AppTask, 
@@ -603,10 +604,38 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                 </div>
                               </div>
 
+                              {/* Thumbnail preview if task has an image */}
+                              {t.thumbnail_url && (
+                                <div className="w-full h-28 rounded-lg overflow-hidden border border-[#2d2d40] bg-[#101016] mb-2 relative">
+                                  <img 
+                                    src={t.thumbnail_url} 
+                                    alt={t.title} 
+                                    className="w-full h-full object-cover transition duration-300 group-hover:scale-105" 
+                                    loading="lazy" 
+                                  />
+                                </div>
+                              )}
+
                               {/* Title */}
-                              <h4 className="text-xs font-semibold text-gray-100 group-hover:text-blue-300 transition leading-snug mb-2 line-clamp-2">
+                              <h4 className="text-xs font-semibold text-gray-100 group-hover:text-blue-300 transition leading-snug mb-1.5 line-clamp-2">
                                 {t.title}
                               </h4>
+
+                              {/* Task URL Link badge */}
+                              {t.url && (
+                                <a
+                                  href={t.url.startsWith('http') ? t.url : `https://${t.url}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded mb-2 max-w-full truncate"
+                                  title={t.url}
+                                >
+                                  <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                                  <span className="truncate">{t.url.replace(/^https?:\/\//, '')}</span>
+                                  <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                                </a>
+                              )}
 
                               {/* Footer Metadata */}
                               <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-[#232332]">
@@ -709,6 +738,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                     )}
                                   </button>
 
+                                  {/* Thumbnail preview */}
+                                  {t.thumbnail_url && (
+                                    <div 
+                                      onClick={() => {
+                                        setModalTask(t);
+                                        setIsModalOpen(true);
+                                      }}
+                                      className="w-7 h-7 rounded-md overflow-hidden border border-[#2d2d40] bg-[#101016] flex-shrink-0 cursor-pointer"
+                                    >
+                                      <img src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                  )}
+
                                   {/* Task Title (click opens modal) */}
                                   <span
                                     onClick={() => {
@@ -721,6 +763,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                   >
                                     {t.title}
                                   </span>
+
+                                  {/* URL Link badge */}
+                                  {t.url && (
+                                    <a
+                                      href={t.url.startsWith('http') ? t.url : `https://${t.url}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 rounded bg-cyan-950/40 text-cyan-400 hover:text-cyan-300 border border-cyan-800/40 transition flex-shrink-0"
+                                      title={`Abrir enlace: ${t.url}`}
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
 
                                   {/* Subtasks Count Badge */}
                                   {subtasks.length > 0 && (

@@ -209,6 +209,41 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
             <span className="hidden xs:inline">Grabar</span>
           </button>
 
+          {/* Quick Upload Image Note Button */}
+          <input
+            type="file"
+            id="quick-image-note-upload"
+            accept="image/*"
+            className="hidden"
+            onChange={async (e) => {
+              if (e.target.files && e.target.files[0]) {
+                const file = e.target.files[0];
+                try {
+                  const res = await r2Storage.uploadFile(file, 'notes/images');
+                  await onCreateNote({
+                    title: file.name.replace(/\.[^/.]+$/, ''),
+                    note_type: 'image',
+                    thumbnail_url: res.url,
+                    content: `<img src="${res.url}" alt="${file.name}" /><p></p>`,
+                    notebook_id: notebook?.id || null
+                  });
+                } catch (err: any) {
+                  alert('Error al subir imagen: ' + (err.message || 'Error de red'));
+                } finally {
+                  e.target.value = '';
+                }
+              }
+            }}
+          />
+          <label
+            htmlFor="quick-image-note-upload"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30 transition flex-shrink-0 cursor-pointer"
+            title="Crear nota a partir de una imagen de tu equipo"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden xs:inline">Imagen</span>
+          </label>
+
           {/* Quick Create Note Button */}
           <button
             onClick={() => onCreateNote({ notebook_id: notebook?.id || null })}

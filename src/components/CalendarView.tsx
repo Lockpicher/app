@@ -18,7 +18,8 @@ import {
   Sparkles,
   CalendarDays,
   List,
-  Columns
+  Columns,
+  ExternalLink
 } from 'lucide-react';
 import { AppTask, AppNote, AppProject, AppReminder, TaskPriority, TaskStatus } from '../lib/types';
 import { db } from '../lib/insforge';
@@ -720,7 +721,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             key={t.id}
                             className="flex items-center justify-between p-2.5 rounded-xl bg-[#14141d] border border-[#242436] hover:border-blue-500/40 transition"
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2.5">
                               <button
                                 onClick={() => onUpdateTask(t.id, {
                                   status: t.status === 'completed' ? 'todo' : 'completed'
@@ -733,9 +734,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <Circle className="w-4 h-4 text-gray-500" />
                                 )}
                               </button>
+
+                              {t.thumbnail_url && (
+                                <div className="w-6 h-6 rounded overflow-hidden border border-[#2d2d40] bg-[#101016] flex-shrink-0">
+                                  <img src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              )}
+
                               <span className={`text-xs font-semibold ${t.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-200'}`}>
                                 {t.title}
                               </span>
+
+                              {t.url && (
+                                <a
+                                  href={t.url.startsWith('http') ? t.url : `https://${t.url}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-cyan-400 hover:text-cyan-300 p-0.5"
+                                  title={t.url}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
                             </div>
 
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1e1e2c] text-gray-400 uppercase">

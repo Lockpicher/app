@@ -163,6 +163,33 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         }
       })
     ],
+    editorProps: {
+      handlePaste: (_view, event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              handleInsertImage(file);
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      handleDrop: (_view, event) => {
+        const files = Array.from(event.dataTransfer?.files || []);
+        for (const file of files) {
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            handleInsertImage(file);
+            return true;
+          }
+        }
+        return false;
+      }
+    },
     content: (() => {
       if (note.content_json && typeof note.content_json === 'object') {
         return note.content_json;
@@ -270,6 +297,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           .insertContent('<p></p>')
           .run();
         setSaveStatus('dirty');
+        setTimeout(() => handleSave(), 100);
       }
       try {
         await db.recordAttachment({

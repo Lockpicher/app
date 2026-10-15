@@ -32,7 +32,8 @@ import {
   Download, 
   Upload,
   AlertCircle,
-  Building2
+  Building2,
+  Link2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -101,6 +102,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [listaId, setListaId] = useState<number | null>(task?.lista_id || initialListId || (lists[0]?.id || 3));
   const [scheduledDate, setScheduledDate] = useState<string>('');
   const [dueDate, setDueDate] = useState<string>('');
+  const [taskUrl, setTaskUrl] = useState<string>('');
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   
   // Markdown Editor / Preview Mode
   const [descViewMode, setDescViewMode] = useState<'edit' | 'preview'>('edit');
@@ -131,6 +134,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setListaId(task.lista_id || initialListId || (lists[0]?.id || 3));
         setScheduledDate(task.scheduled_date ? task.scheduled_date.slice(0, 10) : '');
         setDueDate(task.due_date ? task.due_date.slice(0, 16) : '');
+        setTaskUrl(task.url || '');
+        setThumbnailUrl(task.thumbnail_url || '');
 
         // Fetch subtasks and attachments for existing task
         loadSubtasks(task.id);
@@ -148,6 +153,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setListaId(initialListId || (lists[0]?.id || 3));
         setScheduledDate('');
         setDueDate('');
+        setTaskUrl('');
+        setThumbnailUrl('');
         setSubtasks([]);
         setAttachments([]);
       }
@@ -335,6 +342,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setIsUploadingAttachment(true);
       const res = await r2Storage.uploadFile(file, 'tasks');
       
+      const isImg = res.mime?.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(res.name);
+      if (isImg && !thumbnailUrl) {
+        setThumbnailUrl(res.url);
+      }
+
       if (!task?.id) {
         // Tarea nueva sin guardar: registrar adjunto pendiente y persistir enlace al guardar la tarea
         const tempAtt: AppAttachment = {
@@ -429,6 +441,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         note_id: noteId || null,
         lista_id: listaId || null,
         product_id: task?.product_id || null,
+        url: taskUrl.trim() || null,
+        thumbnail_url: thumbnailUrl.trim() || null,
         scheduled_date: scheduledDate || null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         completed_at: status === 'completed' ? new Date().toISOString() : null,
@@ -763,6 +777,110 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* URL de referencia y Miniatura de Imagen */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#14141c] p-4 rounded-xl border border-[#252535]">
+                {/* Enlace / URL */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-blue-300">
+                      <Link2 className="w-3.5 h-3.5" />
+                      Enlace / URL de la Tarea
+                    </span>
+                    {taskUrl && (
+                      <a 
+                        href={taskUrl.startsWith('http') ? taskUrl : `https://${taskUrl}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                      >
+                        Abrir <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </label>
+                  <input
+                    type="url"
+                    value={taskUrl}
+                    onChange={(e) => {
+                      setTaskUrl(e.target.value);
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="https://ejemplo.com/recurso o documento..."
+                    className="w-full px-3 py-2 bg-[#101015] border border-[#2a2a3b] focus:border-blue-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none"
+                  />
+                </div>
+
+                {/* Imagen / Miniatura */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-emerald-300">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      Imagen / Miniatura de la Tarea
+                    </span>
+                    {thumbnailUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setThumbnailUrl('');
+                          setHasUnsavedChanges(true);
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300"
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    {thumbnailUrl ? (
+                      <div className="relative w-12 h-10 rounded-lg overflow-hidden border border-[#2d2d3f] flex-shrink-0 bg-[#0d0d12]">
+                        <img src={thumbnailUrl} alt="Miniatura" className="w-full h-full object-cover" />
+                      </div>
+                    ) : null}
+
+                    <input
+                      type="text"
+                      value={thumbnailUrl}
+                      onChange={(e) => {
+                        setThumbnailUrl(e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="URL de imagen o sube un archivo..."
+                      className="flex-1 px-3 py-2 bg-[#101015] border border-[#2a2a3b] focus:border-emerald-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none truncate"
+                    />
+
+                    <input
+                      type="file"
+                      id="task-thumbnail-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          try {
+                            setIsUploadingAttachment(true);
+                            const res = await r2Storage.uploadFile(e.target.files[0], 'tasks/thumbnails');
+                            setThumbnailUrl(res.url);
+                            setHasUnsavedChanges(true);
+                          } catch (err: any) {
+                            alert('Error subiendo imagen: ' + err.message);
+                          } finally {
+                            setIsUploadingAttachment(false);
+                            e.target.value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="task-thumbnail-upload"
+                      className="px-2.5 py-2 rounded-lg bg-[#20202e] hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 border border-[#2a2a3e] text-xs font-medium cursor-pointer transition flex items-center gap-1 flex-shrink-0"
+                      title="Subir imagen desde tu equipo a Cloudflare R2"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Subir</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 

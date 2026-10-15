@@ -101,6 +101,8 @@ export interface AppTask {
   completed_at?: string | null;
   properties?: Record<string, any>;
   content_rich?: Record<string, any>;
+  url?: string | null;
+  thumbnail_url?: string | null;
   created_at: string;
   updated_at: string;
 }

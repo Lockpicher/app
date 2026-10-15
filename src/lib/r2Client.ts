@@ -102,7 +102,31 @@ export const r2Storage = {
     
     if (status.configured) {
       try {
-        // Pedir URL firmada de PUT a nuestro backend
+        // En navegadores, las llamadas directas PUT a endpoints R2 con firmas S3 pueden ser bloqueadas
+        // por políticas de CORS en el bucket o restricciones del navegador.
+        // Usamos el proxy de streaming del servidor local Vite como canal primario ultra fiable y rápido.
+        const proxyUrl = `/api/r2/upload-proxy?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(rawName)}`;
+        const proxyRes = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': mime
+          },
+          body: file
+        });
+
+        if (proxyRes.ok) {
+          const proxyData = await proxyRes.json();
+          return {
+            url: proxyData.url,
+            r2Key: proxyData.r2Key,
+            name: proxyData.name,
+            size: proxyData.size,
+            mime: proxyData.mime,
+            provider: 'r2'
+          };
+        }
+
+        // Si el proxy falla, intentar vía URL firmada de PUT directo como fallback
         const presignRes = await fetch('/api/r2/presign-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -113,25 +137,15 @@ export const r2Storage = {
           })
         });
 
-        if (!presignRes.ok) {
-          const errData = await presignRes.json().catch(() => ({}));
-          throw new Error(errData.error || 'Error solicitando URL de subida R2');
-        }
-
-        const { uploadUrl, r2Key, downloadUrl, cleanName } = await presignRes.json();
-
-        let uploadSuccess = false;
-        try {
+        if (presignRes.ok) {
+          const { uploadUrl, r2Key, downloadUrl, cleanName } = await presignRes.json();
           const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
-            headers: {
-              'Content-Type': mime
-            },
+            headers: { 'Content-Type': mime },
             body: file
           });
 
           if (uploadRes.ok) {
-            uploadSuccess = true;
             return {
               url: downloadUrl,
               r2Key,
@@ -141,34 +155,10 @@ export const r2Storage = {
               provider: 'r2'
             };
           }
-        } catch (directPutErr) {
-          console.warn('Subida directa vía PUT desde el navegador bloqueada por red/CORS, activando stream proxy R2 del servidor...');
         }
 
-        // Si el PUT directo en navegador encuentra restricción CORS o bloqueo, subir a través del proxy del servidor
-        const proxyUrl = `/api/r2/upload-proxy?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(cleanName || rawName)}`;
-        const proxyRes = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': mime
-          },
-          body: file
-        });
-
-        if (!proxyRes.ok) {
-          const proxyErr = await proxyRes.json().catch(() => ({}));
-          throw new Error(proxyErr.error || `Error en proxy de subida a R2 (${proxyRes.status})`);
-        }
-
-        const proxyData = await proxyRes.json();
-        return {
-          url: proxyData.url,
-          r2Key: proxyData.r2Key,
-          name: proxyData.name,
-          size: proxyData.size,
-          mime: proxyData.mime,
-          provider: 'r2'
-        };
+        const proxyErr = await proxyRes.json().catch(() => ({}));
+        throw new Error(proxyErr.error || `Error subiendo archivo a R2 (${proxyRes.status})`);
       } catch (r2Err: any) {
         console.error('Error cargando archivo a Cloudflare R2:', r2Err);
         throw new Error(`Fallo al subir a Cloudflare R2: ${r2Err.message || 'Error de red'}`);
