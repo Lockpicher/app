@@ -21,7 +21,8 @@ import {
   Maximize2
 } from 'lucide-react';
 import { AppNote, AppProject, AppLink } from '../lib/types';
-import { storage } from '../lib/insforge';
+import { db, storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface NoteEditorProps {
   note: AppNote;
@@ -165,11 +166,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     }, 50);
   };
 
-  // Upload file to InsForge Storage and insert markdown syntax
+  // Upload file to Cloudflare R2 / Storage and insert markdown syntax
   const handleFileUpload = async (file: File) => {
     try {
       setIsUploading(true);
-      const res = await storage.uploadFile(file, 'notes');
+      const res = await r2Storage.uploadFile(file, `notes/${note.id || 'general'}`);
       
       const isImg = file.type.startsWith('image/');
       const markdownSnippet = isImg 
@@ -179,8 +180,26 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       const nextContent = content + markdownSnippet;
       setContent(nextContent);
       setSaveStatus('dirty');
+
+      // Record attachment in database
+      if (note.id) {
+        await db.recordAttachment({
+          entity_id: note.id,
+          entity_type: 'note',
+          file_name: res.name,
+          display_name: file.name,
+          file_url: res.url,
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
+          file_size: res.size,
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+        });
+      }
     } catch (err: any) {
-      alert('Error subiendo archivo a InsForge Storage: ' + err.message);
+      alert('Error subiendo archivo: ' + err.message);
     } finally {
       setIsUploading(false);
     }

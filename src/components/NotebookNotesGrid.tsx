@@ -25,6 +25,7 @@ import {
 import { AppNote, AppNotebook, NoteType } from '../lib/types';
 import { getCoverById } from '../lib/covers';
 import { storage } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 import { AudioRecorderModal } from './AudioRecorderModal';
 
 interface NotebookNotesGridProps {
@@ -113,7 +114,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
     for (const file of files) {
       try {
         const isImg = file.type.startsWith('image/');
-        const res = await storage.uploadFile(file, isImg ? 'notes/images' : 'notes/files');
+        const res = await r2Storage.uploadFile(file, isImg ? 'notes/images' : 'notes/files');
         
         await onCreateNote({
           title: file.name.replace(/\.[^/.]+$/, ''),

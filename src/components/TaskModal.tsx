@@ -218,7 +218,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const handleInsertImage = async (file: File) => {
     try {
       setIsUploadingAttachment(true);
-      const res = await storage.uploadFile(file, 'tasks');
+      const res = await r2Storage.uploadFile(file, 'tasks');
       const mdSnippet = `\n\n![${res.name}](${res.url})\n\n`;
       setDescription(prev => prev + mdSnippet);
       setHasUnsavedChanges(true);
@@ -229,11 +229,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           entity_id: task.id,
           entity_type: 'task',
           file_name: res.name,
+          display_name: file.name,
           file_url: res.url,
-          file_path: res.path,
-          bucket_name: 'app-storage',
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
           file_size: res.size,
-          mime_type: res.mime
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
         });
         if (att) setAttachments(prev => [att, ...prev]);
       }
