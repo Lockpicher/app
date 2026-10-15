@@ -1,0 +1,850 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  CheckSquare, 
+  Plus, 
+  Calendar, 
+  AlertTriangle, 
+  FolderKanban, 
+  Trash2, 
+  Check, 
+  Clock, 
+  Filter, 
+  FileText, 
+  Flame, 
+  CalendarClock, 
+  UserCheck, 
+  Layers, 
+  Edit3,
+  Search,
+  Move,
+  LayoutList,
+  Kanban,
+  Building2,
+  ChevronRight,
+  ChevronDown,
+  ListOrdered,
+  Folder,
+  Tag,
+  Circle,
+  CheckCircle2,
+  MoreVertical,
+  ExternalLink
+} from 'lucide-react';
+import { 
+  AppTask, 
+  AppProject, 
+  AppNote, 
+  TaskCategory, 
+  TaskStatus,
+  TaskPriority,
+  EisenhowerCategory,
+  KubbonetWorkspace,
+  KubbonetSpace,
+  KubbonetFolder,
+  KubbonetList
+} from '../lib/types';
+import { TaskModal } from './TaskModal';
+import { ClickUpSidebar, HierarchyScope } from './ClickUpSidebar';
+import { db } from '../lib/insforge';
+
+interface TasksViewProps {
+  tasks: AppTask[];
+  projects: AppProject[];
+  notes: AppNote[];
+  categories: TaskCategory[];
+  onCreateTask: (task: Partial<AppTask>) => Promise<void>;
+  onUpdateTask: (id: string, updates: Partial<AppTask>) => Promise<void>;
+  onDeleteTask: (id: string) => Promise<void>;
+  onNavigateToNote: (noteId: string) => void;
+}
+
+export const TasksView: React.FC<TasksViewProps> = ({
+  tasks,
+  projects,
+  notes,
+  categories,
+  onCreateTask,
+  onUpdateTask,
+  onDeleteTask,
+  onNavigateToNote
+}) => {
+  // Hierarchy Data States
+  const [workspace, setWorkspace] = useState<KubbonetWorkspace>({
+    id: 1,
+    nombre: 'Grupo Kubbonet',
+    slug: 'grupo-kubbonet',
+    descripcion: 'Espacio de trabajo principal de KUBBONET CONTROL',
+    color: 'blue',
+    icono: 'Building2',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+  const [spaces, setSpaces] = useState<KubbonetSpace[]>([]);
+  const [folders, setFolders] = useState<KubbonetFolder[]>([]);
+  const [lists, setLists] = useState<KubbonetList[]>([]);
+  const [selectedScope, setSelectedScope] = useState<HierarchyScope>({ type: 'all' });
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+
+  // Expanded subtasks in List View
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
+
+  // Quick Inline Task Creator in List View
+  const [quickTitleByStatus, setQuickTitleByStatus] = useState<Record<string, string>>({});
+
+  // Filters
+  const [filterProject, setFilterProject] = useState<string>('all');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterEisenhower, setFilterEisenhower] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Drag and Drop state (Kanban)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTask, setModalTask] = useState<AppTask | null>(null);
+  const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>('todo');
+
+  // Load Hierarchy from InsForge
+  const loadHierarchy = async () => {
+    try {
+      const [wsArr, sps, flds, lsts] = await Promise.all([
+        db.getWorkspaces(),
+        db.getSpaces(),
+        db.getFolders(),
+        db.getLists()
+      ]);
+      if (wsArr && wsArr.length > 0) setWorkspace(wsArr[0]);
+      setSpaces(sps);
+      setFolders(flds);
+      setLists(lsts);
+    } catch (err) {
+      console.error('Error cargando jerarquía de ClickUp:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadHierarchy();
+  }, []);
+
+  // Columns definition for Kanban
+  const columns: { id: TaskStatus; title: string; color: string; border: string; bg: string; dot: string }[] = [
+    { id: 'todo', title: 'Por Hacer', color: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-500/5', dot: 'bg-amber-400' },
+    { id: 'in_progress', title: 'En Progreso', color: 'text-blue-400', border: 'border-blue-500/30', bg: 'bg-blue-500/5', dot: 'bg-blue-400' },
+    { id: 'in_review', title: 'En Revisión', color: 'text-purple-400', border: 'border-purple-500/30', bg: 'bg-purple-500/5', dot: 'bg-purple-400' },
+    { id: 'completed', title: 'Completada', color: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-500/5', dot: 'bg-emerald-400' }
+  ];
+
+  // Hierarchy CRUD Callbacks
+  const handleCreateSpace = async (spaceData: Partial<KubbonetSpace>) => {
+    const created = await db.createSpace(spaceData);
+    if (created) setSpaces(prev => [...prev, created]);
+  };
+  const handleUpdateSpace = async (id: number, updates: Partial<KubbonetSpace>) => {
+    const updated = await db.updateSpace(id, updates);
+    if (updated) setSpaces(prev => prev.map(s => s.id === id ? updated : s));
+  };
+  const handleDeleteSpace = async (id: number) => {
+    if (!confirm('¿Eliminar este espacio?')) return;
+    await db.deleteSpace(id);
+    setSpaces(prev => prev.filter(s => s.id !== id));
+    if (selectedScope.type === 'space' && selectedScope.spaceId === id) setSelectedScope({ type: 'all' });
+  };
+
+  const handleCreateFolder = async (folderData: Partial<KubbonetFolder>) => {
+    const created = await db.createFolder(folderData);
+    if (created) setFolders(prev => [...prev, created]);
+  };
+  const handleUpdateFolder = async (id: number, updates: Partial<KubbonetFolder>) => {
+    const updated = await db.updateFolder(id, updates);
+    if (updated) setFolders(prev => prev.map(f => f.id === id ? updated : f));
+  };
+  const handleDeleteFolder = async (id: number) => {
+    if (!confirm('¿Eliminar esta carpeta?')) return;
+    await db.deleteFolder(id);
+    setFolders(prev => prev.filter(f => f.id !== id));
+    if (selectedScope.type === 'folder' && selectedScope.folderId === id) setSelectedScope({ type: 'all' });
+  };
+
+  const handleCreateList = async (listData: Partial<KubbonetList>) => {
+    const created = await db.createList(listData);
+    if (created) setLists(prev => [...prev, created]);
+  };
+  const handleUpdateList = async (id: number, updates: Partial<KubbonetList>) => {
+    const updated = await db.updateList(id, updates);
+    if (updated) setLists(prev => prev.map(l => l.id === id ? updated : l));
+  };
+  const handleDeleteList = async (id: number) => {
+    if (!confirm('¿Eliminar esta lista?')) return;
+    await db.deleteList(id);
+    setLists(prev => prev.filter(l => l.id !== id));
+    if (selectedScope.type === 'list' && selectedScope.listId === id) setSelectedScope({ type: 'all' });
+  };
+
+  // Determine active list ID for new task creation
+  const getActiveListIdForNewTask = (): number => {
+    if (selectedScope.type === 'list') return selectedScope.listId;
+    if (selectedScope.type === 'folder') {
+      const folderList = lists.find(l => l.carpeta_id === selectedScope.folderId);
+      if (folderList) return folderList.id;
+    }
+    if (selectedScope.type === 'space') {
+      const spaceList = lists.find(l => l.espacio_id === selectedScope.spaceId);
+      if (spaceList) return spaceList.id;
+    }
+    return 3; // Default Inbox
+  };
+
+  // Filter Tasks based on ClickUp Hierarchy Scope & filters
+  const filteredTasks = tasks.filter(t => {
+    // Top level tasks only (subtasks rendered under their parent)
+    if (t.parent_task_id) return false;
+
+    // Hierarchy Scope Filter
+    if (selectedScope.type === 'list') {
+      if (t.lista_id !== selectedScope.listId) return false;
+    } else if (selectedScope.type === 'folder') {
+      const folderListIds = lists.filter(l => l.carpeta_id === selectedScope.folderId).map(l => l.id);
+      if (!t.lista_id || !folderListIds.includes(t.lista_id)) return false;
+    } else if (selectedScope.type === 'space') {
+      const spaceListIds = lists.filter(l => l.espacio_id === selectedScope.spaceId).map(l => l.id);
+      if (!t.lista_id || !spaceListIds.includes(t.lista_id)) return false;
+    }
+
+    // Additional Criteria Filters
+    if (filterProject !== 'all' && t.project_id !== filterProject) return false;
+    if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+    if (filterEisenhower !== 'all' && t.eisenhower !== filterEisenhower) return false;
+    if (filterCategory !== 'all' && String(t.category_id || '') !== filterCategory) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = t.title.toLowerCase().includes(q);
+      const matchDesc = (t.description || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc) return false;
+    }
+    return true;
+  });
+
+  // Drag & Drop handlers (Kanban)
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTaskId(taskId);
+  };
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverColumn(null);
+  };
+  const handleDragOver = (e: React.DragEvent, colId: TaskStatus) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColumn !== colId) setDragOverColumn(colId);
+  };
+  const handleDragLeave = (colId: TaskStatus) => {
+    if (dragOverColumn === colId) setDragOverColumn(null);
+  };
+  const handleDrop = async (e: React.DragEvent, colId: TaskStatus) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    setDragOverColumn(null);
+    if (!taskId) return;
+    const current = tasks.find(t => t.id === taskId);
+    if (current && current.status !== colId) {
+      await onUpdateTask(taskId, {
+        status: colId,
+        completed_at: colId === 'completed' ? new Date().toISOString() : null
+      });
+    }
+    setDraggedTaskId(null);
+  };
+
+  // Toggle Task Status (Quick check in list or card)
+  const handleToggleTaskStatus = async (task: AppTask) => {
+    const nextStatus: TaskStatus = task.status === 'completed' ? 'todo' : 'completed';
+    await onUpdateTask(task.id, {
+      status: nextStatus,
+      completed_at: nextStatus === 'completed' ? new Date().toISOString() : null
+    });
+  };
+
+  // Quick inline task creation in List View
+  const handleQuickCreateTask = async (status: TaskStatus) => {
+    const title = (quickTitleByStatus[status] || '').trim();
+    if (!title) return;
+    await onCreateTask({
+      title,
+      status,
+      priority: 'medium',
+      lista_id: getActiveListIdForNewTask()
+    });
+    setQuickTitleByStatus(prev => ({ ...prev, [status]: '' }));
+  };
+
+  // Subtasks helper
+  const getSubtasksForTask = (taskId: string) => tasks.filter(t => t.parent_task_id === taskId);
+
+  // Active Scope Details for Header & Breadcrumbs
+  const getScopeBreadcrumb = () => {
+    if (selectedScope.type === 'all') {
+      return {
+        title: 'Todo (Vista Global)',
+        description: 'Todas las tareas y procesos de Grupo Kubbonet',
+        path: ['Grupo Kubbonet', 'Todo']
+      };
+    }
+    if (selectedScope.type === 'space') {
+      const space = spaces.find(s => s.id === selectedScope.spaceId);
+      return {
+        title: space?.nombre || 'Espacio',
+        description: space?.descripcion || 'Espacio de trabajo operativo',
+        path: ['Grupo Kubbonet', space?.nombre || 'Espacio']
+      };
+    }
+    if (selectedScope.type === 'folder') {
+      const folder = folders.find(f => f.id === selectedScope.folderId);
+      const space = spaces.find(s => s.id === folder?.espacio_id);
+      return {
+        title: folder?.nombre || 'Carpeta',
+        description: folder?.descripcion || 'Carpeta de agrupación',
+        path: ['Grupo Kubbonet', space?.nombre || 'Espacio', folder?.nombre || 'Carpeta']
+      };
+    }
+    if (selectedScope.type === 'list') {
+      const list = lists.find(l => l.id === selectedScope.listId);
+      const space = spaces.find(s => s.id === list?.espacio_id);
+      const folder = folders.find(f => f.id === list?.carpeta_id);
+      const path = ['Grupo Kubbonet', space?.nombre || 'Espacio'];
+      if (folder) path.push(folder.nombre);
+      path.push(list?.nombre || 'Lista');
+      return {
+        title: list?.nombre || 'Lista Operativa',
+        description: list?.descripcion || 'Contenedor operativo de tareas',
+        path
+      };
+    }
+    return { title: 'Tareas', description: '', path: ['Grupo Kubbonet'] };
+  };
+
+  const scopeInfo = getScopeBreadcrumb();
+
+  return (
+    <div className="flex-1 flex h-full bg-[#14141c] overflow-hidden select-none">
+      {/* ClickUp Hierarchy Left Sidebar */}
+      <ClickUpSidebar
+        workspace={workspace}
+        spaces={spaces}
+        folders={folders}
+        lists={lists}
+        tasks={tasks}
+        selectedScope={selectedScope}
+        onSelectScope={setSelectedScope}
+        onCreateSpace={handleCreateSpace}
+        onUpdateSpace={handleUpdateSpace}
+        onDeleteSpace={handleDeleteSpace}
+        onCreateFolder={handleCreateFolder}
+        onUpdateFolder={handleUpdateFolder}
+        onDeleteFolder={handleDeleteFolder}
+        onCreateList={handleCreateList}
+        onUpdateList={handleUpdateList}
+        onDeleteList={handleDeleteList}
+      />
+
+      {/* Main Tasks Workspace */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Top Header: Breadcrumbs, Scope Title & View Mode Toggle */}
+        <div className="px-6 py-4 bg-[#14141c] border-b border-[#222232] flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-1">
+            {/* Breadcrumb Path */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+              <Building2 className="w-3.5 h-3.5 text-blue-400" />
+              {scopeInfo.path.map((segment, idx) => (
+                <React.Fragment key={idx}>
+                  {idx > 0 && <span className="text-gray-600">/</span>}
+                  <span className={idx === scopeInfo.path.length - 1 ? 'text-blue-300 font-semibold' : 'text-gray-400'}>
+                    {segment}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+                {scopeInfo.title}
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#202030] text-gray-400 border border-[#2b2b40]">
+                  {filteredTasks.length} {filteredTasks.length === 1 ? 'tarea' : 'tareas'}
+                </span>
+              </h2>
+            </div>
+            {scopeInfo.description && (
+              <p className="text-xs text-gray-400 max-w-xl truncate">{scopeInfo.description}</p>
+            )}
+          </div>
+
+          {/* Right Header Controls: View Switcher & New Task Button */}
+          <div className="flex items-center gap-2.5">
+            {/* View Mode Toggle: Board vs List */}
+            <div className="flex items-center bg-[#181824] p-0.5 rounded-lg border border-[#2b2b3e]">
+              <button
+                onClick={() => setViewMode('board')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  viewMode === 'board'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Kanban className="w-3.5 h-3.5" />
+                <span>Tablero</span>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  viewMode === 'list'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+                <span>Lista</span>
+              </button>
+            </div>
+
+            {/* Create Task Button */}
+            <button
+              onClick={() => {
+                setModalTask(null);
+                setModalInitialStatus('todo');
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-900/30 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Tarea</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter & Search Bar */}
+        <div className="px-6 py-2.5 bg-[#121218] border-b border-[#20202c] flex items-center justify-between flex-wrap gap-2.5 text-xs">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar tareas por título o contenido..."
+              className="w-full pl-8 pr-3 py-1.5 bg-[#181822] border border-[#282838] focus:border-blue-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none transition"
+            />
+          </div>
+
+          {/* Quick Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Priority Filter */}
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer"
+            >
+              <option value="all">Todas las prioridades</option>
+              <option value="urgent">Urgente 🔥</option>
+              <option value="high">Alta</option>
+              <option value="medium">Media</option>
+              <option value="low">Baja</option>
+            </select>
+
+            {/* Eisenhower Filter */}
+            <select
+              value={filterEisenhower}
+              onChange={(e) => setFilterEisenhower(e.target.value)}
+              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer"
+            >
+              <option value="all">Todo Eisenhower</option>
+              <option value="do">1. HACER (Urgente/Importante)</option>
+              <option value="schedule">2. PROGRAMAR</option>
+              <option value="delegate">3. DELEGAR</option>
+              <option value="delete">4. ELIMINAR</option>
+            </select>
+
+            {/* Category Filter */}
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[150px] truncate"
+            >
+              <option value="all">Todas las categorías</option>
+              {categories.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Content View: Board or List */}
+        <div className="flex-1 overflow-auto p-6">
+          {viewMode === 'board' ? (
+            /* ==================================================== */
+            /* VISTA TABLERO (KANBAN COLUMNS)                       */
+            /* ==================================================== */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-full min-h-[500px]">
+              {columns.map((col) => {
+                const colTasks = filteredTasks.filter(t => t.status === col.id);
+                const isOver = dragOverColumn === col.id;
+
+                return (
+                  <div
+                    key={col.id}
+                    onDragOver={(e) => handleDragOver(e, col.id)}
+                    onDragLeave={() => handleDragLeave(col.id)}
+                    onDrop={(e) => handleDrop(e, col.id)}
+                    className={`flex flex-col bg-[#14141d] rounded-xl border transition-all duration-200 overflow-hidden ${
+                      isOver 
+                        ? 'border-blue-400 bg-blue-950/20 shadow-lg shadow-blue-950/40' 
+                        : `${col.border} hover:border-[#35354a]`
+                    }`}
+                  >
+                    {/* Column Header */}
+                    <div className="px-4 py-3 bg-[#171722] border-b border-[#252535] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                        <h3 className={`font-bold text-xs uppercase tracking-wider ${col.color}`}>
+                          {col.title}
+                        </h3>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#20202e] text-gray-400">
+                          {colTasks.length}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setModalTask(null);
+                          setModalInitialStatus(col.id);
+                          setIsModalOpen(true);
+                        }}
+                        className="p-1 rounded text-gray-400 hover:text-white hover:bg-[#252538] transition"
+                        title={`Añadir tarea a ${col.title}`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Column Cards Container */}
+                    <div className="flex-1 p-3 space-y-2.5 overflow-y-auto min-h-[300px]">
+                      {colTasks.length === 0 ? (
+                        <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-[#20202e] rounded-xl text-center p-4">
+                          <p className="text-[11px] text-gray-400">No hay tareas en esta columna</p>
+                        </div>
+                      ) : (
+                        colTasks.map((t) => {
+                          const subtasks = getSubtasksForTask(t.id);
+                          const completedSubs = subtasks.filter(s => s.status === 'completed').length;
+                          const taskList = lists.find(l => l.id === t.lista_id);
+                          const isOverdue = t.due_date && new Date(t.due_date).getTime() < Date.now() && t.status !== 'completed';
+
+                          return (
+                            <div
+                              key={t.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, t.id)}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => {
+                                setModalTask(t);
+                                setIsModalOpen(true);
+                              }}
+                              className={`p-3 bg-[#181824] hover:bg-[#202030] rounded-xl border border-[#2b2b3e] hover:border-blue-500/40 transition cursor-pointer group shadow-sm relative ${
+                                draggedTaskId === t.id ? 'opacity-40 scale-95' : ''
+                              }`}
+                            >
+                              {/* Card Header: List origin pill & Priority */}
+                              <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                                {taskList ? (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40 truncate max-w-[140px]">
+                                    {taskList.nombre}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#20202c] text-gray-400">
+                                    General
+                                  </span>
+                                )}
+
+                                <div className="flex items-center gap-1">
+                                  {t.priority === 'urgent' && (
+                                    <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-800/60 px-1.5 py-0.5 rounded font-mono font-bold flex items-center gap-0.5">
+                                      <Flame className="w-3 h-3 text-red-400" /> Urgente
+                                    </span>
+                                  )}
+                                  {t.priority === 'high' && (
+                                    <span className="text-[10px] bg-amber-950/60 text-amber-300 border border-amber-800/40 px-1.5 py-0.5 rounded font-mono">
+                                      Alta
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Title */}
+                              <h4 className="text-xs font-semibold text-gray-100 group-hover:text-blue-300 transition leading-snug mb-2 line-clamp-2">
+                                {t.title}
+                              </h4>
+
+                              {/* Footer Metadata */}
+                              <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-[#232332]">
+                                {/* Subtasks Counter Pill */}
+                                {subtasks.length > 0 ? (
+                                  <span className="flex items-center gap-1 font-mono text-[10px] text-gray-300 bg-[#121218] px-1.5 py-0.5 rounded border border-[#282838]">
+                                    <CheckSquare className="w-3 h-3 text-emerald-400" />
+                                    {completedSubs}/{subtasks.length}
+                                  </span>
+                                ) : (
+                                  <span />
+                                )}
+
+                                {/* Due Date */}
+                                {t.due_date && (
+                                  <span className={`flex items-center gap-1 font-mono text-[10px] ${
+                                    isOverdue ? 'text-red-400 font-semibold' : 'text-gray-400'
+                                  }`}>
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(t.due_date).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ==================================================== */
+            /* VISTA LISTA (CLICKUP STATUS-GROUPED COMPACT TABLE)  */
+            /* ==================================================== */
+            <div className="space-y-6">
+              {columns.map((col) => {
+                const colTasks = filteredTasks.filter(t => t.status === col.id);
+
+                return (
+                  <div key={col.id} className="bg-[#151520] rounded-xl border border-[#232332] overflow-hidden shadow-sm">
+                    {/* Status Header */}
+                    <div className="px-4 py-2.5 bg-[#191926] border-b border-[#252536] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                        <span className={`text-xs font-bold uppercase tracking-wider ${col.color}`}>
+                          {col.title}
+                        </span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#202030] text-gray-400">
+                          {colTasks.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tasks Table */}
+                    {colTasks.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-gray-500">
+                        No hay tareas en este estado.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[#20202e]">
+                        {colTasks.map((t) => {
+                          const subtasks = getSubtasksForTask(t.id);
+                          const isExpanded = !!expandedTaskIds[t.id];
+                          const taskList = lists.find(l => l.id === t.lista_id);
+                          const isOverdue = t.due_date && new Date(t.due_date).getTime() < Date.now() && t.status !== 'completed';
+
+                          return (
+                            <div key={t.id} className="group hover:bg-[#1a1a28] transition">
+                              {/* Main Task Row */}
+                              <div className="flex items-center justify-between px-4 py-2.5 gap-3">
+                                {/* Left: Expand toggle, Complete checkbox & Title */}
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                  {subtasks.length > 0 ? (
+                                    <button
+                                      onClick={() => setExpandedTaskIds(prev => ({ ...prev, [t.id]: !prev[t.id] }))}
+                                      className="p-1 text-gray-400 hover:text-white"
+                                      title="Ver subtareas"
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown className="w-3.5 h-3.5 text-blue-400" />
+                                      ) : (
+                                        <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <span className="w-5" />
+                                  )}
+
+                                  {/* Quick complete checkbox */}
+                                  <button
+                                    onClick={() => handleToggleTaskStatus(t)}
+                                    className="p-1 text-gray-500 hover:text-emerald-400 transition"
+                                  >
+                                    {t.status === 'completed' ? (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                    ) : (
+                                      <Circle className="w-4 h-4 text-gray-400 hover:text-emerald-400" />
+                                    )}
+                                  </button>
+
+                                  {/* Task Title (click opens modal) */}
+                                  <span
+                                    onClick={() => {
+                                      setModalTask(t);
+                                      setIsModalOpen(true);
+                                    }}
+                                    className={`text-xs font-medium cursor-pointer hover:text-blue-300 transition truncate ${
+                                      t.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-100'
+                                    }`}
+                                  >
+                                    {t.title}
+                                  </span>
+
+                                  {/* Subtasks Count Badge */}
+                                  {subtasks.length > 0 && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-gray-400 border border-[#29293a]">
+                                      {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length} subtareas
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Right Meta Columns */}
+                                <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                                  {/* List pill */}
+                                  {taskList && (
+                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40">
+                                      {taskList.nombre}
+                                    </span>
+                                  )}
+
+                                  {/* Priority Badge */}
+                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                                    t.priority === 'urgent' ? 'bg-red-950 text-red-300 border border-red-800/60' :
+                                    t.priority === 'high' ? 'bg-amber-950 text-amber-300 border border-amber-800/60' :
+                                    t.priority === 'low' ? 'bg-gray-800 text-gray-400 border border-gray-700' :
+                                    'bg-blue-950 text-blue-300 border border-blue-800/40'
+                                  }`}>
+                                    {t.priority.toUpperCase()}
+                                  </span>
+
+                                  {/* Due Date */}
+                                  {t.due_date ? (
+                                    <span className={`text-[10px] font-mono flex items-center gap-1 ${
+                                      isOverdue ? 'text-red-400 font-bold' : 'text-gray-400'
+                                    }`}>
+                                      <Calendar className="w-3 h-3" />
+                                      {new Date(t.due_date).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-mono">Sin fecha</span>
+                                  )}
+
+                                  {/* Actions */}
+                                  <button
+                                    onClick={() => {
+                                      setModalTask(t);
+                                      setIsModalOpen(true);
+                                    }}
+                                    className="p-1.5 text-gray-500 hover:text-white rounded hover:bg-[#252538]"
+                                    title="Editar tarea"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Expanded Inline Subtasks Table */}
+                              {isExpanded && subtasks.length > 0 && (
+                                <div className="bg-[#121218] pl-12 pr-4 py-2 border-t border-[#1e1e2a] space-y-1">
+                                  {subtasks.map((sub) => (
+                                    <div key={sub.id} className="flex items-center justify-between py-1 text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => handleToggleTaskStatus(sub)}
+                                          className="text-gray-500 hover:text-emerald-400"
+                                        >
+                                          {sub.status === 'completed' ? (
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                          ) : (
+                                            <Circle className="w-3.5 h-3.5 text-gray-500" />
+                                          )}
+                                        </button>
+                                        <span className={sub.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-300'}>
+                                          {sub.title}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-mono text-gray-500 uppercase">
+                                        Subtarea
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Quick Inline Add Task Footer */}
+                    <div className="p-2.5 bg-[#161622] border-t border-[#222232] flex items-center gap-2">
+                      <Plus className="w-3.5 h-3.5 text-gray-400 ml-2" />
+                      <input
+                        type="text"
+                        value={quickTitleByStatus[col.id] || ''}
+                        onChange={(e) => setQuickTitleByStatus(prev => ({ ...prev, [col.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleQuickCreateTask(col.id);
+                        }}
+                        placeholder={`Añadir tarea rápida en ${col.title}... (Presiona Enter)`}
+                        className="flex-1 bg-transparent text-xs text-white placeholder-gray-500 outline-none"
+                      />
+                      {quickTitleByStatus[col.id] && (
+                        <button
+                          onClick={() => handleQuickCreateTask(col.id)}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-semibold"
+                        >
+                          Guardar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Task Creation & Edition Modal */}
+      <TaskModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        task={modalTask}
+        projects={projects}
+        notes={notes}
+        categories={categories}
+        spaces={spaces}
+        folders={folders}
+        lists={lists}
+        initialListId={getActiveListIdForNewTask()}
+        initialStatus={modalInitialStatus}
+        onSave={async (taskData) => {
+          if (modalTask) {
+            await onUpdateTask(modalTask.id, taskData);
+          } else {
+            await onCreateTask(taskData);
+          }
+          setIsModalOpen(false);
+        }}
+        onDelete={async (id) => {
+          await onDeleteTask(id);
+          setIsModalOpen(false);
+        }}
+      />
+    </div>
+  );
+};
