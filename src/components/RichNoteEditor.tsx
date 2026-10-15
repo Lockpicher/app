@@ -132,6 +132,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
   // Drag & drop file overlay
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
 
   // TipTap Editor initialization
@@ -258,6 +259,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   // Insert Image from user desktop
   const handleInsertImage = async (file: File) => {
     try {
+      setIsUploadingImage(true);
       const res = await storage.uploadFile(file, `notes/${note.id}/images`);
       if (editor) {
         editor
@@ -280,7 +282,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       });
       loadAttachments();
     } catch (e: any) {
-      alert('Error subiendo imagen: ' + e.message);
+      console.error('Error insertando imagen en nota:', e);
+      alert('Error subiendo imagen: ' + (e.message || 'Error de red en Storage'));
+    } finally {
+      setIsUploadingImage(false);
+      if (fileUploadInputRef.current) {
+        fileUploadInputRef.current.value = '';
+      }
     }
   };
 
@@ -781,10 +789,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             />
             <button
               onClick={() => fileUploadInputRef.current?.click()}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538]"
-              title="Subir Imagen a InsForge Storage"
+              disabled={isUploadingImage}
+              className={`p-1.5 rounded transition ${
+                isUploadingImage
+                  ? 'bg-cyan-500/20 text-cyan-300 cursor-wait'
+                  : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+              }`}
+              title={isUploadingImage ? 'Subiendo imagen a Storage...' : 'Subir Imagen a InsForge Storage'}
             >
-              <Upload className="w-3.5 h-3.5 text-cyan-400" />
+              <Upload className={`w-3.5 h-3.5 text-cyan-400 ${isUploadingImage ? 'animate-bounce' : ''}`} />
             </button>
 
             {/* Record Voice Note Button */}

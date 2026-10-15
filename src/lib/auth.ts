@@ -90,11 +90,67 @@ class AuthService {
         }
       } catch (err) {
         console.error('Error al inicializar sesión de InsForge:', err);
+      } finally {
+        if (!this.currentUser) {
+          this.initPromise = null;
+        }
       }
       return null;
     })();
 
     return this.initPromise;
+  }
+
+  /**
+   * Garantiza que la sesión de InsForge esté activa con un token JWT válido y no expirado.
+   * Si el token está ausente o expira en menos de 2 minutos, renueva automáticamente la sesión
+   * contra InsForge backend para evitar 401s y timeouts en operaciones de Storage.
+   */
+  public async ensureActiveSession(): Promise<{ user: AuthUser; token: string }> {
+    let token = (insforge as any).tokenManager?.getAccessToken?.() || null;
+    
+    // Validar expiración del JWT
+    let isTokenValid = false;
+    if (token) {
+      try {
+        const payloadBase64 = token.split('.')[1];
+        if (payloadBase64) {
+          const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonStr = atob(base64);
+          const payload = JSON.parse(jsonStr);
+          const nowSeconds = Math.floor(Date.now() / 1000);
+          if (payload.exp && payload.exp > nowSeconds + 120) {
+            isTokenValid = true;
+          }
+        }
+      } catch (e) {
+        isTokenValid = false;
+      }
+    }
+
+    if (!isTokenValid || !this.currentUser) {
+      console.log('Renovando token de sesión activa de InsForge...');
+      this.initPromise = null;
+      const res = await insforge.auth.signInWithPassword({
+        email: DEFAULT_WORKSPACE_EMAIL,
+        password: DEFAULT_WORKSPACE_PASSWORD
+      });
+
+      if (res.data?.user && res.data.accessToken) {
+        this.currentUser = {
+          id: res.data.user.id,
+          email: res.data.user.email,
+          name: (res.data.user.profile as any)?.name || 'Usuario Segundo Cerebro',
+          createdAt: res.data.user.createdAt
+        };
+        token = res.data.accessToken;
+        this.notifyListeners();
+      } else {
+        throw new Error('No se pudo autenticar la sesión con InsForge. Comprueba tu conexión de red.');
+      }
+    }
+
+    return { user: this.currentUser!, token: token! };
   }
 
   public async getCurrentUser(): Promise<AuthUser | null> {

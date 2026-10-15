@@ -85,9 +85,12 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
       setCoverType('custom');
     } catch (err: any) {
       console.error('Error subiendo portada:', err);
-      setErrorMsg('Error al subir imagen de portada: ' + (err.message || 'Permisos insuficientes'));
+      setErrorMsg('Error al subir imagen de portada: ' + (err.message || 'Error de conexión'));
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 

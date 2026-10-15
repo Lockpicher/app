@@ -111,16 +111,21 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
     const files = Array.from(e.dataTransfer.files);
 
     for (const file of files) {
-      const isImg = file.type.startsWith('image/');
-      const res = await storage.uploadFile(file, isImg ? 'notes/images' : 'notes/files');
-      
-      await onCreateNote({
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        note_type: isImg ? 'image' : 'file',
-        thumbnail_url: isImg ? res.url : undefined,
-        content: isImg ? `<img src="${res.url}" alt="${file.name}" />` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
-        notebook_id: notebook?.id || null
-      });
+      try {
+        const isImg = file.type.startsWith('image/');
+        const res = await storage.uploadFile(file, isImg ? 'notes/images' : 'notes/files');
+        
+        await onCreateNote({
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          note_type: isImg ? 'image' : 'file',
+          thumbnail_url: isImg ? res.url : undefined,
+          content: isImg ? `<img src="${res.url}" alt="${file.name}" />` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
+          notebook_id: notebook?.id || null
+        });
+      } catch (err: any) {
+        console.error('Error subiendo archivo arrastrado:', err);
+        alert(`Error al subir ${file.name}: ` + (err.message || 'Error de conexión'));
+      }
     }
   };
 
