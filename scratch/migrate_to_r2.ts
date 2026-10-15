@@ -54,9 +54,9 @@ export async function runStorageMigration(dryRun = false): Promise<{
     throw new Error('Cloudflare R2 no está configurado en las variables de entorno del servidor. Por favor define R2_ENDPOINT (o R2_ACCOUNT_ID), R2_ACCESS_KEY_ID y R2_SECRET_ACCESS_KEY.');
   }
 
-  // 1. Get inventory from PostgreSQL storage.objects table
+  // 1. Get inventory from PostgreSQL storage_objects view
   const { data: objects, error: objError } = await client.database
-    .from('storage.objects' as any)
+    .from('storage_objects')
     .select('bucket, key, size, mime_type, etag');
 
   if (objError || !objects) {
