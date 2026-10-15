@@ -149,36 +149,36 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       )}
 
       {/* Top Header */}
-      <div className="px-8 py-5 border-b border-[#252538] bg-[#14141e] flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
+      <div className="px-4 sm:px-8 py-3.5 sm:py-5 border-b border-[#252538] bg-[#14141e] flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onBackToNotebooks}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-300 hover:text-white bg-[#1c1c28] hover:bg-[#252538] border border-[#2c2c40] transition"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-300 hover:text-white bg-[#1c1c28] hover:bg-[#252538] border border-[#2c2c40] transition flex-shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Cuadernos
+            <span className="hidden sm:inline">Cuadernos</span>
           </button>
 
           {/* Notebook Title & Badge */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             {notebook && (
               <div 
-                className="w-7 h-9 rounded-md shadow-sm border border-white/20 flex-shrink-0"
+                className="w-6 h-8 sm:w-7 sm:h-9 rounded-md shadow-sm border border-white/20 flex-shrink-0"
                 style={{ 
                   backgroundColor: notebook.color || '#3b82f6',
                   backgroundImage: notebookCoverPreset?.patternSvg 
                 }}
               />
             )}
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                {notebook ? notebook.name : 'Todas las Notas'}
-                <span className="text-[11px] font-mono font-normal text-gray-400">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 truncate">
+                <span className="truncate">{notebook ? notebook.name : 'Todas las Notas'}</span>
+                <span className="text-[11px] font-mono font-normal text-gray-400 flex-shrink-0">
                   ({filteredNotes.length})
                 </span>
               </h2>
               {notebook?.description && (
-                <p className="text-[11px] text-gray-400 truncate max-w-md">
+                <p className="text-[11px] text-gray-400 truncate max-w-md hidden sm:block">
                   {notebook.description}
                 </p>
               )}
@@ -187,45 +187,45 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
         </div>
 
         {/* Search & Actions */}
-        <div className="flex items-center gap-2.5">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar en notas..."
-              className="pl-8 pr-3 py-1.5 bg-[#1a1a28] border border-[#2c2c40] rounded-xl text-xs text-white placeholder-gray-500 outline-none w-52 focus:border-blue-500"
+              className="pl-8 pr-3 py-1.5 bg-[#1a1a28] border border-[#2c2c40] rounded-xl text-xs text-white placeholder-gray-500 outline-none w-full sm:w-48 focus:border-blue-500"
             />
           </div>
 
           {/* Quick Voice Note Button */}
           <button
             onClick={() => setIsVoiceModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/30 transition"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/30 transition flex-shrink-0"
             title="Grabar nota de voz con transcripción automática"
           >
             <Mic className="w-3.5 h-3.5 text-red-400" />
-            Grabar Voz
+            <span className="hidden xs:inline">Grabar</span>
           </button>
 
           {/* Quick Create Note Button */}
           <button
             onClick={() => onCreateNote({ notebook_id: notebook?.id || null })}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30 transition"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30 transition flex-shrink-0"
           >
             <Plus className="w-4 h-4" />
-            Nueva Nota
+            <span>Nueva Nota</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Filter Tabs */}
-      <div className="px-8 py-2.5 bg-[#121218] border-b border-[#222232] flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
+      {/* Filter Tabs */}
+      <div className="px-4 sm:px-8 py-2 bg-[#121218] border-b border-[#222232] flex items-center justify-between text-xs overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 flex-nowrap min-w-max">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-3 py-1 rounded-lg font-medium transition ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition ${
               filterType === 'all' ? 'bg-[#252538] text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -233,7 +233,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           </button>
           <button
             onClick={() => setFilterType('favorites')}
-            className={`px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
               filterType === 'favorites' ? 'bg-amber-500/20 text-amber-300' : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -242,16 +242,16 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           </button>
           <button
             onClick={() => setFilterType('audio')}
-            className={`px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
               filterType === 'audio' ? 'bg-red-500/20 text-red-300' : 'text-gray-400 hover:text-white'
             }`}
           >
             <Mic className="w-3 h-3 text-red-400" />
-            Notas de Voz
+            Audio
           </button>
           <button
             onClick={() => setFilterType('images')}
-            className={`px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
               filterType === 'images' ? 'bg-blue-500/20 text-blue-300' : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -260,22 +260,22 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           </button>
           <button
             onClick={() => setFilterType('tasks')}
-            className={`px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
               filterType === 'tasks' ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white'
             }`}
           >
             <CheckSquare className="w-3 h-3 text-emerald-400" />
-            Listas de Tareas
+            Tareas
           </button>
         </div>
 
-        <span className="text-gray-500 font-mono text-[11px] hidden sm:inline">
-          {filteredNotes.length} {filteredNotes.length === 1 ? 'nota mostrada' : 'notas mostradas'}
+        <span className="text-gray-500 font-mono text-[11px] hidden md:inline ml-2 flex-shrink-0">
+          {filteredNotes.length} {filteredNotes.length === 1 ? 'nota' : 'notas'}
         </span>
       </div>
 
       {/* Symmetrical Uniform Cards Grid */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         {filteredNotes.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-[#262638] rounded-2xl max-w-md mx-auto p-8 space-y-3">
             <div className="w-12 h-12 rounded-xl bg-[#1a1a26] text-blue-400 flex items-center justify-center mx-auto">

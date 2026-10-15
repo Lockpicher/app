@@ -271,21 +271,25 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           .run();
         setSaveStatus('dirty');
       }
-      await db.recordAttachment({
-        entity_id: note.id,
-        entity_type: 'note',
-        file_name: res.name,
-        display_name: file.name,
-        file_url: res.url,
-        file_path: res.r2Key,
-        r2_key: res.provider === 'r2' ? res.r2Key : undefined,
-        bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
-        storage_provider: res.provider,
-        file_size: res.size,
-        mime_type: res.mime,
-        migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
-      });
-      loadAttachments();
+      try {
+        await db.recordAttachment({
+          entity_id: note.id,
+          entity_type: 'note',
+          file_name: res.name,
+          display_name: file.name,
+          file_url: res.url,
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
+          file_size: res.size,
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+        });
+        loadAttachments();
+      } catch (attErr) {
+        console.warn('Adjunto registrado en la nota visualmente, error en metadatos secundarios:', attErr);
+      }
     } catch (e: any) {
       console.error('Error insertando imagen en nota:', e);
       alert('Error subiendo imagen: ' + (e.message || 'Error de red en Storage'));
@@ -601,8 +605,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
       {/* Zoho Notebook Style Rich Toolbar */}
       {editor && (
-        <div className="px-6 py-2 border-b border-[#222232] bg-[#161622] flex items-center justify-between flex-wrap gap-2 text-xs">
-          <div className="flex items-center gap-1 flex-wrap">
+        <div className="px-3 sm:px-6 py-2 border-b border-[#222232] bg-[#161622] flex items-center justify-between gap-2 text-xs overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1 flex-nowrap min-w-max">
             {/* Undo / Redo */}
             <button
               onClick={() => editor.chain().focus().undo().run()}
@@ -865,12 +869,12 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       )}
 
       {/* Main Content Area + Collapsible Inspector Sidebar */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Editor Body */}
-        <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 max-w-4xl mx-auto w-full">
           {/* Note Tags and Category Header */}
-          <div className="mb-4 flex items-center justify-between text-xs text-gray-400 pb-2 border-b border-[#20202d]">
-            <div className="flex items-center gap-2">
+          <div className="mb-4 flex items-center justify-between text-xs text-gray-400 pb-2 border-b border-[#20202d] flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
               <Tag className="w-3.5 h-3.5 text-gray-500" />
               <input
                 type="text"
@@ -879,12 +883,12 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                   setTagsInput(e.target.value);
                   setSaveStatus('dirty');
                 }}
-                placeholder="Etiquetas separadas por coma (ej. finanzas, ideas)..."
-                className="bg-transparent text-xs text-gray-300 outline-none w-72 placeholder-gray-600"
+                placeholder="Etiquetas separadas por coma..."
+                className="bg-transparent text-xs text-gray-300 outline-none w-full placeholder-gray-600"
               />
             </div>
-            <span className="font-mono text-[10px]">
-              Editada: {new Date(note.updated_at).toLocaleString()}
+            <span className="font-mono text-[10px] text-gray-500">
+              {new Date(note.updated_at).toLocaleDateString()}
             </span>
           </div>
 
@@ -903,7 +907,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
         {/* Inspector Sidebar Panel (Tasks, Reminders, Attachments) */}
         {sidebarTab !== 'none' && (
-          <div className="w-80 border-l border-[#222232] bg-[#12121a] flex flex-col h-full overflow-hidden animate-fadeIn">
+          <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-80 border-l border-[#222232] bg-[#12121a] flex flex-col h-full overflow-hidden shadow-2xl animate-fadeIn">
             {/* Sidebar Tab Header */}
             <div className="px-4 py-3 border-b border-[#222232] flex items-center justify-between bg-[#0e0e15]">
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">

@@ -47,8 +47,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onCreateNote
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewType, setViewType] = useState<CalendarViewType>('month');
+  const [viewType, setViewType] = useState<CalendarViewType>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      return 'agenda';
+    }
+    return 'month';
+  });
   
+  // Mobile Tray Drawer State
+  const [isMobileTrayOpen, setIsMobileTrayOpen] = useState(false);
+
   // Filters
   const [showTasks, setShowTasks] = useState(true);
   const [showReminders, setShowReminders] = useState(true);
@@ -436,6 +444,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
 
+          {/* Mobile Pendientes Toggle */}
+          <button
+            onClick={() => setIsMobileTrayOpen(!isMobileTrayOpen)}
+            className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 bg-[#1e1e2c] hover:bg-[#252538] text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition"
+          >
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span>Pendientes ({unscheduledTasks.length})</span>
+          </button>
+
           {/* Quick Create Button */}
           <button
             onClick={() => {
@@ -451,8 +468,58 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </header>
 
       {/* Main Calendar Body */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Side/Bottom Pending Unscheduled Tray (Collapsible on mobile) */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Tray Modal/Drawer */}
+        {isMobileTrayOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end p-2">
+            <div className="bg-[#181824] border border-[#2c2c3e] rounded-t-2xl max-h-[75vh] flex flex-col p-4 shadow-2xl">
+              <div className="flex items-center justify-between pb-3 border-b border-[#252538]">
+                <span className="text-sm font-bold text-white flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  Tareas sin Fecha ({unscheduledTasks.length})
+                </span>
+                <button
+                  onClick={() => setIsMobileTrayOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto py-3 space-y-2">
+                {unscheduledTasks.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-6">
+                    Todas las tareas están fechadas.
+                  </p>
+                ) : (
+                  unscheduledTasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="p-3 bg-[#13131c] rounded-xl border border-[#252538] flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="overflow-hidden">
+                        <p className="font-semibold text-gray-200 truncate">{task.title}</p>
+                        <span className="text-[10px] text-gray-400 uppercase font-mono">{task.priority}</span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          await onUpdateTask(task.id, { scheduled_date: todayStr });
+                          showToast(`Tarea programada para hoy`);
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[11px] font-semibold flex-shrink-0"
+                      >
+                        Agendar Hoy
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Left Desktop Pending Unscheduled Tray */}
         <div className="hidden lg:flex w-64 bg-[#121218] border-r border-[#222230] flex-col overflow-hidden">
           <div className="p-3 border-b border-[#222230] flex items-center justify-between">
             <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5">

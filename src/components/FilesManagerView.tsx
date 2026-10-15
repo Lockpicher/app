@@ -684,7 +684,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                   <div className="h-36 bg-[#111116] border-b border-[#242432] relative overflow-hidden flex items-center justify-center">
                     {cat === 'image' ? (
                       <img
-                        src={file.file_url}
+                        src={r2Storage.getDisplayUrl(file)}
                         alt={file.file_name}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                         loading="lazy"
@@ -812,18 +812,18 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           </div>
         ) : (
           /* List View */
-          <div className="bg-[#181822] border border-[#272738] rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs text-gray-300">
+          <div className="bg-[#181822] border border-[#272738] rounded-xl overflow-x-auto shadow-sm">
+            <table className="w-full text-left text-xs text-gray-300 min-w-[650px] sm:min-w-full">
               <thead className="bg-[#121218] border-b border-[#252535] text-[11px] text-gray-400 uppercase tracking-wider font-semibold">
                 <tr>
-                  <th className="py-3 px-4 w-10"></th>
-                  <th className="py-3 px-4">Nombre</th>
-                  <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Tamaño</th>
-                  <th className="py-3 px-4">Almacenamiento</th>
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4">Relaciones</th>
-                  <th className="py-3 px-4 text-right">Acciones</th>
+                  <th className="py-3 px-3 sm:px-4 w-10"></th>
+                  <th className="py-3 px-3 sm:px-4">Nombre</th>
+                  <th className="py-3 px-3 sm:px-4">Tipo</th>
+                  <th className="py-3 px-3 sm:px-4">Tamaño</th>
+                  <th className="hidden md:table-cell py-3 px-3 sm:px-4">Almacenamiento</th>
+                  <th className="hidden sm:table-cell py-3 px-3 sm:px-4">Fecha</th>
+                  <th className="hidden lg:table-cell py-3 px-3 sm:px-4">Relaciones</th>
+                  <th className="py-3 px-3 sm:px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#222230]">
@@ -859,15 +859,15 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                       <td className="py-3 px-4 font-mono text-gray-300">
                         {formatSize(file.file_size)}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="hidden md:table-cell py-3 px-3 sm:px-4">
                         <span className="px-2 py-0.5 rounded bg-gray-800 text-[10px] font-mono text-gray-300">
                           {file.storage_provider === 'r2' ? 'Cloudflare R2' : 'InsForge'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-gray-400 font-mono text-[11px]">
+                      <td className="hidden sm:table-cell py-3 px-3 sm:px-4 text-gray-400 font-mono text-[11px]">
                         {new Date(file.created_at).toLocaleDateString()}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="hidden lg:table-cell py-3 px-3 sm:px-4">
                         {file.relations && file.relations.length > 0 ? (
                           <div className="flex items-center gap-1 flex-wrap">
                             {file.relations.map(rel => (
@@ -887,10 +887,10 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                           <span className="text-gray-600 text-[11px]">-</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                      <td className="py-3 px-3 sm:px-4 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <a
-                            href={file.file_url}
+                            href={r2Storage.getDisplayUrl(file)}
                             download={file.file_name}
                             target="_blank"
                             rel="noopener noreferrer"

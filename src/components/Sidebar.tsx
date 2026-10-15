@@ -16,7 +16,11 @@ import {
   Book,
   Star,
   Bell,
-  Layers
+  Calendar,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { ViewMode, AppNote } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -39,6 +43,10 @@ interface SidebarProps {
     objects: number;
   };
   onOpenQuickSwitcher: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -50,7 +58,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewNote,
   onNewNotebook,
   counts,
-  onOpenQuickSwitcher
+  onOpenQuickSwitcher,
+  isCollapsed = false,
+  onToggleCollapse,
+  isMobileOpen = false,
+  onCloseMobile
 }) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
@@ -60,31 +72,75 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const pinnedNotes = notes.filter(n => n.is_pinned);
 
+  const handleSelectNav = (v: ViewMode) => {
+    onSelectView(v);
+    if (onCloseMobile) onCloseMobile();
+  };
+
   return (
-    <aside className="w-64 bg-[#141419] border-r border-[#23232b] flex flex-col h-screen select-none">
-      {/* App Header */}
-      <div className="p-4 border-b border-[#23232b]">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-900/30">
-              <Sparkles className="w-4 h-4" />
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isMobileOpen && (
+        <div 
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden transition-opacity"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`
+        fixed lg:static top-0 bottom-0 left-0 z-50
+        bg-[#141419] border-r border-[#23232b] flex flex-col h-screen select-none transition-all duration-300
+        ${isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+        ${isCollapsed ? 'lg:w-0 lg:overflow-hidden lg:border-none' : 'w-64'}
+      `}>
+        {/* App Header */}
+        <div className="p-4 border-b border-[#23232b]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-900/30 flex-shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="overflow-hidden">
+                <h1 className="font-bold text-sm tracking-wide text-white truncate flex items-center gap-1.5">
+                  Segundo Cerebro
+                </h1>
+                <p className="text-[11px] text-gray-400 truncate">Cuadernos & Conocimiento</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-sm tracking-wide text-white flex items-center gap-1.5">
-                Segundo Cerebro
-              </h1>
-              <p className="text-[11px] text-gray-400">Cuadernos & Conocimiento</p>
+
+            {/* Close button for Mobile / Collapse button for Desktop */}
+            <div className="flex items-center gap-1">
+              {onCloseMobile && (
+                <button
+                  onClick={onCloseMobile}
+                  className="lg:hidden p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202a]"
+                  title="Cerrar menú"
+                  aria-label="Cerrar navegación lateral"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  className="hidden lg:flex p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202a]"
+                  title="Contraer Segundo Cerebro"
+                  aria-label="Contraer barra lateral"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* InsForge Status Pill */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1a1a22] border border-[#2c2c38] text-[11px] text-emerald-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <Database className="w-3 h-3 text-emerald-400" />
-          <span className="truncate">InsForge BaaS Conectado</span>
+          {/* InsForge Status Pill */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1a1a22] border border-[#2c2c38] text-[11px] text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>
+            <Database className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+            <span className="truncate">InsForge BaaS Conectado</span>
+          </div>
         </div>
-      </div>
 
       {/* Quick Actions */}
       <div className="p-3 space-y-2 border-b border-[#23232b]">
@@ -128,7 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Cuadernos (Zoho Notebook style) */}
         <button
-          onClick={() => onSelectView('notebooks')}
+          onClick={() => handleSelectNav('notebooks')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'notebooks'
               ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
@@ -146,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Todas las Notas */}
         <button
-          onClick={() => onSelectView('all_notes')}
+          onClick={() => handleSelectNav('all_notes')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'all_notes' || currentView === 'notes'
               ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
@@ -164,7 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Favoritos */}
         <button
-          onClick={() => onSelectView('favorites')}
+          onClick={() => handleSelectNav('favorites')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'favorites'
               ? 'bg-amber-600/15 text-amber-300 border border-amber-500/30'
@@ -182,7 +238,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Recordatorios */}
         <button
-          onClick={() => onSelectView('reminders')}
+          onClick={() => handleSelectNav('reminders')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'reminders'
               ? 'bg-amber-600/15 text-amber-300 border border-amber-500/30'
@@ -198,12 +254,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
         </button>
 
+        {/* Calendario Central Integrado */}
+        <button
+          onClick={() => handleSelectNav('calendar')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'calendar'
+              ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Calendar className="w-4 h-4 text-blue-400" />
+            Calendario
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-850 font-mono">
+            Agenda
+          </span>
+        </button>
+
         <div className="pt-3 px-2 pb-1 text-[11px] font-semibold tracking-wider uppercase text-gray-400">
           Gestión & Entidades
         </div>
 
         <button
-          onClick={() => onSelectView('tasks')}
+          onClick={() => handleSelectNav('tasks')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'tasks'
               ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
@@ -220,7 +294,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={() => onSelectView('projects')}
+          onClick={() => handleSelectNav('projects')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'projects'
               ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
@@ -237,7 +311,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={() => onSelectView('objects')}
+          onClick={() => handleSelectNav('objects')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'objects'
               ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
@@ -258,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <button
-          onClick={() => onSelectView('graph')}
+          onClick={() => handleSelectNav('graph')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'graph'
               ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
@@ -272,7 +346,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={() => onSelectView('files')}
+          onClick={() => handleSelectNav('files')}
           className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
             currentView === 'files'
               ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
@@ -343,5 +417,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
     </aside>
+    </>
   );
 };

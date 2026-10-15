@@ -11,6 +11,7 @@ import { ObjectsView } from './components/ObjectsView';
 import { GraphView } from './components/GraphView';
 import { StorageView } from './components/StorageView';
 import { FilesManagerView } from './components/FilesManagerView';
+import { CalendarView } from './components/CalendarView';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
@@ -27,7 +28,16 @@ import {
   TaskCategory,
   ViewMode 
 } from './lib/types';
-import { Loader2 } from 'lucide-react';
+import { 
+  Loader2, 
+  Menu, 
+  ChevronRight, 
+  Book, 
+  CheckSquare, 
+  Calendar as CalendarIcon, 
+  FolderKanban, 
+  HardDrive 
+} from 'lucide-react';
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('notebooks');
@@ -54,6 +64,26 @@ export function App() {
   // Notebook creation modal from sidebar
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [editingNotebook, setEditingNotebook] = useState<AppNotebook | null>(null);
+
+  // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('segundo_cerebro_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('segundo_cerebro_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Load initial data from InsForge
   const loadData = async () => {
@@ -494,8 +524,60 @@ export function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-obsidian-bg">
-      {/* Left Sidebar */}
+    <div className="flex flex-col lg:flex-row h-screen w-screen overflow-hidden bg-obsidian-bg">
+      {/* Mobile Top App Bar (visible on <lg screens) */}
+      <header className="lg:hidden h-14 bg-[#141419] border-b border-[#23232b] flex items-center justify-between px-4 z-30 flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 -ml-1 text-gray-300 hover:text-white rounded-lg hover:bg-[#20202a] active:bg-[#282836] transition"
+            aria-label="Abrir menú de navegación"
+          >
+            <Menu className="w-5 h-5 text-gray-200" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+              <span className="text-xs font-bold">SC</span>
+            </div>
+            <span className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-xs">
+              {currentView === 'notebooks' && 'Cuadernos'}
+              {currentView === 'all_notes' && 'Todas las notas'}
+              {currentView === 'favorites' && 'Favoritos'}
+              {currentView === 'reminders' && 'Recordatorios'}
+              {currentView === 'calendar' && 'Calendario'}
+              {currentView === 'tasks' && 'Tareas'}
+              {currentView === 'projects' && 'Proyectos'}
+              {currentView === 'objects' && 'Objetos'}
+              {currentView === 'graph' && 'Grafo'}
+              {currentView === 'files' && 'Archivos R2'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => handleNewNote()}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-medium shadow-sm transition"
+          >
+            <span>+ Nota</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Floating Re-expand Button for Desktop when Sidebar is collapsed */}
+      {isSidebarCollapsed && (
+        <button
+          onClick={toggleSidebarCollapse}
+          className="hidden lg:flex fixed left-3 top-3 z-40 p-2 rounded-xl bg-[#1a1a24] border border-[#2b2b3a] hover:border-purple-500/50 text-gray-300 hover:text-white shadow-xl hover:scale-105 transition duration-200 items-center gap-1.5 text-xs font-medium"
+          title="Mostrar Segundo Cerebro"
+          aria-label="Expandir navegación lateral"
+        >
+          <ChevronRight className="w-4 h-4 text-purple-400" />
+          <span className="text-[11px] font-semibold text-gray-200">Menú</span>
+        </button>
+      )}
+
+      {/* Left Sidebar (Desktop responsive / Mobile drawer) */}
       <Sidebar
         currentView={currentView}
         onSelectView={(v) => {
@@ -524,10 +606,14 @@ export function App() {
           objects: objects.length
         }}
         onOpenQuickSwitcher={() => setIsQuickSwitcherOpen(true)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Content Workspace */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0 pb-14 lg:pb-0 relative">
         {/* If user is editing a note, display the RichNoteEditor */}
         {isEditingNote && activeNote ? (
           <RichNoteEditor
@@ -619,6 +705,23 @@ export function App() {
               />
             )}
 
+            {/* Calendario Central Integrado */}
+            {currentView === 'calendar' && (
+              <CalendarView
+                tasks={tasks}
+                notes={notes}
+                projects={projects}
+                reminders={reminders}
+                onUpdateTask={handleUpdateTask}
+                onCreateTask={handleCreateTask}
+                onOpenNote={(id: string) => {
+                  const note = notes.find(n => n.id === id);
+                  if (note) handleOpenNote(note);
+                }}
+                onCreateNote={handleNewNote}
+              />
+            )}
+
             {/* Tareas View */}
             {currentView === 'tasks' && (
               <TasksView
@@ -699,6 +802,78 @@ export function App() {
             )}
           </>
         )}
+
+        {/* Mobile Bottom Navigation Bar (visible on <lg screens) */}
+        <nav 
+          className="lg:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#121218]/95 backdrop-blur-md border-t border-[#23232f] flex items-center justify-around px-2 z-30"
+          aria-label="Navegación inferior móvil"
+        >
+          <button
+            onClick={() => {
+              setIsEditingNote(false);
+              setSelectedNotebookId(null);
+              setCurrentView('notebooks');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
+              currentView === 'notebooks' || currentView === 'all_notes' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Book className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] font-medium leading-none">Cuadernos</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsEditingNote(false);
+              setCurrentView('tasks');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
+              currentView === 'tasks' ? 'text-amber-400' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <CheckSquare className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] font-medium leading-none">Tareas</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsEditingNote(false);
+              setCurrentView('calendar');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
+              currentView === 'calendar' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] font-medium leading-none">Calendario</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsEditingNote(false);
+              setCurrentView('projects');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
+              currentView === 'projects' ? 'text-purple-400' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <FolderKanban className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] font-medium leading-none">Proyectos</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsEditingNote(false);
+              setCurrentView('files');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
+              currentView === 'files' ? 'text-cyan-400' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] font-medium leading-none">Archivos</span>
+          </button>
+        </nav>
       </main>
 
       {/* Global Notebook Modal (triggered from sidebar) */}

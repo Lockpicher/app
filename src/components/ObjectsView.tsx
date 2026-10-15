@@ -100,28 +100,28 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Boxes className="w-5 h-5 text-emerald-400" />
-            Objetos y Entidades (Capacities & Dataview)
+          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+            <Boxes className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span>Objetos y Entidades</span>
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">
             Estructura conceptos, personas, libros y recursos con propiedades dinámicas.
           </p>
         </div>
 
         <button
           onClick={() => setIsCreating(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-900/30"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-900/30 whitespace-nowrap"
         >
           <Plus className="w-4 h-4" />
-          Nuevo Objeto
+          <span>Nuevo Objeto</span>
         </button>
       </div>
 
       {/* Filter Tabs by Object Type */}
-      <div className="px-8 py-3 bg-[#131318] border-b border-[#23232f] flex items-center gap-2 overflow-x-auto">
+      <div className="px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-[#131318] border-b border-[#23232f] flex items-center gap-2 overflow-x-auto no-scrollbar">
         {types.map(t => {
           const Icon = t.icon;
           const count = t.id === 'all' 
@@ -131,7 +131,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
             <button
               key={t.id}
               onClick={() => setSelectedType(t.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
                 selectedType === t.id
                   ? 'bg-[#22222e] text-white border border-[#3b3b4f]'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1a1a22]'
@@ -148,7 +148,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
       </div>
 
       {/* Objects Grid */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredObjects.length === 0 ? (
             <div className="col-span-full text-center py-12 text-gray-400 text-xs">
@@ -246,9 +246,9 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
 
       {/* Modal Nuevo Objeto */}
       {isCreating && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <form onSubmit={handleCreate} className="bg-[#1a1a24] border border-[#2f2f40] rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <form onSubmit={handleCreate} className="bg-[#1a1a24] border border-[#2f2f40] rounded-xl max-w-md w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
               <Boxes className="w-4 h-4 text-emerald-400" />
               Nuevo Objeto / Entidad
             </h3>

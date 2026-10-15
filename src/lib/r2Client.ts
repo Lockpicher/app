@@ -179,17 +179,30 @@ export const r2Storage = {
   },
 
   /**
+   * Obtiene la URL de visualización (stream/proxy o pública) sin expirar
+   */
+  getDisplayUrl(attachment: Partial<AppAttachment> & { file_url?: string; r2_key?: string; storage_provider?: string }): string {
+    if (attachment.r2_key) {
+      return `/api/r2/stream?key=${encodeURIComponent(attachment.r2_key)}`;
+    }
+    return attachment.file_url || '';
+  },
+
+  /**
    * Obtiene una URL de visualización o descarga con permisos y expiración
    */
   async getDownloadUrl(attachment: AppAttachment, forceDownload = false): Promise<string> {
     if (attachment.storage_provider === 'r2' && attachment.r2_key) {
+      if (!forceDownload) {
+        return `/api/r2/stream?key=${encodeURIComponent(attachment.r2_key)}`;
+      }
       try {
         const res = await fetch('/api/r2/presign-download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             key: attachment.r2_key,
-            disposition: forceDownload ? 'attachment' : 'inline',
+            disposition: 'attachment',
             filename: attachment.file_name
           })
         });

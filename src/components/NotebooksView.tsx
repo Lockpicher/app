@@ -72,26 +72,26 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#161620] overflow-hidden">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-4 sm:px-8 py-4 sm:py-5 border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
+          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 sm:gap-2.5">
             <Book className="w-5 h-5 text-blue-400" />
             Cuadernos
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-gray-400 mt-0.5 line-clamp-1 sm:line-clamp-none">
             Colecciones de notas, ideas y conocimiento organizadas en cuadernos visuales estilo Zoho Notebook.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar cuaderno..."
-              className="pl-8 pr-3 py-1.5 bg-[#1a1a26] border border-[#2c2c40] rounded-xl text-xs text-white placeholder-gray-500 outline-none w-48 focus:border-blue-500 transition"
+              className="pl-8 pr-3 py-1.5 bg-[#1a1a26] border border-[#2c2c40] rounded-xl text-xs text-white placeholder-gray-500 outline-none w-full sm:w-48 focus:border-blue-500 transition"
             />
           </div>
 
@@ -103,21 +103,21 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
                 : 'bg-[#1a1a26] border-[#2c2c40] text-gray-400 hover:text-white'
             }`}
           >
-            {showArchived ? 'Ver Activos' : 'Ver Archivados'}
+            {showArchived ? 'Activos' : 'Archivados'}
           </button>
 
           <button
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-900/30 transition"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-900/30 transition flex-shrink-0"
           >
             <Plus className="w-4 h-4" />
-            Nuevo Cuaderno
+            <span>Nuevo Cuaderno</span>
           </button>
         </div>
       </div>
 
       {/* Main Grid Canvas (3:4 ratio covers) */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         {filteredNotebooks.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-[#29293e] rounded-2xl max-w-lg mx-auto p-8 space-y-3">
             <div className="w-12 h-12 rounded-xl bg-[#1b1b28] text-blue-400 flex items-center justify-center mx-auto">
@@ -137,7 +137,7 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 md:gap-8">
             {filteredNotebooks.map((nb) => {
               const nbNotes = notes.filter(n => n.notebook_id === nb.id && !n.is_archived);
               const preset = getCoverById(nb.cover_url);

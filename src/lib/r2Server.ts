@@ -240,3 +240,16 @@ export async function deleteR2Object(key: string): Promise<boolean> {
   );
   return true;
 }
+
+/**
+ * Obtiene el stream directo y metadatos de un objeto en R2 (soporta Range requests)
+ */
+export async function getR2ObjectStream(key: string, range?: string) {
+  const { client, bucket } = getR2Client();
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Range: range
+  });
+  return await client.send(command);
+}

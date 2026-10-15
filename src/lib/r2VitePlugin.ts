@@ -7,8 +7,10 @@ import {
   headR2Object,
   uploadBufferToR2,
   getR2Client,
-  testR2Connection
+  testR2Connection,
+  getR2ObjectStream
 } from './r2Server';
+import { Readable } from 'stream';
 
 async function parseJsonBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -102,8 +104,8 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
         if (publicUrl) {
           downloadUrl = `${publicUrl.replace(/\/$/, '')}/${r2Key}`;
         } else {
-          // If private, create initial presigned view URL
-          downloadUrl = await createPresignedDownloadUrl(r2Key, 86400);
+          // Si no hay dominio público configurado, usar endpoint local de stream con soporte HTTP Range y streaming
+          downloadUrl = `/api/r2/stream?key=${encodeURIComponent(r2Key)}`;
         }
 
         return sendJson(res, 200, {
@@ -167,7 +169,7 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
     return;
   }
 
-  // 5. Proxy download / Range stream for audio/video (HTTP Range support)
+  // 5. Proxy download / Range stream for images/audio/video (Direct Stream & HTTP Range support)
   if (pathname.startsWith('/api/r2/stream') && req.method === 'GET') {
     const key = url.searchParams.get('key');
     if (!key) {
@@ -178,14 +180,55 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
       return sendJson(res, 400, { error: 'Cloudflare R2 no configurado' });
     }
 
-    // Redirect to presigned URL or fetch stream
-    createPresignedDownloadUrl(key, 3600)
-      .then((signedUrl: string) => {
-        res.writeHead(307, { Location: signedUrl });
-        res.end();
+    // Permitir CORS en peticiones de stream
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+
+    const rangeHeader = req.headers['range'];
+
+    getR2ObjectStream(key, rangeHeader)
+      .then((s3Res) => {
+        if (s3Res.ContentType) {
+          res.setHeader('Content-Type', s3Res.ContentType);
+        }
+        if (s3Res.ContentLength !== undefined) {
+          res.setHeader('Content-Length', s3Res.ContentLength.toString());
+        }
+        if (s3Res.ContentRange) {
+          res.setHeader('Content-Range', s3Res.ContentRange);
+          res.statusCode = 206; // Partial Content
+        } else {
+          res.statusCode = 200;
+        }
+
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+
+        if (s3Res.Body instanceof Readable) {
+          s3Res.Body.pipe(res);
+        } else if (s3Res.Body && typeof (s3Res.Body as any).transformToWebStream === 'function') {
+          // Si es un web stream o similar
+          const nodeStream = Readable.fromWeb((s3Res.Body as any).transformToWebStream());
+          nodeStream.pipe(res);
+        } else {
+          // Fallback a URL presignada si el body no se puede convertir a stream
+          createPresignedDownloadUrl(key, 86400).then(signedUrl => {
+            res.writeHead(302, { Location: signedUrl });
+            res.end();
+          }).catch(err => sendJson(res, 500, { error: err.message }));
+        }
       })
       .catch((err: any) => {
-        sendJson(res, 500, { error: err.message });
+        // Si falla el stream directo, intentar redirección presignada
+        createPresignedDownloadUrl(key, 86400)
+          .then((signedUrl: string) => {
+            res.writeHead(302, { Location: signedUrl });
+            res.end();
+          })
+          .catch((signErr: any) => {
+            sendJson(res, 500, { error: err.message || signErr.message });
+          });
       });
     return;
   }
@@ -230,7 +273,7 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
         if (publicUrl) {
           downloadUrl = `${publicUrl.replace(/\/$/, '')}/${r2Key}`;
         } else {
-          downloadUrl = await createPresignedDownloadUrl(r2Key, 86400);
+          downloadUrl = `/api/r2/stream?key=${encodeURIComponent(r2Key)}`;
         }
 
         return sendJson(res, 200, {

@@ -59,6 +59,8 @@ interface ClickUpSidebarProps {
   onCreateList: (list: Partial<KubbonetList>) => Promise<void>;
   onUpdateList: (id: number, updates: Partial<KubbonetList>) => Promise<void>;
   onDeleteList: (id: number) => Promise<void>;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
@@ -77,7 +79,9 @@ export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
   onDeleteFolder,
   onCreateList,
   onUpdateList,
-  onDeleteList
+  onDeleteList,
+  isMobileOpen = false,
+  onCloseMobile
 }) => {
   // Expanded state
   const [expandedSpaces, setExpandedSpaces] = useState<Record<number, boolean>>({ 1: true, 2: true });
@@ -141,37 +145,62 @@ export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
   };
 
   return (
-    <aside className="w-64 bg-[#111116] border-r border-[#20202a] flex flex-col h-full select-none flex-shrink-0 text-xs">
-      {/* Workspace Header (Nivel 1: Workspace) */}
-      <div className="p-3 border-b border-[#20202a] bg-[#14141c]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-900/30">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs truncate max-w-[130px]">
-                {workspace.nombre}
+    <>
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div 
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden transition-opacity"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`
+        fixed md:static top-0 bottom-0 left-0 z-50 md:z-auto
+        w-64 bg-[#111116] border-r border-[#20202a] flex flex-col h-full select-none flex-shrink-0 text-xs transition-transform duration-300
+        ${isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}
+      `}>
+        {/* Workspace Header (Nivel 1: Workspace) */}
+        <div className="p-3 border-b border-[#20202a] bg-[#14141c]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-900/30 flex-shrink-0">
+                <Building2 className="w-4 h-4" />
               </div>
-              <div className="text-[10px] text-blue-400 font-mono">Workspace Activo</div>
+              <div className="overflow-hidden">
+                <div className="font-bold text-white text-xs truncate max-w-[120px]">
+                  {workspace.nombre}
+                </div>
+                <div className="text-[10px] text-blue-400 font-mono">Workspace Activo</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {onCloseMobile && (
+                <button
+                  onClick={onCloseMobile}
+                  className="md:hidden p-1 text-gray-400 hover:text-white rounded hover:bg-[#20202e]"
+                  title="Cerrar menú jerarquía"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180" />
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setEditingSpace(null);
+                  setSpaceName('');
+                  setSpaceDesc('');
+                  setSpaceColor('indigo');
+                  setIsSpaceModalOpen(true);
+                }}
+                className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#20202e] transition"
+                title="Crear nuevo Espacio (Space)"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
-
-          <button
-            onClick={() => {
-              setEditingSpace(null);
-              setSpaceName('');
-              setSpaceDesc('');
-              setSpaceColor('indigo');
-              setIsSpaceModalOpen(true);
-            }}
-            className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#20202e] transition"
-            title="Crear nuevo Espacio (Space)"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
         </div>
-      </div>
 
       {/* Global "Todo" View Button */}
       <div className="p-2 border-b border-[#20202a]">
@@ -600,5 +629,6 @@ export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
         </div>
       )}
     </aside>
+    </>
   );
 };

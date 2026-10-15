@@ -13,6 +13,7 @@ import {
   ExternalLink 
 } from 'lucide-react';
 import { AppAttachment } from '../lib/types';
+import { r2Storage } from '../lib/r2Client';
 
 interface LightboxModalProps {
   files: AppAttachment[];
@@ -114,7 +115,7 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
           )}
 
           <a 
-            href={currentFile.file_url} 
+            href={r2Storage.getDisplayUrl(currentFile)} 
             download={currentFile.file_name}
             target="_blank"
             rel="noopener noreferrer"
@@ -153,7 +154,7 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
         <div className="max-w-full max-h-full flex items-center justify-center overflow-auto p-2">
           {isImage && (
             <img 
-              src={currentFile.file_url} 
+              src={r2Storage.getDisplayUrl(currentFile)} 
               alt={currentFile.file_name}
               style={{ transform: `scale(${zoom})`, transition: 'transform 0.15s ease-out' }}
               className="max-h-[75vh] max-w-[85vw] object-contain rounded-lg shadow-2xl select-none"
@@ -163,7 +164,7 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
           {isVideo && (
             <div className="w-full max-w-4xl bg-black rounded-xl overflow-hidden border border-gray-800 shadow-2xl">
               <video 
-                src={currentFile.file_url} 
+                src={r2Storage.getDisplayUrl(currentFile)} 
                 controls 
                 autoPlay
                 playsInline
@@ -184,7 +185,7 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
                 <p className="text-xs text-gray-400 font-mono mt-1">{formatSize(currentFile.file_size)} • {currentFile.mime_type}</p>
               </div>
               <audio 
-                src={currentFile.file_url} 
+                src={r2Storage.getDisplayUrl(currentFile)} 
                 controls 
                 autoPlay
                 className="w-full mt-4" 

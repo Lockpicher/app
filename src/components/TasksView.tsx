@@ -28,7 +28,9 @@ import {
   Circle,
   CheckCircle2,
   MoreVertical,
-  ExternalLink
+  ExternalLink,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { 
   AppTask, 
@@ -84,6 +86,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [lists, setLists] = useState<KubbonetList[]>([]);
   const [selectedScope, setSelectedScope] = useState<HierarchyScope>({ type: 'all' });
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [isClickUpSidebarOpen, setIsClickUpSidebarOpen] = useState(false);
 
   // Expanded subtasks in List View
   const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
@@ -339,7 +342,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
         lists={lists}
         tasks={tasks}
         selectedScope={selectedScope}
-        onSelectScope={setSelectedScope}
+        onSelectScope={(scope) => {
+          setSelectedScope(scope);
+          setIsClickUpSidebarOpen(false);
+        }}
         onCreateSpace={handleCreateSpace}
         onUpdateSpace={handleUpdateSpace}
         onDeleteSpace={handleDeleteSpace}
@@ -349,24 +355,37 @@ export const TasksView: React.FC<TasksViewProps> = ({
         onCreateList={handleCreateList}
         onUpdateList={handleUpdateList}
         onDeleteList={handleDeleteList}
+        isMobileOpen={isClickUpSidebarOpen}
+        onCloseMobile={() => setIsClickUpSidebarOpen(false)}
       />
 
       {/* Main Tasks Workspace */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         {/* Top Header: Breadcrumbs, Scope Title & View Mode Toggle */}
-        <div className="px-6 py-4 bg-[#14141c] border-b border-[#222232] flex items-center justify-between flex-wrap gap-4">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-[#14141c] border-b border-[#222232] flex items-center justify-between flex-wrap gap-3">
           <div className="space-y-1">
-            {/* Breadcrumb Path */}
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-              <Building2 className="w-3.5 h-3.5 text-blue-400" />
-              {scopeInfo.path.map((segment, idx) => (
-                <React.Fragment key={idx}>
-                  {idx > 0 && <span className="text-gray-600">/</span>}
-                  <span className={idx === scopeInfo.path.length - 1 ? 'text-blue-300 font-semibold' : 'text-gray-400'}>
-                    {segment}
-                  </span>
-                </React.Fragment>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsClickUpSidebarOpen(!isClickUpSidebarOpen)}
+                className="md:hidden p-1.5 -ml-1 text-gray-400 hover:text-white rounded-lg bg-[#1a1a24] border border-[#2b2b3a]"
+                title="Abrir jerarquía de espacios"
+                aria-label="Abrir jerarquía"
+              >
+                <Layers className="w-4 h-4 text-blue-400" />
+              </button>
+
+              {/* Breadcrumb Path */}
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium overflow-hidden truncate">
+                <Building2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                {scopeInfo.path.map((segment, idx) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <span className="text-gray-600">/</span>}
+                    <span className={idx === scopeInfo.path.length - 1 ? 'text-blue-300 font-semibold truncate' : 'text-gray-400 truncate'}>
+                      {segment}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center gap-3">

@@ -388,20 +388,20 @@ export const GraphView: React.FC<GraphViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#111116] overflow-hidden select-none relative">
       {/* Top Floating Controls */}
-      <div className="absolute top-4 left-6 z-10 bg-[#191922]/90 backdrop-blur-md px-4 py-2.5 rounded-xl border border-[#2d2d3d] shadow-xl flex items-center gap-4">
+      <div className="absolute top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-auto z-10 bg-[#191922]/90 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#2d2d3d] shadow-xl flex flex-wrap items-center gap-2 sm:gap-4 max-w-full">
         <div className="flex items-center gap-2">
-          <Share2 className="w-4 h-4 text-purple-400" />
+          <Share2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
           <span className="text-xs font-bold text-white tracking-wide">Grafo de Red</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#252536] text-gray-400 font-mono">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#252536] text-gray-400 font-mono hidden xs:inline">
             {nodesRef.current.length} nodos • {edgesRef.current.length} vínculos
           </span>
         </div>
 
         {/* Node Filter Pills */}
-        <div className="flex items-center gap-2 border-l border-[#2e2e40] pl-4 text-xs">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-t xs:border-t-0 xs:border-l border-[#2e2e40] pt-1.5 xs:pt-0 xs:pl-3 sm:pl-4 text-xs overflow-x-auto no-scrollbar w-full xs:w-auto">
           <button
             onClick={() => setShowProjects(!showProjects)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition whitespace-nowrap ${
               showProjects ? 'bg-blue-950/60 text-blue-300 border border-blue-800/40' : 'text-gray-400 bg-transparent opacity-50'
             }`}
           >
@@ -411,7 +411,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
           <button
             onClick={() => setShowNotes(!showNotes)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition whitespace-nowrap ${
               showNotes ? 'bg-purple-950/60 text-purple-300 border border-purple-800/40' : 'text-gray-400 bg-transparent opacity-50'
             }`}
           >
@@ -421,7 +421,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
           <button
             onClick={() => setShowTasks(!showTasks)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition whitespace-nowrap ${
               showTasks ? 'bg-amber-950/60 text-amber-300 border border-amber-800/40' : 'text-gray-400 bg-transparent opacity-50'
             }`}
           >
@@ -431,7 +431,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
           <button
             onClick={() => setShowObjects(!showObjects)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition whitespace-nowrap ${
               showObjects ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/40' : 'text-gray-400 bg-transparent opacity-50'
             }`}
           >

@@ -60,14 +60,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-4 sm:px-8 py-4 sm:py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
             <FolderKanban className="w-5 h-5 text-blue-400" />
             Gestor de Proyectos
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Coordina objetivos, progreso y conecta notas, tareas y adjuntos (archivos, imágenes y enlaces) por proyecto.
+          <p className="text-xs text-gray-400 mt-0.5 line-clamp-1 sm:line-clamp-none">
+            Coordina objetivos, progreso y conecta notas, tareas y adjuntos por proyecto.
           </p>
         </div>
 
@@ -76,13 +76,13 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shadow-blue-900/30"
         >
           <Plus className="w-4 h-4" />
-          Nuevo Proyecto
+          <span>Nuevo Proyecto</span>
         </button>
       </div>
 
       {/* Projects Grid */}
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {projects.map((project) => {
             const projectTasks = tasks.filter(t => t.project_id === project.id);
             const completedTasks = projectTasks.filter(t => t.status === 'completed');
