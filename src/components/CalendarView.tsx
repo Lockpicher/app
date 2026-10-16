@@ -21,20 +21,30 @@ import {
   Columns,
   ExternalLink
 } from 'lucide-react';
-import { AppTask, AppNote, AppProject, AppReminder, TaskPriority, TaskStatus } from '../lib/types';
+import { AppTask, AppNote, AppProject, AppReminder, AppObject, TaskPriority, TaskStatus } from '../lib/types';
+import { calculateAge } from '../lib/birthdays';
 import { db } from '../lib/insforge';
 
 type CalendarViewType = 'month' | 'week' | 'day' | 'agenda';
+
+export interface CalendarBirthdayItem {
+  id: string;
+  person: AppObject;
+  birthdayDate: string; // YYYY-MM-DD for this calendar year
+  age: number | null;
+}
 
 interface CalendarViewProps {
   tasks: AppTask[];
   notes: AppNote[];
   projects: AppProject[];
   reminders: AppReminder[];
+  objects?: AppObject[];
   onUpdateTask: (id: string, updates: Partial<AppTask>) => Promise<void>;
   onCreateTask: (task: Partial<AppTask>) => Promise<AppTask | null>;
   onOpenNote?: (id: string) => void;
   onCreateNote?: (note: Partial<AppNote>) => Promise<void>;
+  onOpenPerson?: (person: AppObject) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -42,10 +52,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   notes,
   projects,
   reminders,
+  objects = [],
   onUpdateTask,
   onCreateTask,
   onOpenNote,
-  onCreateNote
+  onCreateNote,
+  onOpenPerson
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewType, setViewType] = useState<CalendarViewType>(() => {
@@ -124,11 +136,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       reminders: AppReminder[];
       notes: AppNote[];
       projects: AppProject[];
+      birthdays: CalendarBirthdayItem[];
     }>();
 
     const getBucket = (dateKey: string) => {
       if (!map.has(dateKey)) {
-        map.set(dateKey, { tasks: [], reminders: [], notes: [], projects: [] });
+        map.set(dateKey, { tasks: [], reminders: [], notes: [], projects: [], birthdays: [] });
       }
       return map.get(dateKey)!;
     };
@@ -169,8 +182,34 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       });
     }
 
+    // Integrate Contact Birthdays with Annual Recurrence (without duplicating records)
+    const currentYear = currentDate.getFullYear();
+    const years = [currentYear - 1, currentYear, currentYear + 1];
+
+    objects.forEach(obj => {
+      if (obj.object_type !== 'person') return;
+      const bday = obj.properties?.birthday || obj.properties?.cumpleanos || obj.properties?.fecha_nacimiento;
+      if (!bday) return;
+
+      const parts = String(bday).split('-');
+      const month = parts.length === 3 ? parts[1] : parts[0];
+      const day = parts.length === 3 ? parts[2] : parts[1];
+      if (!month || !day) return;
+
+      years.forEach(y => {
+        const targetDateKey = `${y}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const age = calculateAge(bday, y);
+        getBucket(targetDateKey).birthdays.push({
+          id: `${obj.id}-${y}`,
+          person: obj,
+          birthdayDate: targetDateKey,
+          age
+        });
+      });
+    });
+
     return map;
-  }, [tasks, reminders, notes, projects, showTasks, showReminders, showNotes, showProjects]);
+  }, [tasks, reminders, notes, projects, objects, showTasks, showReminders, showNotes, showProjects, currentDate]);
 
   // Unscheduled tasks (Bandeja de pendientes sin fecha)
   const unscheduledTasks = useMemo(() => {
@@ -580,7 +619,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     (dayItems?.tasks.length || 0) + 
                     (dayItems?.reminders.length || 0) + 
                     (dayItems?.notes.length || 0) + 
-                    (dayItems?.projects.length || 0);
+                    (dayItems?.projects.length || 0) +
+                    (dayItems?.birthdays.length || 0);
 
                   return (
                     <div
@@ -619,6 +659,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                       {/* Items List in Day Cell */}
                       <div className="flex-1 space-y-1 overflow-y-auto max-h-[85px] no-scrollbar">
+                        {/* Birthdays (Highest visual priority) */}
+                        {dayItems?.birthdays.map(b => (
+                          <div
+                            key={b.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenPerson) onOpenPerson(b.person);
+                            }}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950/90 text-amber-200 border border-amber-600/60 truncate flex items-center gap-1 hover:border-amber-400 hover:bg-amber-900 shadow-sm"
+                            title={`Cumpleaños de ${b.person.title}${b.age !== null ? ` (${b.age} años)` : ''} - Clic para ver ficha`}
+                          >
+                            <span>🎂</span>
+                            <span className="truncate">{b.person.title}</span>
+                            {b.age !== null && (
+                              <span className="text-[9px] font-mono text-amber-400">({b.age})</span>
+                            )}
+                          </div>
+                        ))}
+
                         {/* Tasks */}
                         {dayItems?.tasks.slice(0, 3).map(task => (
                           <div
@@ -713,6 +772,46 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           </span>
                         )}
                       </div>
+
+                      {/* Birthdays on this day */}
+                      {dayItems.birthdays.length > 0 && (
+                        <div className="space-y-2">
+                          {dayItems.birthdays.map(b => (
+                            <div
+                              key={b.id}
+                              className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-amber-950/60 to-purple-950/40 border border-amber-600/50 shadow-sm"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">🎂</span>
+                                <div>
+                                  <h4 className="text-xs font-bold text-amber-200 flex items-center gap-1.5">
+                                    <span>Cumpleaños de {b.person.title}</span>
+                                    {b.age !== null && (
+                                      <span className="text-[10px] px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">
+                                        Cumple {b.age} años
+                                      </span>
+                                    )}
+                                  </h4>
+                                  <p className="text-[11px] text-gray-400 mt-0.5">
+                                    {b.person.description || 'Contacto de Segundo Cerebro'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenPerson && onOpenPerson(b.person)}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold transition flex items-center gap-1"
+                                >
+                                  <span>Ver Ficha</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Tasks on this day */}
                       <div className="space-y-2">

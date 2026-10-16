@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   FileText, 
   CheckSquare, 
@@ -20,9 +20,13 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Inbox,
+  Archive,
+  BookOpen,
   X
 } from 'lucide-react';
-import { ViewMode, AppNote } from '../lib/types';
+import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
 
 interface SidebarProps {
@@ -42,12 +46,19 @@ interface SidebarProps {
     tasks: number;
     projects: number;
     objects: number;
+    inbox?: number;
+    areas?: number;
+    archives?: number;
   };
   onOpenQuickSwitcher: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  objectTypes?: ObjectTypeDefinition[];
+  activeObjectType?: string;
+  onSelectObjectType?: (typeId: string) => void;
+  objects?: AppObject[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -64,9 +75,81 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   isMobileOpen = false,
-  onCloseMobile
+  onCloseMobile,
+  objectTypes = [],
+  activeObjectType = 'all',
+  onSelectObjectType,
+  objects = []
 }) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  // Capacities-style Objects & Entities collapsible and resizable panel state
+  const [isObjectsExpanded, setIsObjectsExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('segundo_cerebro_objects_expanded');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [objectsPanelHeight, setObjectsPanelHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('segundo_cerebro_objects_height');
+      const val = saved ? parseInt(saved, 10) : 180;
+      return isNaN(val) ? 180 : Math.min(Math.max(val, 80), 380);
+    } catch {
+      return 180;
+    }
+  });
+
+  // Persist expanded state
+  useEffect(() => {
+    try {
+      localStorage.setItem('segundo_cerebro_objects_expanded', String(isObjectsExpanded));
+    } catch {}
+  }, [isObjectsExpanded]);
+
+  // Pointer event resize logic
+  const isDraggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(objectsPanelHeight);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = objectsPanelHeight;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'row-resize';
+  };
+
+  const handlePointerMove = useCallback((e: PointerEvent) => {
+    if (!isDraggingRef.current) return;
+    const deltaY = e.clientY - startYRef.current;
+    const nextHeight = Math.min(Math.max(startHeightRef.current + deltaY, 70), 400);
+    setObjectsPanelHeight(nextHeight);
+  }, []);
+
+  const handlePointerUp = useCallback((e: PointerEvent) => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    try {
+      localStorage.setItem('segundo_cerebro_objects_height', String(objectsPanelHeight));
+    } catch {}
+  }, [objectsPanelHeight]);
+
+  useEffect(() => {
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [handlePointerMove, handlePointerUp]);
 
   useEffect(() => {
     return auth.onAuthStateChanged((u) => setCurrentUser(u));
@@ -200,7 +283,121 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Sections */}
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-        <div className="px-2 pb-1 text-[11px] font-semibold tracking-wider uppercase text-gray-400">
+        {/* SISTEMA PARA (Tiago Forte) */}
+        <div className="px-2 pb-1 text-[11px] font-semibold tracking-wider uppercase text-amber-400/90 flex items-center justify-between">
+          <span>Sistema PARA</span>
+          <span className="text-[9px] font-mono px-1 rounded bg-amber-500/10 text-amber-400">Método</span>
+        </div>
+
+        {/* Capturar / Inbox */}
+        <button
+          onClick={() => handleSelectNav('para_inbox')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'para_inbox'
+              ? 'bg-amber-600/15 text-amber-300 border border-amber-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Inbox className="w-4 h-4 text-amber-400" />
+            <span>Capturar (Inbox)</span>
+          </span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-amber-300 font-mono">
+            {counts.inbox ?? 0}
+          </span>
+        </button>
+
+        {/* Proyectos (PARA) */}
+        <button
+          onClick={() => handleSelectNav('para_projects')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'para_projects' || currentView === 'projects'
+              ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <FolderKanban className="w-4 h-4 text-blue-400" />
+            <span>Proyectos</span>
+          </span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
+            {counts.projects}
+          </span>
+        </button>
+
+        {/* Áreas de Responsabilidad */}
+        <button
+          onClick={() => handleSelectNav('para_areas')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'para_areas'
+              ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Layers className="w-4 h-4 text-purple-400" />
+            <span>Áreas</span>
+          </span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
+            {counts.areas ?? 0}
+          </span>
+        </button>
+
+        {/* Recursos de Conocimiento */}
+        <button
+          onClick={() => handleSelectNav('para_resources')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'para_resources'
+              ? 'bg-emerald-600/15 text-emerald-300 border border-emerald-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <span>Recursos</span>
+          </span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
+            {counts.objects}
+          </span>
+        </button>
+
+        {/* Archivo Histórico */}
+        <button
+          onClick={() => handleSelectNav('para_archives')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
+            currentView === 'para_archives'
+              ? 'bg-gray-600/15 text-gray-200 border border-gray-500/30'
+              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Archive className="w-4 h-4 text-gray-400" />
+            <span>Archivo</span>
+          </span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
+            {counts.archives ?? 0}
+          </span>
+        </button>
+
+        {/* Revisión Periódica */}
+        <button
+          onClick={() => handleSelectNav('para_review')}
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition mb-2 ${
+            currentView === 'para_review'
+              ? 'bg-cyan-600/15 text-cyan-300 border border-cyan-500/30'
+              : 'text-gray-400 hover:bg-[#1c1c24] hover:text-gray-200'
+          }`}
+        >
+          <span className="flex items-center gap-2.5">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Revisión Periódica</span>
+          </span>
+          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/60 text-cyan-300">
+            Auditar
+          </span>
+        </button>
+
+        <div className="pt-2 px-2 pb-1 text-[11px] font-semibold tracking-wider uppercase text-gray-400 border-t border-[#23232f]">
           Cuadernos & Notas
         </div>
 
@@ -332,22 +529,113 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
         </button>
 
-        <button
-          onClick={() => handleSelectNav('objects')}
-          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition ${
-            currentView === 'objects'
-              ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-              : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
-          }`}
-        >
-          <span className="flex items-center gap-2.5">
-            <Boxes className="w-4 h-4 text-emerald-400" />
-            Objetos & Entidades
-          </span>
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
-            {counts.objects}
-          </span>
-        </button>
+        {/* Capacities-style Expandable & Resizable Objects & Entities Panel */}
+        <div className="pt-0.5">
+          <div 
+            onClick={() => handleSelectNav('objects')}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition cursor-pointer group ${
+              currentView === 'objects' && (!activeObjectType || activeObjectType === 'all')
+                ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
+                : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsObjectsExpanded(prev => !prev);
+                }}
+                className="p-0.5 text-gray-500 hover:text-white rounded hover:bg-[#252535] transition"
+                title={isObjectsExpanded ? 'Contraer tipos' : 'Desplegar tipos'}
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isObjectsExpanded ? 'rotate-0' : '-rotate-90'}`} />
+              </button>
+              <span className="flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-emerald-400" />
+                <span>Objetos & Entidades</span>
+              </span>
+            </div>
+
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400">
+              {counts.objects}
+            </span>
+          </div>
+
+          {/* Sub-panel of Dynamic Object Types */}
+          {isObjectsExpanded && (
+            <div className="mt-1 pl-4 pr-1">
+              <div 
+                style={{ height: `${objectsPanelHeight}px` }}
+                className="overflow-y-auto no-scrollbar rounded-lg bg-[#121218] border border-[#232330] p-1 space-y-0.5"
+              >
+                {/* Option to view All Objects */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSelectObjectType) onSelectObjectType('all');
+                    handleSelectNav('objects');
+                  }}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition ${
+                    currentView === 'objects' && (!activeObjectType || activeObjectType === 'all')
+                      ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/40'
+                      : 'text-gray-400 hover:bg-[#1a1a24] hover:text-gray-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <Boxes className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                    <span className="truncate">Todos los tipos</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-500">
+                    {objects.length}
+                  </span>
+                </button>
+
+                {/* Dynamic Types List (predefined + custom from InsForge) */}
+                {objectTypes.map(t => {
+                  const typeCount = objects.filter(o => o.object_type === t.id).length;
+                  const isSelected = currentView === 'objects' && activeObjectType === t.id;
+
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        if (onSelectObjectType) onSelectObjectType(t.id);
+                        handleSelectNav('objects');
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition ${
+                        isSelected
+                          ? 'bg-[#20202e] text-white border border-[#3b3b4f]'
+                          : 'text-gray-400 hover:bg-[#1a1a24] hover:text-gray-200'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <span 
+                          className="w-2 h-2 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: t.color || '#3b82f6' }} 
+                        />
+                        <span className="truncate">{t.name}</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-500">
+                        {typeCount}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Horizontal Drag Resizer Handle */}
+              <div
+                onPointerDown={handlePointerDown}
+                className="h-2.5 my-0.5 cursor-row-resize flex items-center justify-center group/resizer"
+                title="Arrastrar verticalmente para cambiar altura del panel"
+              >
+                <div className="w-10 h-1 rounded-full bg-[#29293a] group-hover/resizer:bg-emerald-500 transition-colors" />
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="pt-3 px-2 pb-1 text-[11px] font-semibold tracking-wider uppercase text-gray-400">
           Visualización & Medios

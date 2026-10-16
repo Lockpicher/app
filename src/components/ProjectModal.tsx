@@ -34,6 +34,7 @@ interface ProjectModalProps {
   project: AppProject | null;
   tasks: AppTask[];
   notes: AppNote[];
+  areas?: import('../lib/types').AppArea[];
   onSave: (projectData: Partial<AppProject>) => Promise<void>;
   onDelete?: (projectId: string) => Promise<void>;
 }
@@ -44,6 +45,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   project,
   tasks,
   notes,
+  areas = [],
   onSave,
   onDelete
 }) => {
@@ -64,6 +66,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [dueDate, setDueDate] = useState('');
   const [progress, setProgress] = useState(0);
   const [tagsInput, setTagsInput] = useState('');
+  const [areaId, setAreaId] = useState<string>('');
+  const [nextAction, setNextAction] = useState<string>('');
 
   // Attachments State
   const [attachments, setAttachments] = useState<AppAttachment[]>([]);
@@ -97,6 +101,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setDueDate(project.due_date ? project.due_date.slice(0, 10) : '');
         setProgress(project.progress ?? 0);
         setTagsInput((project.tags || []).join(', '));
+        setAreaId(project.area_id || '');
+        setNextAction(project.next_action || '');
         loadAttachments(project.id);
       } else {
         setTitle('');
@@ -108,6 +114,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setDueDate('');
         setProgress(0);
         setTagsInput('');
+        setAreaId('');
+        setNextAction('');
         setAttachments([]);
       }
       setHasUnsavedChanges(false);
@@ -169,7 +177,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         start_date: startDate || undefined,
         due_date: dueDate || undefined,
         progress: Number(progress) || 0,
-        tags: parsedTags
+        tags: parsedTags,
+        area_id: areaId || null,
+        next_action: nextAction.trim() || null
       };
 
       await onSave(projectData);
@@ -629,6 +639,46 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   placeholder="ej. marketing, diseño, urgente, sprint-1"
                   className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
                 />
+              </div>
+
+              {/* Sistema PARA: Área vinculada y Próxima Acción */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-[#14141e] rounded-xl border border-purple-500/20">
+                <div>
+                  <label className="text-xs font-semibold text-purple-300 block mb-1.5 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Área de Responsabilidad (PARA)</span>
+                  </label>
+                  <select
+                    value={areaId}
+                    onChange={(e) => {
+                      setAreaId(e.target.value);
+                      setHasUnsavedChanges(true);
+                    }}
+                    className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="">Sin área vinculada</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>{a.title || a.name || 'Área sin título'}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-amber-300 block mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Próxima Acción Inmediata</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={nextAction}
+                    onChange={(e) => {
+                      setNextAction(e.target.value);
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="¿Cuál es el siguiente paso concreto?"
+                    className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-amber-500 transition"
+                  />
+                </div>
               </div>
 
               {/* Progress Slider */}

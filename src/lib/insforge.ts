@@ -16,7 +16,11 @@ import {
   KubbonetWorkspace,
   KubbonetSpace,
   KubbonetFolder,
-  KubbonetList
+  KubbonetList,
+  PersonInteraction,
+  PersonCustomField,
+  PersonRelationship,
+  AppArea
 } from './types';
 import { auth } from './auth';
 
@@ -231,6 +235,175 @@ export const db = {
       .eq('id', id);
     if (error) {
       console.error('Error deleting reminder:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // Áreas de Responsabilidad (PARA - Persistidas como object_type: 'area' en app_objects)
+  async getAreas(): Promise<AppArea[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', 'area')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+      return data.map((row: any) => {
+        const p = row.properties || {};
+        return {
+          id: row.id,
+          title: row.title,
+          description: row.description || '',
+          color: row.color || p.color || '#8b5cf6',
+          icon: row.icon || p.icon || 'shield',
+          order_index: p.order_index || 0,
+          review_frequency_days: p.review_frequency_days || 30,
+          last_reviewed_at: p.last_reviewed_at || null,
+          next_review_at: p.next_review_at || null,
+          is_archived: p.is_archived || false,
+          objectives: Array.isArray(p.objectives) ? p.objectives : [],
+          metrics: p.metrics || {},
+          properties: p,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        } as AppArea;
+      });
+    } catch (e) {
+      console.warn('Error recuperando áreas:', e);
+      return [];
+    }
+  },
+
+  async createArea(area: Partial<AppArea>): Promise<AppArea | null> {
+    try {
+      const payload = {
+        object_type: 'area',
+        title: area.title || 'Nueva Área',
+        description: area.description || '',
+        color: area.color || '#8b5cf6',
+        icon: area.icon || 'shield',
+        properties: {
+          color: area.color || '#8b5cf6',
+          icon: area.icon || 'shield',
+          order_index: area.order_index || 0,
+          review_frequency_days: area.review_frequency_days || 30,
+          last_reviewed_at: area.last_reviewed_at || null,
+          next_review_at: area.next_review_at || null,
+          is_archived: area.is_archived || false,
+          objectives: area.objectives || [],
+          metrics: area.metrics || {}
+        }
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      const created = data?.[0];
+      if (!created) return null;
+
+      const p = created.properties || {};
+      return {
+        id: created.id,
+        title: created.title,
+        description: created.description,
+        color: created.color,
+        icon: created.icon,
+        order_index: p.order_index,
+        review_frequency_days: p.review_frequency_days,
+        last_reviewed_at: p.last_reviewed_at,
+        next_review_at: p.next_review_at,
+        is_archived: p.is_archived,
+        objectives: p.objectives,
+        metrics: p.metrics,
+        properties: p,
+        created_at: created.created_at,
+        updated_at: created.updated_at
+      };
+    } catch (e) {
+      console.error('Error creando área:', e);
+      throw e;
+    }
+  },
+
+  async updateArea(id: string, updates: Partial<AppArea>): Promise<AppArea | null> {
+    try {
+      // First get existing area to preserve fields
+      const { data: existingData } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('id', id);
+
+      const existing = existingData?.[0];
+      const existingProps = existing?.properties || {};
+
+      const updatedProps = {
+        ...existingProps,
+        ...(updates.color ? { color: updates.color } : {}),
+        ...(updates.icon ? { icon: updates.icon } : {}),
+        ...(updates.order_index !== undefined ? { order_index: updates.order_index } : {}),
+        ...(updates.review_frequency_days !== undefined ? { review_frequency_days: updates.review_frequency_days } : {}),
+        ...(updates.last_reviewed_at !== undefined ? { last_reviewed_at: updates.last_reviewed_at } : {}),
+        ...(updates.next_review_at !== undefined ? { next_review_at: updates.next_review_at } : {}),
+        ...(updates.is_archived !== undefined ? { is_archived: updates.is_archived } : {}),
+        ...(updates.objectives ? { objectives: updates.objectives } : {}),
+        ...(updates.metrics ? { metrics: updates.metrics } : {})
+      };
+
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+        properties: updatedProps
+      };
+      if (updates.title) payload.title = updates.title;
+      if (updates.description !== undefined) payload.description = updates.description;
+      if (updates.color) payload.color = updates.color;
+      if (updates.icon) payload.icon = updates.icon;
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .update(payload)
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      const updated = data?.[0];
+      if (!updated) return null;
+
+      const p = updated.properties || {};
+      return {
+        id: updated.id,
+        title: updated.title,
+        description: updated.description,
+        color: updated.color,
+        icon: updated.icon,
+        order_index: p.order_index,
+        review_frequency_days: p.review_frequency_days,
+        last_reviewed_at: p.last_reviewed_at,
+        next_review_at: p.next_review_at,
+        is_archived: p.is_archived,
+        objectives: p.objectives,
+        metrics: p.metrics,
+        properties: p,
+        created_at: updated.created_at,
+        updated_at: updated.updated_at
+      };
+    } catch (e) {
+      console.error('Error actualizando área:', e);
+      throw e;
+    }
+  },
+
+  async deleteArea(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_objects')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error eliminando área:', error);
       throw error;
     }
     return true;
@@ -581,6 +754,9 @@ export const db = {
       .from('app_objects')
       .select()
       .neq('object_type', '__meta_type__')
+      .neq('object_type', 'interaction')
+      .neq('object_type', 'area')
+      .neq('object_type', 'person_relationship')
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching objects:', error);
     return (data as unknown as AppObject[]) || [];
@@ -621,6 +797,258 @@ export const db = {
       throw error;
     }
     return true;
+  },
+
+  // Interacciones con Personas (Persistidas como registros independientes en app_objects con object_type: 'interaction')
+  async getPersonInteractions(personId: string): Promise<PersonInteraction[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', 'interaction')
+        .order('created_at', { ascending: false });
+      
+      if (error || !data) return [];
+      
+      // Filtrar por personId en properties
+      const matches = data.filter((row: any) => row.properties?.person_id === personId);
+      return matches.map((row: any) => {
+        const p = row.properties || {};
+        return {
+          id: row.id,
+          person_id: p.person_id || personId,
+          type: p.interaction_type || 'meeting',
+          date: p.interaction_date || row.created_at,
+          summary: row.title,
+          notes: row.content || p.notes || '',
+          commitments: p.commitments || '',
+          next_action: p.next_action || '',
+          follow_up_date: p.follow_up_date || null,
+          file_urls: Array.isArray(p.file_urls) ? p.file_urls : [],
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        } as PersonInteraction;
+      });
+    } catch (e) {
+      console.warn('Error recuperando interacciones de la persona:', e);
+      return [];
+    }
+  },
+
+  async createPersonInteraction(interaction: Omit<PersonInteraction, 'id' | 'created_at'>): Promise<PersonInteraction | null> {
+    try {
+      const payload = {
+        object_type: 'interaction',
+        title: interaction.summary,
+        description: interaction.notes?.slice(0, 200) || '',
+        content: interaction.notes || '',
+        properties: {
+          person_id: interaction.person_id,
+          interaction_type: interaction.type,
+          interaction_date: interaction.date,
+          commitments: interaction.commitments,
+          next_action: interaction.next_action,
+          follow_up_date: interaction.follow_up_date,
+          file_urls: interaction.file_urls || []
+        }
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      const created = data?.[0];
+      if (!created) return null;
+
+      const p = created.properties || {};
+      return {
+        id: created.id,
+        person_id: p.person_id,
+        type: p.interaction_type,
+        date: p.interaction_date,
+        summary: created.title,
+        notes: created.content,
+        commitments: p.commitments,
+        next_action: p.next_action,
+        follow_up_date: p.follow_up_date,
+        file_urls: p.file_urls,
+        created_at: created.created_at,
+        updated_at: created.updated_at
+      };
+    } catch (e) {
+      console.error('Error registrando interacción:', e);
+      throw e;
+    }
+  },
+
+  async deletePersonInteraction(interactionId: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_objects')
+      .delete()
+      .eq('id', interactionId);
+    if (error) {
+      console.error('Error eliminando interacción:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // ==========================================
+  // RELACIONES PERSONALES ENTRE CONTACTOS
+  // (Persistidas en app_objects con object_type: 'person_relationship')
+  // ==========================================
+  async getPersonRelationships(personId?: string): Promise<PersonRelationship[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', 'person_relationship')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+
+      const list: PersonRelationship[] = data.map((row: any) => {
+        const p = row.properties || {};
+        return {
+          id: row.id,
+          source_person_id: p.source_person_id,
+          target_person_id: p.target_person_id,
+          relation_type: p.relation_type,
+          notes: row.content || p.notes || '',
+          status: p.status || 'active',
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        };
+      });
+
+      if (!personId) return list;
+      return list.filter(r => r.source_person_id === personId || r.target_person_id === personId);
+    } catch (e) {
+      console.warn('Error recuperando relaciones personales:', e);
+      return [];
+    }
+  },
+
+  async createPersonRelationship(rel: Omit<PersonRelationship, 'id' | 'created_at'>): Promise<PersonRelationship | null> {
+    try {
+      if (rel.source_person_id === rel.target_person_id) {
+        throw new Error('No puedes vincular una persona consigo misma.');
+      }
+
+      // Check if relationship already exists in either direction
+      const existing = await this.getPersonRelationships();
+      const duplicate = existing.find(r => 
+        (r.source_person_id === rel.source_person_id && r.target_person_id === rel.target_person_id) ||
+        (r.source_person_id === rel.target_person_id && r.target_person_id === rel.source_person_id)
+      );
+
+      if (duplicate) {
+        throw new Error('Ya existe una relación registrada entre estas dos personas.');
+      }
+
+      const payload = {
+        object_type: 'person_relationship',
+        title: `${rel.relation_type}: ${rel.source_person_id} -> ${rel.target_person_id}`,
+        content: rel.notes || '',
+        properties: {
+          source_person_id: rel.source_person_id,
+          target_person_id: rel.target_person_id,
+          relation_type: rel.relation_type,
+          notes: rel.notes || '',
+          status: rel.status || 'active'
+        }
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      const created = data?.[0];
+      if (!created) return null;
+
+      const p = created.properties || {};
+      return {
+        id: created.id,
+        source_person_id: p.source_person_id,
+        target_person_id: p.target_person_id,
+        relation_type: p.relation_type,
+        notes: created.content,
+        status: p.status,
+        created_at: created.created_at,
+        updated_at: created.updated_at
+      };
+    } catch (e) {
+      console.error('Error creando relación personal:', e);
+      throw e;
+    }
+  },
+
+  async updatePersonRelationship(id: string, updates: Partial<PersonRelationship>): Promise<PersonRelationship | null> {
+    try {
+      const { data: existingData } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('id', id);
+
+      const existing = existingData?.[0];
+      const p = existing?.properties || {};
+
+      const updatedProps = {
+        ...p,
+        ...(updates.relation_type ? { relation_type: updates.relation_type } : {}),
+        ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
+        ...(updates.status ? { status: updates.status } : {})
+      };
+
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+        properties: updatedProps
+      };
+      if (updates.notes !== undefined) payload.content = updates.notes;
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .update(payload)
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      const updated = data?.[0];
+      if (!updated) return null;
+
+      const finalProps = updated.properties || {};
+      return {
+        id: updated.id,
+        source_person_id: finalProps.source_person_id,
+        target_person_id: finalProps.target_person_id,
+        relation_type: finalProps.relation_type,
+        notes: updated.content,
+        status: finalProps.status,
+        created_at: updated.created_at,
+        updated_at: updated.updated_at
+      };
+    } catch (e) {
+      console.error('Error actualizando relación personal:', e);
+      throw e;
+    }
+  },
+
+  async deletePersonRelationship(id: string): Promise<boolean> {
+    try {
+      const { error } = await insforge.database
+        .from('app_objects')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error eliminando relación personal:', e);
+      throw e;
+    }
   },
 
   // Tipos de Objeto Personalizados (Persistidos en InsForge como __meta_type__)
@@ -714,6 +1142,41 @@ export const db = {
       .select();
     if (error) console.error('Error fetching links:', error);
     return (data as unknown as AppLink[]) || [];
+  },
+
+  async createLink(link: Omit<AppLink, 'id' | 'created_at'>): Promise<AppLink | null> {
+    try {
+      // Check existing link to avoid duplicates
+      const { data: existing } = await insforge.database
+        .from('app_links')
+        .select('*')
+        .eq('source_id', link.source_id)
+        .eq('target_id', link.target_id)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        return existing[0] as unknown as AppLink;
+      }
+
+      const { data, error } = await insforge.database
+        .from('app_links')
+        .insert([link])
+        .select();
+
+      if (error) throw error;
+      return (data as unknown as AppLink[])?.[0] || null;
+    } catch (e) {
+      console.warn('Error creando enlace de grafo:', e);
+      return null;
+    }
+  },
+
+  async deleteLink(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_links')
+      .delete()
+      .eq('id', id);
+    return !error;
   },
 
   async syncNoteLinks(noteId: string, wikilinks: string[], allEntities: { id: string; title: string; type: string }[]) {

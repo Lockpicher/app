@@ -13,8 +13,13 @@ import { StorageView } from './components/StorageView';
 import { FilesManagerView } from './components/FilesManagerView';
 import { CalendarView } from './components/CalendarView';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { ParaInboxView } from './components/ParaInboxView';
+import { ParaAreasView } from './components/ParaAreasView';
+import { ParaArchiveView } from './components/ParaArchiveView';
+import { ParaReviewView } from './components/ParaReviewView';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
+import { registerServiceWorker, syncPersonBirthdayReminders } from './lib/birthdays';
 import { 
   AppNotebook,
   AppNote, 
@@ -25,8 +30,12 @@ import {
   AppLink, 
   AppAttachment, 
   AppFolder,
+  AppArea,
+  PARACategory,
   TaskCategory,
-  ViewMode 
+  ViewMode,
+  ObjectTypeDefinition,
+  DEFAULT_OBJECT_TYPES
 } from './lib/types';
 import { 
   Loader2, 
@@ -54,12 +63,17 @@ export function App() {
   const [attachments, setAttachments] = useState<AppAttachment[]>([]);
   const [folders, setFolders] = useState<AppFolder[]>([]);
   const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [areas, setAreas] = useState<AppArea[]>([]);
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
   const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState(false);
+
+  // Objects & Entities active filter & custom types
+  const [activeObjectType, setActiveObjectType] = useState<string>('all');
+  const [customObjectTypes, setCustomObjectTypes] = useState<ObjectTypeDefinition[]>([]);
 
   // Notebook creation modal from sidebar
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
@@ -129,8 +143,10 @@ export function App() {
         db.getLinks().catch(() => []),
         db.getAttachments().catch(() => []),
         db.getFileFolders().catch(() => []),
-        db.getTaskCategories().catch(() => [])
-      ]).then(([rems, p, t, o, l, a, flds, cats]) => {
+        db.getTaskCategories().catch(() => []),
+        db.getCustomObjectTypes().catch(() => []),
+        db.getAreas().catch(() => [])
+      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars]) => {
         setReminders(rems);
         setProjects(p);
         setTasks(t);
@@ -139,6 +155,8 @@ export function App() {
         setAttachments(a);
         setFolders(flds);
         setCategories(cats);
+        setCustomObjectTypes(cTypes);
+        setAreas(ars);
       }).catch(err => {
         console.warn('Background sync error (non-fatal):', err);
       });
@@ -151,6 +169,7 @@ export function App() {
 
   useEffect(() => {
     loadData();
+    registerServiceWorker().catch(() => {});
   }, []);
 
   // Reminders scheduler listener
@@ -469,12 +488,26 @@ export function App() {
   // ==========================================
   const handleCreateObject = async (obj: Partial<AppObject>) => {
     const created = await db.createObject(obj);
-    if (created) setObjects(prev => [created, ...prev]);
+    if (created) {
+      setObjects(prev => [created, ...prev]);
+      if (created.object_type === 'person') {
+        syncPersonBirthdayReminders(created, reminders).then(newRems => {
+          if (newRems.length > 0) setReminders(prev => [...prev, ...newRems]);
+        }).catch(console.warn);
+      }
+    }
   };
 
   const handleUpdateObject = async (id: string, updates: Partial<AppObject>) => {
     const updated = await db.updateObject(id, updates);
-    if (updated) setObjects(prev => prev.map(o => o.id === id ? updated : o));
+    if (updated) {
+      setObjects(prev => prev.map(o => o.id === id ? updated : o));
+      if (updated.object_type === 'person') {
+        syncPersonBirthdayReminders(updated, reminders).then(newRems => {
+          if (newRems.length > 0) setReminders(prev => [...prev, ...newRems]);
+        }).catch(console.warn);
+      }
+    }
   };
 
   const handleDeleteObject = async (id: string) => {
@@ -499,6 +532,186 @@ export function App() {
   const handleFoldersChanged = async () => {
     const flds = await db.getFileFolders();
     setFolders(flds);
+  };
+
+  // ==========================================
+  // PARA SYSTEM ACTIONS (Tiago Forte)
+  // ==========================================
+  const handleCreateArea = async (areaData: Partial<AppArea>) => {
+    try {
+      const created = await db.createArea(areaData);
+      if (created) setAreas(prev => [created, ...prev]);
+    } catch (err: any) {
+      alert('Error creando Área: ' + err.message);
+    }
+  };
+
+  const handleUpdateArea = async (id: string, updates: Partial<AppArea>) => {
+    try {
+      const updated = await db.updateArea(id, updates);
+      if (updated) setAreas(prev => prev.map(a => a.id === id ? updated : a));
+    } catch (err: any) {
+      alert('Error actualizando Área: ' + err.message);
+    }
+  };
+
+  const handleDeleteArea = async (id: string) => {
+    try {
+      await db.deleteArea(id);
+      setAreas(prev => prev.filter(a => a.id !== id));
+    } catch (err: any) {
+      alert('Error eliminando Área: ' + err.message);
+    }
+  };
+
+  const handleQuickCapture = async (
+    type: 'note' | 'task' | 'project' | 'person' | 'resource', 
+    data: { title: string; content?: string }
+  ) => {
+    try {
+      if (type === 'note') {
+        const targetNotebookId = selectedNotebookId || notebooks[0]?.id || null;
+        const created = await db.createNote({
+          title: data.title,
+          content: data.content ? `<p>${data.content}</p>` : '',
+          plain_text: data.content || '',
+          notebook_id: targetNotebookId,
+          para_category: 'inbox'
+        });
+        if (created) setNotes(prev => [created, ...prev]);
+      } else if (type === 'task') {
+        const created = await db.createTask({
+          title: data.title,
+          status: 'todo',
+          priority: 'medium',
+          para_category: 'inbox'
+        });
+        if (created) setTasks(prev => [created, ...prev]);
+      } else if (type === 'project') {
+        const created = await db.createProject({
+          title: data.title,
+          description: data.content || undefined,
+          status: 'planning',
+          para_category: 'project'
+        });
+        if (created) setProjects(prev => [created, ...prev]);
+      } else if (type === 'person') {
+        const created = await db.createObject({
+          title: data.title,
+          description: data.content || undefined,
+          object_type: 'person',
+          properties: {},
+          para_category: 'resource'
+        });
+        if (created) setObjects(prev => [created, ...prev]);
+      } else if (type === 'resource') {
+        const created = await db.createObject({
+          title: data.title,
+          description: data.content || undefined,
+          object_type: 'resource',
+          properties: {},
+          para_category: 'resource'
+        });
+        if (created) setObjects(prev => [created, ...prev]);
+      }
+    } catch (err: any) {
+      alert('Error en Captura Rápida: ' + err.message);
+    }
+  };
+
+  const handleClassifyItem = async (
+    itemType: 'note' | 'task' | 'project' | 'object',
+    itemId: string,
+    targetCategory: PARACategory,
+    targetAreaId?: string,
+    targetProjectId?: string
+  ) => {
+    try {
+      if (itemType === 'note') {
+        const updates: Partial<AppNote> = {
+          para_category: targetCategory,
+          area_id: targetAreaId || null,
+          project_id: targetProjectId || null
+        };
+        const updated = await db.updateNote(itemId, updates);
+        if (updated) setNotes(prev => prev.map(n => n.id === itemId ? updated : n));
+      } else if (itemType === 'task') {
+        const updates: Partial<AppTask> = {
+          para_category: targetCategory,
+          area_id: targetAreaId || null,
+          project_id: targetProjectId || null
+        };
+        const updated = await db.updateTask(itemId, updates);
+        if (updated) setTasks(prev => prev.map(t => t.id === itemId ? updated : t));
+      } else if (itemType === 'project') {
+        const updates: Partial<AppProject> = {
+          para_category: targetCategory,
+          area_id: targetAreaId || null,
+          is_archived: targetCategory === 'archive'
+        };
+        const updated = await db.updateProject(itemId, updates);
+        if (updated) setProjects(prev => prev.map(p => p.id === itemId ? updated : p));
+      } else if (itemType === 'object') {
+        const updates: Partial<AppObject> = {
+          para_category: targetCategory,
+          area_id: targetAreaId || null,
+          project_id: targetProjectId || null
+        };
+        const updated = await db.updateObject(itemId, updates);
+        if (updated) setObjects(prev => prev.map(o => o.id === itemId ? updated : o));
+      }
+    } catch (err: any) {
+      alert('Error clasificando elemento: ' + err.message);
+    }
+  };
+
+  const handleRestoreItem = async (
+    itemType: 'project' | 'note' | 'task' | 'object' | 'area',
+    itemId: string
+  ) => {
+    try {
+      if (itemType === 'project') {
+        const updated = await db.updateProject(itemId, { is_archived: false, status: 'active', para_category: 'project' });
+        if (updated) setProjects(prev => prev.map(p => p.id === itemId ? updated : p));
+      } else if (itemType === 'note') {
+        const updated = await db.updateNote(itemId, { is_archived: false, para_category: 'inbox' });
+        if (updated) setNotes(prev => prev.map(n => n.id === itemId ? updated : n));
+      } else if (itemType === 'area') {
+        const updated = await db.updateArea(itemId, { is_archived: false });
+        if (updated) setAreas(prev => prev.map(a => a.id === itemId ? updated : a));
+      } else if (itemType === 'object') {
+        const updated = await db.updateObject(itemId, { para_category: 'resource' });
+        if (updated) setObjects(prev => prev.map(o => o.id === itemId ? updated : o));
+      }
+    } catch (err: any) {
+      alert('Error restaurando elemento: ' + err.message);
+    }
+  };
+
+  const handlePermanentDelete = async (
+    itemType: 'project' | 'note' | 'task' | 'object' | 'area',
+    itemId: string
+  ) => {
+    try {
+      if (itemType === 'project') {
+        await db.deleteProject(itemId);
+        setProjects(prev => prev.filter(p => p.id !== itemId));
+      } else if (itemType === 'note') {
+        await db.deleteNote(itemId);
+        setNotes(prev => prev.filter(n => n.id !== itemId));
+      } else if (itemType === 'task') {
+        await db.deleteTask(itemId);
+        setTasks(prev => prev.filter(t => t.id !== itemId));
+      } else if (itemType === 'area') {
+        await db.deleteArea(itemId);
+        setAreas(prev => prev.filter(a => a.id !== itemId));
+      } else if (itemType === 'object') {
+        await db.deleteObject(itemId);
+        setObjects(prev => prev.filter(o => o.id !== itemId));
+      }
+    } catch (err: any) {
+      alert('Error eliminando permanentemente: ' + err.message);
+    }
   };
 
   // ==========================================
@@ -552,6 +765,12 @@ export function App() {
               <span className="text-xs font-bold">SC</span>
             </div>
             <span className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-xs">
+              {currentView === 'para_inbox' && 'Capturar (Inbox)'}
+              {currentView === 'para_projects' && 'Proyectos (PARA)'}
+              {currentView === 'para_areas' && 'Áreas de Responsabilidad'}
+              {currentView === 'para_resources' && 'Recursos'}
+              {currentView === 'para_archives' && 'Archivo Histórico'}
+              {currentView === 'para_review' && 'Revisión Periódica'}
               {currentView === 'notebooks' && 'Cuadernos'}
               {currentView === 'all_notes' && 'Todas las notas'}
               {currentView === 'favorites' && 'Favoritos'}
@@ -629,14 +848,29 @@ export function App() {
           favorites: notes.filter(n => n.is_favorite).length,
           reminders: reminders.filter(r => r.status === 'pending').length,
           tasks: tasks.length,
-          projects: projects.length,
-          objects: objects.length
+          projects: projects.filter(p => !p.is_archived && p.status !== 'completed').length,
+          objects: objects.filter(o => o.para_category !== 'archive').length,
+          inbox: notes.filter(n => !n.is_archived && (!n.para_category || n.para_category === 'inbox') && !n.project_id && !n.area_id).length +
+                 tasks.filter(t => t.status !== 'completed' && (!t.para_category || t.para_category === 'inbox') && !t.project_id && !t.area_id).length,
+          areas: areas.filter(a => !a.is_archived).length,
+          archives: projects.filter(p => p.is_archived || p.status === 'completed' || p.para_category === 'archive').length +
+                    notes.filter(n => n.is_archived || n.para_category === 'archive').length +
+                    areas.filter(a => a.is_archived).length +
+                    objects.filter(o => o.para_category === 'archive').length
         }}
         onOpenQuickSwitcher={() => setIsQuickSwitcherOpen(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        objectTypes={[...DEFAULT_OBJECT_TYPES, ...customObjectTypes]}
+        activeObjectType={activeObjectType}
+        onSelectObjectType={(typeId) => {
+          setActiveObjectType(typeId);
+          setIsEditingNote(false);
+          setCurrentView('objects');
+        }}
+        objects={objects}
       />
 
       {/* Main Content Workspace */}
@@ -738,6 +972,7 @@ export function App() {
                 tasks={tasks}
                 notes={notes}
                 projects={projects}
+                objects={objects}
                 reminders={reminders}
                 onUpdateTask={handleUpdateTask}
                 onCreateTask={handleCreateTask}
@@ -746,6 +981,10 @@ export function App() {
                   if (note) handleOpenNote(note);
                 }}
                 onCreateNote={handleNewNote}
+                onOpenPerson={(person) => {
+                  setActiveObjectType('person');
+                  setCurrentView('objects');
+                }}
               />
             )}
 
@@ -767,16 +1006,121 @@ export function App() {
               />
             )}
 
-            {/* Proyectos View */}
-            {currentView === 'projects' && (
+            {/* Proyectos View (Standard & PARA Projects) */}
+            {(currentView === 'projects' || currentView === 'para_projects') && (
               <ProjectsView
                 projects={projects}
                 tasks={tasks}
                 notes={notes}
+                areas={areas}
                 onCreateProject={handleCreateProject}
                 onUpdateProject={handleUpdateProject}
                 onDeleteProject={handleDeleteProject}
                 onSelectProject={() => {}}
+              />
+            )}
+
+            {/* SISTEMA PARA: Bandeja de Entrada / Capturar */}
+            {currentView === 'para_inbox' && (
+              <ParaInboxView
+                notes={notes}
+                tasks={tasks}
+                projects={projects}
+                objects={objects}
+                areas={areas}
+                onQuickCreate={handleQuickCapture}
+                onClassifyItem={handleClassifyItem}
+                onOpenNote={handleOpenNote}
+                onOpenProject={(project) => {
+                  setCurrentView('projects');
+                }}
+                onOpenObject={(obj) => {
+                  setActiveObjectType(obj.object_type);
+                  setCurrentView('objects');
+                }}
+              />
+            )}
+
+            {/* SISTEMA PARA: Áreas de Responsabilidad */}
+            {currentView === 'para_areas' && (
+              <ParaAreasView
+                areas={areas}
+                projects={projects}
+                notes={notes}
+                tasks={tasks}
+                objects={objects}
+                onCreateArea={handleCreateArea}
+                onUpdateArea={handleUpdateArea}
+                onDeleteArea={handleDeleteArea}
+                onOpenProject={(project) => {
+                  setCurrentView('projects');
+                }}
+                onOpenNote={handleOpenNote}
+                onOpenObject={(obj) => {
+                  setActiveObjectType(obj.object_type);
+                  setCurrentView('objects');
+                }}
+              />
+            )}
+
+            {/* SISTEMA PARA: Recursos de Conocimiento */}
+            {currentView === 'para_resources' && (
+              <ObjectsView
+                objects={objects.filter(o => o.para_category !== 'archive')}
+                projects={projects}
+                attachments={attachments}
+                onAttachmentCreated={handleAttachmentCreated}
+                onAttachmentDeleted={handleAttachmentDeleted}
+                onCreateObject={handleCreateObject}
+                onUpdateObject={handleUpdateObject}
+                onDeleteObject={handleDeleteObject}
+                notes={notes}
+                tasks={tasks}
+                onOpenNote={handleOpenNote}
+                activeType={activeObjectType}
+                onSelectType={setActiveObjectType}
+                customTypes={customObjectTypes}
+                onCustomTypesChange={setCustomObjectTypes}
+              />
+            )}
+
+            {/* SISTEMA PARA: Archivo Histórico */}
+            {currentView === 'para_archives' && (
+              <ParaArchiveView
+                projects={projects}
+                notes={notes}
+                tasks={tasks}
+                objects={objects}
+                areas={areas}
+                onRestoreItem={handleRestoreItem}
+                onPermanentDelete={handlePermanentDelete}
+                onOpenNote={handleOpenNote}
+                onOpenProject={(project) => {
+                  setCurrentView('projects');
+                }}
+                onOpenObject={(obj) => {
+                  setActiveObjectType(obj.object_type);
+                  setCurrentView('objects');
+                }}
+              />
+            )}
+
+            {/* SISTEMA PARA: Revisión Periódica */}
+            {currentView === 'para_review' && (
+              <ParaReviewView
+                projects={projects}
+                areas={areas}
+                tasks={tasks}
+                notes={notes}
+                onOpenProject={(project) => {
+                  setCurrentView('projects');
+                }}
+                onOpenArea={(area) => {
+                  setCurrentView('para_areas');
+                }}
+                onNavigateToView={(view) => {
+                  setCurrentView(view);
+                }}
               />
             )}
 
@@ -794,6 +1138,10 @@ export function App() {
                 notes={notes}
                 tasks={tasks}
                 onOpenNote={handleOpenNote}
+                activeType={activeObjectType}
+                onSelectType={setActiveObjectType}
+                customTypes={customObjectTypes}
+                onCustomTypesChange={setCustomObjectTypes}
               />
             )}
 

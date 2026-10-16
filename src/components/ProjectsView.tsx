@@ -19,6 +19,7 @@ interface ProjectsViewProps {
   projects: AppProject[];
   tasks: AppTask[];
   notes: AppNote[];
+  areas?: import('../lib/types').AppArea[];
   onCreateProject: (project: Partial<AppProject>) => Promise<void>;
   onUpdateProject: (id: string, updates: Partial<AppProject>) => Promise<void>;
   onDeleteProject: (id: string) => Promise<void>;
@@ -29,6 +30,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   projects,
   tasks,
   notes,
+  areas = [],
   onCreateProject,
   onUpdateProject,
   onDeleteProject,
@@ -218,6 +220,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         project={selectedProject}
         tasks={tasks}
         notes={notes}
+        areas={areas}
         onSave={handleSaveModal}
         onDelete={onDeleteProject}
       />
