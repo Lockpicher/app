@@ -24,6 +24,7 @@ interface ProjectsViewProps {
   onUpdateProject: (id: string, updates: Partial<AppProject>) => Promise<void>;
   onDeleteProject: (id: string) => Promise<void>;
   onSelectProject: (projectId: string) => void;
+  onCreateTask?: (taskData: Partial<AppTask>) => Promise<AppTask | null | void>;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -34,7 +35,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onCreateProject,
   onUpdateProject,
   onDeleteProject,
-  onSelectProject
+  onSelectProject,
+  onCreateTask
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<AppProject | null>(null);
@@ -223,6 +225,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         areas={areas}
         onSave={handleSaveModal}
         onDelete={onDeleteProject}
+        onCreateTask={onCreateTask}
       />
     </div>
   );

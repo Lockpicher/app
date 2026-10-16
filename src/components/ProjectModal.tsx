@@ -22,7 +22,9 @@ import {
   Copy,
   Layers,
   Sparkles,
-  BarChart2
+  BarChart2,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import { AppProject, AppTask, AppNote, AppAttachment } from '../lib/types';
 import { db, storage } from '../lib/insforge';
@@ -37,6 +39,7 @@ interface ProjectModalProps {
   areas?: import('../lib/types').AppArea[];
   onSave: (projectData: Partial<AppProject>) => Promise<void>;
   onDelete?: (projectId: string) => Promise<void>;
+  onCreateTask?: (taskData: Partial<AppTask>) => Promise<AppTask | null | void>;
 }
 
 export const ProjectModal: React.FC<ProjectModalProps> = ({
@@ -47,7 +50,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   notes,
   areas = [],
   onSave,
-  onDelete
+  onDelete,
+  onCreateTask
 }) => {
   const isEditing = !!project?.id;
   const [activeTab, setActiveTab] = useState<'details' | 'attachments' | 'tasks'>('details');
@@ -85,6 +89,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   // Lightbox Image Preview Modal
   const [lightboxImage, setLightboxImage] = useState<AppAttachment | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Quick Task Creation inside project
+  const [newProjectTaskTitle, setNewProjectTaskTitle] = useState('');
+  const [isCreatingProjectTask, setIsCreatingProjectTask] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -126,6 +134,20 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       setEditingLinkId(null);
     }
   }, [isOpen, project]);
+
+  const [panelMode, setPanelMode] = useState<'panel' | 'modal'>('panel');
+
+  // Keyboard shortcut: Escape to close safe
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, hasUnsavedChanges]);
 
   const loadAttachments = async (projectId: string) => {
     try {
@@ -360,40 +382,70 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     : progress;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-[#181822] border border-[#2b2b3c] rounded-2xl max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div 
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity duration-200 ${
+        panelMode === 'panel'
+          ? 'flex justify-end'
+          : 'flex items-center justify-center p-2 sm:p-4 overflow-y-auto'
+      }`}
+      onClick={handleClose}
+    >
+      <div 
+        className={`bg-[#181822] border-[#2b2b3c] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+          panelMode === 'panel'
+            ? 'w-full max-w-2xl h-full border-l border-y-0 border-r-0 rounded-none sm:rounded-l-2xl animate-in slide-in-from-right duration-200'
+            : 'w-full max-w-4xl border rounded-2xl my-auto h-[90vh] animate-in zoom-in-95 duration-200'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#252535] bg-[#14141c] flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="px-5 sm:px-6 py-3.5 border-b border-[#252535] bg-[#14141c] flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
             <div 
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0"
               style={{ backgroundColor: color }}
             >
               <FolderKanban className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                {isEditing ? `Editar Proyecto: ${project.title}` : 'Nuevo Proyecto'}
+            <div className="overflow-hidden">
+              <h2 className="text-base font-bold text-white flex items-center gap-2 truncate">
+                <span className="truncate">{isEditing ? `Editar Proyecto: ${project.title}` : 'Nuevo Proyecto'}</span>
                 {isEditing && (
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/40">
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/40 flex-shrink-0">
                     {status}
                   </span>
                 )}
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-400 truncate">
                 Gestiona la configuración, cronograma, archivos y tareas de este proyecto.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={handleClose}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#252535] transition"
-            title="Cerrar ventana"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Toggle Panel vs Modal button */}
+            <button
+              type="button"
+              onClick={() => setPanelMode(prev => prev === 'panel' ? 'modal' : 'panel')}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252535] transition hidden sm:flex items-center justify-center"
+              title={panelMode === 'panel' ? 'Expandir a modal centrado' : 'Acoplar a panel lateral'}
+            >
+              {panelMode === 'panel' ? (
+                <Maximize2 className="w-4 h-4" />
+              ) : (
+                <PanelRightClose className="w-4 h-4 text-blue-400" />
+              )}
+            </button>
+
+            <button
+              onClick={handleClose}
+              className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252535] transition"
+              title="Cerrar ventana (Esc)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -1047,12 +1099,66 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 </h3>
               </div>
 
+              {/* Formulario para Crear Tarea Directa para este Proyecto */}
+              {project?.id ? (
+                <div className="p-3 bg-[#15151f] border border-[#262638] rounded-xl flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newProjectTaskTitle}
+                    onChange={(e) => setNewProjectTaskTitle(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && newProjectTaskTitle.trim()) {
+                        e.preventDefault();
+                        if (onCreateTask) {
+                          setIsCreatingProjectTask(true);
+                          await onCreateTask({
+                            title: newProjectTaskTitle.trim(),
+                            project_id: project.id,
+                            status: 'todo',
+                            priority: 'medium'
+                          });
+                          setNewProjectTaskTitle('');
+                          setIsCreatingProjectTask(false);
+                        }
+                      }
+                    }}
+                    placeholder="Escribe una nueva tarea para este proyecto y presiona Enter..."
+                    className="flex-1 px-3 py-1.5 bg-[#101016] border border-[#2c2c3e] rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newProjectTaskTitle.trim() || isCreatingProjectTask}
+                    onClick={async () => {
+                      if (newProjectTaskTitle.trim() && onCreateTask) {
+                        setIsCreatingProjectTask(true);
+                        await onCreateTask({
+                          title: newProjectTaskTitle.trim(),
+                          project_id: project.id,
+                          status: 'todo',
+                          priority: 'medium'
+                        });
+                        setNewProjectTaskTitle('');
+                        setIsCreatingProjectTask(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Agregar Tarea</span>
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] text-amber-400 italic">
+                  * Guarda el proyecto para comenzar a vincular y crear tareas operativas.
+                </p>
+              )}
+
               {projectTasks.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-[#282838] rounded-xl p-6">
                   <CheckSquare className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-xs text-gray-300">No hay tareas asignadas a este proyecto.</p>
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Puedes asignar tareas a este proyecto desde el tablero de tareas Kanban.
+                    Puedes agregar tareas usando el campo superior o asignarlas desde el tablero de tareas Kanban.
                   </p>
                 </div>
               ) : (

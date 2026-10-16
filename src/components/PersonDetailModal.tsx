@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Trash2, 
@@ -35,7 +35,9 @@ import {
   AlertCircle,
   HelpCircle,
   Eye,
-  Sliders
+  Sliders,
+  Camera,
+  Loader2
 } from 'lucide-react';
 import { 
   AppObject, 
@@ -53,6 +55,7 @@ import {
 import { calculateAge, formatBirthdayDisplay } from '../lib/birthdays';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { db } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface PersonDetailModalProps {
   person: AppObject;
@@ -109,6 +112,15 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
   const [description, setDescription] = useState(person.description || '');
   const [projectId, setProjectId] = useState(person.project_id || '');
   const [tagsInput, setTagsInput] = useState((person.tags || []).join(', '));
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sync photoUrl if person changes
+  useEffect(() => {
+    setPhotoUrl(person.thumbnail_url || person.properties?.photo_url || '');
+    setImageError(false);
+  }, [person.thumbnail_url, person.properties?.photo_url]);
 
   // Context & Relationship fields
   const [howWeMet, setHowWeMet] = useState(props.how_we_met || props.donde_nos_conocimos || '');
@@ -207,7 +219,10 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
   const relatedTasks = tasks.filter(t => (person.project_id && t.project_id === person.project_id) || (t.title && t.title.includes(person.title)));
 
   // Incremental save helper
-  const handleSaveContact = async (incrementalUpdates: Record<string, any> = {}) => {
+  const handleSaveContact = async (
+    incrementalUpdates: Record<string, any> = {},
+    explicitPhotoUrl?: string | null
+  ) => {
     if (!title.trim()) {
       setStatusMessage({ text: 'El nombre es obligatorio.', type: 'error' });
       return;
@@ -221,6 +236,10 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
     try {
       setIsSaving(true);
       setStatusMessage(null);
+
+      const effectivePhotoUrl = explicitPhotoUrl !== undefined 
+        ? explicitPhotoUrl 
+        : (photoUrl.trim() || undefined);
 
       const parsedTags = tagsInput
         .split(',')
@@ -248,6 +267,8 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
         interests: interests.trim() || undefined,
         shared_goals: sharedGoals.trim() || undefined,
         value_add: howICanAddValue.trim() || undefined,
+        photo_url: effectivePhotoUrl || undefined,
+        thumbnail_url: effectivePhotoUrl || undefined,
         custom_fields: customFields,
         last_interaction: interactions[0]?.date || props.last_interaction,
         ...incrementalUpdates
@@ -264,7 +285,7 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
         title: title.trim(),
         description: description.trim() || undefined,
         project_id: projectId || undefined,
-        thumbnail_url: photoUrl.trim() || undefined,
+        thumbnail_url: effectivePhotoUrl || undefined,
         tags: parsedTags,
         properties: updatedProperties
       });
@@ -276,6 +297,92 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
       setStatusMessage({ text: err.message || 'Error guardando datos.', type: 'error' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Direct Profile Photo Upload Handler
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset input so same file can be picked again if desired
+    e.target.value = '';
+    if (!file) return;
+
+    // Validate mime type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setStatusMessage({ 
+        text: 'Formato no soportado. Por favor, selecciona una imagen en formato JPG, PNG o WebP.', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    // Validate size (max 5 MB)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setStatusMessage({ 
+        text: 'La imagen excede el límite permitido de 5 MB. Elige una imagen más liviana.', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      setStatusMessage({ text: 'Subiendo fotografía de perfil...', type: 'success' });
+
+      // Upload directly via Cloudflare R2 / InsForge storage integration
+      const uploaded = await r2Storage.uploadFile(file, 'contacts/photos');
+      const newUrl = uploaded.url;
+
+      setPhotoUrl(newUrl);
+      setImageError(false);
+
+      // Persist immediately to database
+      await handleSaveContact({
+        photo_url: newUrl,
+        thumbnail_url: newUrl
+      }, newUrl);
+
+      setStatusMessage({ text: 'Fotografía de perfil actualizada con éxito.', type: 'success' });
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err: any) {
+      console.error('Error uploading contact photo:', err);
+      setStatusMessage({ 
+        text: err.message || 'Error al subir la fotografía. Inténtalo de nuevo.', 
+        type: 'error' 
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Direct Profile Photo Remove Handler
+  const handleRemovePhoto = async () => {
+    if (!confirm('¿Deseas eliminar la fotografía de perfil y restaurar el avatar con iniciales?')) {
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      setPhotoUrl('');
+      setImageError(false);
+
+      await handleSaveContact({
+        photo_url: undefined,
+        thumbnail_url: undefined
+      }, null);
+
+      setStatusMessage({ text: 'Fotografía eliminada. Avatar restaurado.', type: 'success' });
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err: any) {
+      console.error('Error removing contact photo:', err);
+      setStatusMessage({ 
+        text: err.message || 'Error al eliminar la fotografía.', 
+        type: 'error' 
+      });
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
@@ -533,18 +640,81 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
           {/* LEFT PANEL: IDENTITY CARD */}
           <aside className="w-full md:w-72 lg:w-80 bg-[#14141c] border-b md:border-b-0 md:border-r border-[#242436] p-5 flex flex-col overflow-y-auto no-scrollbar flex-shrink-0">
             <div className="flex flex-col items-center text-center">
-              {/* Photo or Initials */}
-              {person.thumbnail_url || photoUrl ? (
-                <img
-                  src={person.thumbnail_url || photoUrl}
-                  alt={person.title}
-                  className="w-24 h-24 rounded-2xl object-cover border-2 border-[#36364d] shadow-lg mb-3"
+              {/* Interactive Profile Photo Card with Direct Upload */}
+              <div className="relative group mb-3">
+                <input
+                  type="file"
+                  ref={photoInputRef}
+                  onChange={handlePhotoFileChange}
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
                 />
-              ) : (
-                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg mb-3">
-                  {person.title.slice(0, 2).toUpperCase()}
+
+                {/* Avatar Display */}
+                <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#36364d] shadow-lg relative bg-[#181824] flex items-center justify-center">
+                  {(person.thumbnail_url || photoUrl) && !imageError ? (
+                    <img
+                      src={person.thumbnail_url || photoUrl}
+                      alt={person.title}
+                      onError={() => setImageError(true)}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-2xl font-bold">
+                      {person.title ? person.title.slice(0, 2).toUpperCase() : 'PE'}
+                    </div>
+                  )}
+
+                  {/* Uploading Spinner Overlay */}
+                  {isUploadingPhoto && (
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center gap-1 z-20">
+                      <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                      <span className="text-[10px] text-blue-200 font-medium">Subiendo...</span>
+                    </div>
+                  )}
+
+                  {/* Hover / Tap Quick Overlay */}
+                  {!isUploadingPhoto && (
+                    <div
+                      onClick={() => photoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/60 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-1 cursor-pointer z-10 p-1"
+                      title="Cambiar fotografía de perfil"
+                    >
+                      <Camera className="w-5 h-5 text-white" />
+                      <span className="text-[10px] font-semibold text-white tracking-wide leading-none text-center">
+                        Cambiar foto
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Action buttons under or alongside avatar on hover or tap */}
+                <div className="flex items-center justify-center gap-1.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#20202e] hover:bg-blue-600/30 text-gray-300 hover:text-blue-300 border border-[#2d2d3e] hover:border-blue-500/40 text-[10px] font-medium transition"
+                    title="Subir foto desde el ordenador (JPG, PNG, WebP)"
+                  >
+                    <Camera className="w-3 h-3 text-blue-400" />
+                    <span>Cambiar</span>
+                  </button>
+
+                  {(person.thumbnail_url || photoUrl) && !imageError && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      disabled={isUploadingPhoto}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#20202e] hover:bg-red-500/20 text-gray-300 hover:text-red-400 border border-[#2d2d3e] hover:border-red-500/30 text-[10px] font-medium transition"
+                      title="Quitar foto y usar iniciales"
+                    >
+                      <Trash2 className="w-3 h-3 text-red-400" />
+                      <span>Quitar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Name & Role */}
               <h2 className="text-base sm:text-lg font-bold text-white leading-tight">
@@ -887,14 +1057,33 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-gray-400 block mb-1">URL de Fotografía</label>
-                        <input
-                          type="url"
-                          value={photoUrl}
-                          onChange={e => setPhotoUrl(e.target.value)}
-                          placeholder="https://..."
-                          className="w-full px-3 py-1.5 bg-[#181824] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-blue-500"
-                        />
+                        <label className="text-[11px] text-gray-400 block mb-1">Fotografía de Perfil</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="url"
+                            value={photoUrl}
+                            onChange={e => {
+                              setPhotoUrl(e.target.value);
+                              setImageError(false);
+                            }}
+                            placeholder="https://..."
+                            className="flex-1 px-3 py-1.5 bg-[#181824] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => photoInputRef.current?.click()}
+                            disabled={isUploadingPhoto}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#222232] hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap"
+                            title="Subir archivo desde el ordenador"
+                          >
+                            {isUploadingPhoto ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Camera className="w-3.5 h-3.5 text-blue-400" />
+                            )}
+                            <span>Subir</span>
+                          </button>
+                        </div>
                       </div>
                       <div className="col-span-full">
                         <label className="text-[11px] text-gray-400 block mb-1">Descripción de la Persona</label>

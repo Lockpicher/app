@@ -123,32 +123,88 @@ export const db = {
 
     const { data, error } = await query;
     if (error) console.error('Error fetching notes:', error);
-    return (data as unknown as AppNote[]) || [];
+    if (!data) return [];
+
+    return (data as any[]).map(row => {
+      const p = row.properties || {};
+      return {
+        ...row,
+        area_id: row.area_id || p.area_id || null,
+        para_category: row.para_category || p.para_category || undefined
+      } as AppNote;
+    });
   },
 
   async createNote(note: Partial<AppNote>): Promise<AppNote | null> {
+    const { area_id, para_category, ...directFields } = note as any;
+    const finalProperties = {
+      ...(note.properties || {}),
+      ...(area_id !== undefined ? { area_id } : {}),
+      ...(para_category !== undefined ? { para_category } : {})
+    };
+
+    const payload = {
+      ...directFields,
+      properties: finalProperties
+    };
+
     const { data, error } = await insforge.database
       .from('app_notes')
-      .insert([note])
+      .insert([payload])
       .select();
     if (error) {
       console.error('Error creating note:', error);
       throw error;
     }
-    return (data as unknown as AppNote[])?.[0] || null;
+    const created = (data as unknown as AppNote[])?.[0] || null;
+    if (!created) return null;
+
+    const p = (created as any).properties || {};
+    return {
+      ...created,
+      area_id: created.area_id || p.area_id || null,
+      para_category: created.para_category || p.para_category || undefined
+    };
   },
 
   async updateNote(id: string, updates: Partial<AppNote>): Promise<AppNote | null> {
+    const { id: _ignored, area_id, para_category, ...directFields } = updates as any;
+    
+    let finalProperties = updates.properties;
+    if (area_id !== undefined || para_category !== undefined || finalProperties) {
+      finalProperties = {
+        ...(finalProperties || {}),
+        ...(area_id !== undefined ? { area_id } : {}),
+        ...(para_category !== undefined ? { para_category } : {})
+      };
+    }
+
+    const payload: Record<string, any> = {
+      ...directFields,
+      updated_at: new Date().toISOString()
+    };
+    if (finalProperties !== undefined) {
+      payload.properties = finalProperties;
+    }
+
     const { data, error } = await insforge.database
       .from('app_notes')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
       .select();
     if (error) {
       console.error('Error updating note:', error);
       throw error;
     }
-    return (data as unknown as AppNote[])?.[0] || null;
+    const updated = (data as unknown as AppNote[])?.[0] || null;
+    if (!updated) return null;
+
+    const p = (updated as any).properties || {};
+    return {
+      ...updated,
+      area_id: updated.area_id || p.area_id || null,
+      para_category: updated.para_category || p.para_category || undefined
+    };
   },
 
   async duplicateNote(noteId: string): Promise<AppNote | null> {
@@ -416,32 +472,93 @@ export const db = {
       .select()
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching projects:', error);
-    return (data as unknown as AppProject[]) || [];
+    if (!data) return [];
+
+    return (data as any[]).map(row => {
+      const p = row.properties || {};
+      return {
+        ...row,
+        area_id: row.area_id || p.area_id || null,
+        para_category: row.para_category || p.para_category || undefined,
+        next_action: row.next_action || p.next_action || null
+      } as AppProject;
+    });
   },
 
   async createProject(project: Partial<AppProject>): Promise<AppProject | null> {
+    const { area_id, para_category, next_action, ...directFields } = project as any;
+    const finalProperties = {
+      ...(project.properties || {}),
+      ...(area_id !== undefined ? { area_id } : {}),
+      ...(para_category !== undefined ? { para_category } : {}),
+      ...(next_action !== undefined ? { next_action } : {})
+    };
+
+    const payload = {
+      ...directFields,
+      properties: finalProperties
+    };
+
     const { data, error } = await insforge.database
       .from('app_projects')
-      .insert([project])
+      .insert([payload])
       .select();
     if (error) {
       console.error('Error creating project:', error);
       throw error;
     }
-    return (data as unknown as AppProject[])?.[0] || null;
+    const created = (data as unknown as AppProject[])?.[0] || null;
+    if (!created) return null;
+
+    const p = (created as any).properties || {};
+    return {
+      ...created,
+      area_id: created.area_id || p.area_id || null,
+      para_category: created.para_category || p.para_category || undefined,
+      next_action: created.next_action || p.next_action || null
+    };
   },
 
   async updateProject(id: string, updates: Partial<AppProject>): Promise<AppProject | null> {
+    const { id: _ignored, area_id, para_category, next_action, ...directFields } = updates as any;
+    
+    let finalProperties = updates.properties;
+    if (area_id !== undefined || para_category !== undefined || next_action !== undefined || finalProperties) {
+      finalProperties = {
+        ...(finalProperties || {}),
+        ...(area_id !== undefined ? { area_id } : {}),
+        ...(para_category !== undefined ? { para_category } : {}),
+        ...(next_action !== undefined ? { next_action } : {})
+      };
+    }
+
+    const payload: Record<string, any> = {
+      ...directFields,
+      updated_at: new Date().toISOString()
+    };
+    if (finalProperties !== undefined) {
+      payload.properties = finalProperties;
+    }
+
     const { data, error } = await insforge.database
       .from('app_projects')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
       .select();
     if (error) {
       console.error('Error updating project:', error);
       throw error;
     }
-    return (data as unknown as AppProject[])?.[0] || null;
+    const updated = (data as unknown as AppProject[])?.[0] || null;
+    if (!updated) return null;
+
+    const p = (updated as any).properties || {};
+    return {
+      ...updated,
+      area_id: updated.area_id || p.area_id || null,
+      para_category: updated.para_category || p.para_category || undefined,
+      next_action: updated.next_action || p.next_action || null
+    };
   },
 
   async deleteProject(id: string): Promise<boolean> {
@@ -464,33 +581,106 @@ export const db = {
       .is('parent_task_id', null)
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching tasks:', error);
-    return (data as unknown as AppTask[]) || [];
+    if (!data) return [];
+
+    return (data as any[]).map(row => {
+      const p = row.properties || {};
+      return {
+        ...row,
+        area_id: row.area_id || p.area_id || null,
+        para_category: row.para_category || p.para_category || undefined
+      } as AppTask;
+    });
   },
 
   async createTask(task: Partial<AppTask>): Promise<AppTask | null> {
+    const { area_id, para_category, ...directFields } = task as any;
+    const finalProperties = {
+      ...(task.properties || {}),
+      ...(area_id !== undefined ? { area_id } : {}),
+      ...(para_category !== undefined ? { para_category } : {})
+    };
+
+    const payload = {
+      ...directFields,
+      properties: finalProperties
+    };
+
     const { data, error } = await insforge.database
       .from('app_tasks')
-      .insert([task])
+      .insert([payload])
       .select();
     if (error) {
       console.error('Error creating task:', error);
       throw error;
     }
-    return (data as unknown as AppTask[])?.[0] || null;
+    const created = (data as unknown as AppTask[])?.[0] || null;
+    if (!created) return null;
+
+    const p = (created as any).properties || {};
+    return {
+      ...created,
+      area_id: created.area_id || p.area_id || null,
+      para_category: created.para_category || p.para_category || undefined
+    };
   },
 
   async updateTask(id: string, updates: Partial<AppTask>): Promise<AppTask | null> {
-    const { id: _ignored, ...cleanUpdates } = updates;
-    const { data, error } = await insforge.database
+    const { id: _ignored, area_id, para_category, ...directFields } = updates as any;
+    
+    let finalProperties = updates.properties;
+    if (area_id !== undefined || para_category !== undefined || finalProperties) {
+      finalProperties = {
+        ...(finalProperties || {}),
+        ...(area_id !== undefined ? { area_id } : {}),
+        ...(para_category !== undefined ? { para_category } : {})
+      };
+    }
+
+    const payload: Record<string, any> = {
+      ...directFields,
+      updated_at: new Date().toISOString()
+    };
+    if (finalProperties !== undefined) {
+      payload.properties = finalProperties;
+    }
+
+    let { data, error } = await insforge.database
       .from('app_tasks')
-      .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
       .select();
+
+    // If network error or unauthorized, re-authenticate workspace session and retry once
+    if (error && (error.message?.includes('NetworkError') || error.message?.includes('fetch failed') || error.message?.includes('JWT') || (error as any).status === 401)) {
+      console.warn('Re-autenticando sesión tras fallo de red en updateTask...');
+      try {
+        await auth.ensureActiveSession();
+        const retryRes = await insforge.database
+          .from('app_tasks')
+          .update(payload)
+          .eq('id', id)
+          .select();
+        data = retryRes.data;
+        error = retryRes.error;
+      } catch (authErr) {
+        console.error('Error re-autenticando en updateTask:', authErr);
+      }
+    }
+
     if (error) {
       console.error('Error updating task:', error);
       throw error;
     }
-    return (data as unknown as AppTask[])?.[0] || null;
+    const updated = (data as unknown as AppTask[])?.[0] || null;
+    if (!updated) return null;
+
+    const p = (updated as any).properties || {};
+    return {
+      ...updated,
+      area_id: updated.area_id || p.area_id || null,
+      para_category: updated.para_category || p.para_category || undefined
+    };
   },
 
   async deleteTask(id: string): Promise<boolean> {

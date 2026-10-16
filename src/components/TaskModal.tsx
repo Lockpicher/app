@@ -33,7 +33,11 @@ import {
   Upload,
   AlertCircle,
   Building2,
-  Link2
+  Link2,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -192,6 +196,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   if (!isOpen) return null;
+
+  // Layout Mode: 'panel' (slide-over drawer on right) or 'modal' (centered)
+  const [panelMode, setPanelMode] = useState<'panel' | 'modal'>('panel');
+
+  // Keyboard shortcut: Escape to close safe
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleSafeClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, hasUnsavedChanges]);
 
   // Handle Safe Close with Unsaved Changes Warning
   const handleSafeClose = () => {
@@ -533,32 +552,40 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto"
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity duration-200 ${
+        panelMode === 'panel'
+          ? 'flex justify-end'
+          : 'flex items-center justify-center p-2 sm:p-4 overflow-y-auto'
+      }`}
       onClick={handleSafeClose}
     >
       <div 
-        className="bg-[#181822] border border-[#2e2e42] rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col my-auto max-h-[92vh] overflow-hidden"
+        className={`bg-[#181822] border-[#2e2e42] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+          panelMode === 'panel'
+            ? 'w-full max-w-2xl h-full border-l border-y-0 border-r-0 rounded-none sm:rounded-l-2xl animate-in slide-in-from-right duration-200'
+            : 'w-full max-w-4xl border rounded-2xl my-auto max-h-[92vh] animate-in zoom-in-95 duration-200'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Encabezado Principal */}
-        <div className="px-6 py-4 bg-[#14141c] border-b border-[#252535] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-900/40">
+        <div className="px-5 sm:px-6 py-3.5 bg-[#14141c] border-b border-[#252535] flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-900/40 flex-shrink-0">
               <CheckSquare className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                {isEditing ? 'Editar Tarea Ágil' : 'Nueva Tarea Ágil'}
+            <div className="overflow-hidden">
+              <h2 className="text-base font-bold text-white flex items-center gap-2 truncate">
+                <span className="truncate">{isEditing ? 'Editar Tarea Ágil' : 'Nueva Tarea Ágil'}</span>
                 {isOverdue && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-950/80 text-red-300 border border-red-800/60 flex items-center gap-1 font-semibold uppercase animate-pulse">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-950/80 text-red-300 border border-red-800/60 flex items-center gap-1 font-semibold uppercase animate-pulse flex-shrink-0">
                     <AlertTriangle className="w-3 h-3 text-red-400" />
                     Vencida
                   </span>
                 )}
               </h2>
-              <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-0.5 flex-wrap">
-                <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-gray-300 font-medium">Grupo Kubbonet</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-0.5 truncate">
+                <Building2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                <span className="text-gray-300 font-medium truncate">Grupo Kubbonet</span>
                 {(() => {
                   const currentList = lists?.find(l => l.id === listaId);
                   if (!currentList) return null;
@@ -567,15 +594,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   return (
                     <>
                       <span>/</span>
-                      <span className="text-indigo-300 font-medium">{currentSpace?.nombre || 'Espacio'}</span>
+                      <span className="text-indigo-300 font-medium truncate">{currentSpace?.nombre || 'Espacio'}</span>
                       {currentFolder && (
                         <>
                           <span>/</span>
-                          <span className="text-cyan-300 font-medium">{currentFolder.nombre}</span>
+                          <span className="text-cyan-300 font-medium truncate">{currentFolder.nombre}</span>
                         </>
                       )}
                       <span>/</span>
-                      <span className="text-blue-300 font-semibold">{currentList.nombre}</span>
+                      <span className="text-blue-300 font-semibold truncate">{currentList.nombre}</span>
                     </>
                   );
                 })()}
@@ -583,12 +610,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Toggle Panel vs Modal button */}
+            <button
+              type="button"
+              onClick={() => setPanelMode(prev => prev === 'panel' ? 'modal' : 'panel')}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252535] transition hidden sm:flex items-center justify-center"
+              title={panelMode === 'panel' ? 'Expandir a modal centrado' : 'Acoplar a panel lateral'}
+            >
+              {panelMode === 'panel' ? (
+                <Maximize2 className="w-4 h-4" />
+              ) : (
+                <PanelRightClose className="w-4 h-4 text-blue-400" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={handleSafeClose}
               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252535] transition"
-              title="Cerrar formulario"
+              title="Cerrar formulario (Esc)"
             >
               <X className="w-5 h-5" />
             </button>

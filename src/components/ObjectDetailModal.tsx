@@ -54,7 +54,11 @@ import {
   Loader2,
   Check,
   Eye,
-  Plus
+  Plus,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
@@ -121,6 +125,20 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
 
   // Quick entity linker state in editor
   const [showEntityLinker, setShowEntityLinker] = useState(false);
+
+  const [panelMode, setPanelMode] = useState<'panel' | 'modal'>('panel');
+
+  // Keyboard shortcut: Escape to close
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   const project = projects.find(p => p.id === object.project_id);
   const objectAttachments = attachments.filter(a => a.entity_id === object.id);
@@ -324,20 +342,34 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 z-50 animate-in fade-in duration-200">
-      <div className="bg-[#171722] border border-[#2d2d40] rounded-2xl max-w-5xl w-full flex flex-col max-h-[96vh] shadow-2xl overflow-hidden">
+    <div 
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity duration-200 ${
+        panelMode === 'panel'
+          ? 'flex justify-end'
+          : 'flex items-center justify-center p-2 sm:p-4 overflow-y-auto'
+      }`}
+      onClick={onClose}
+    >
+      <div 
+        className={`bg-[#171722] border-[#2d2d40] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+          panelMode === 'panel'
+            ? 'w-full max-w-2xl h-full border-l border-y-0 border-r-0 rounded-none sm:rounded-l-2xl animate-in slide-in-from-right duration-200'
+            : 'w-full max-w-5xl border rounded-2xl my-auto max-h-[96vh] animate-in zoom-in-95 duration-200'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Cover / Header Banner */}
-        <div className="relative bg-[#13131c] border-b border-[#262638] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
+        <div className="relative bg-[#13131c] border-b border-[#262638] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 overflow-hidden">
             {thumbnailUrl || object.thumbnail_url ? (
               <img 
                 src={thumbnailUrl || object.thumbnail_url!} 
                 alt={object.title} 
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover border border-[#35354a] shadow flex-shrink-0"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-[#35354a] shadow flex-shrink-0"
               />
             ) : (
               <div 
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg font-bold shadow flex-shrink-0"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-base sm:text-lg font-bold shadow flex-shrink-0"
                 style={{ backgroundColor: `${typeDef?.color || '#3b82f6'}20`, color: typeDef?.color || '#3b82f6' }}
               >
                 {object.title ? object.title.slice(0, 2).toUpperCase() : 'PG'}
@@ -363,29 +395,28 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
                   </span>
                 )}
               </div>
-              <h2 className="text-sm sm:text-lg md:text-xl font-bold text-white mt-0.5 truncate">
+              <h2 className="text-sm sm:text-base md:text-lg font-bold text-white mt-0.5 truncate">
                 {title || object.title}
               </h2>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {!isEditing ? (
               <button
                 type="button"
                 onClick={() => setIsEditing(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#222232] text-emerald-400 hover:bg-[#2b2b3e] border border-emerald-500/20 transition"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-[#222232] text-emerald-400 hover:bg-[#2b2b3e] border border-emerald-500/20 transition"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Editar Ficha</span>
-                <span className="sm:hidden">Editar</span>
+                <span className="hidden sm:inline">Editar</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm disabled:opacity-50"
               >
                 {isSaving ? (
                   <>
@@ -415,10 +446,24 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
               <Trash2 className="w-4 h-4" />
             </button>
 
+            {/* Toggle Panel vs Modal button */}
+            <button
+              type="button"
+              onClick={() => setPanelMode(prev => prev === 'panel' ? 'modal' : 'panel')}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252535] transition hidden sm:flex items-center justify-center"
+              title={panelMode === 'panel' ? 'Expandir a modal centrado' : 'Acoplar a panel lateral'}
+            >
+              {panelMode === 'panel' ? (
+                <Maximize2 className="w-4 h-4" />
+              ) : (
+                <PanelRightClose className="w-4 h-4 text-emerald-400" />
+              )}
+            </button>
+
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-[#252535] transition"
-              title="Cerrar"
+              title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
             </button>

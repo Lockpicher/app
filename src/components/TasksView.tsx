@@ -578,19 +578,40 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                 draggedTaskId === t.id ? 'opacity-40 scale-95' : ''
                               }`}
                             >
-                              {/* Card Header: List origin pill & Priority */}
-                              <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                                {taskList ? (
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40 truncate max-w-[140px]">
-                                    {taskList.nombre}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#20202c] text-gray-400">
-                                    General
-                                  </span>
-                                )}
+                              {/* Card Header: List origin pill, Project pill & Priority */}
+                              <div className="flex items-center justify-between gap-1.5 mb-1.5 flex-wrap">
+                                <div className="flex items-center gap-1 overflow-hidden max-w-[70%]">
+                                  {taskList ? (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40 truncate">
+                                      {taskList.nombre}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#20202c] text-gray-400">
+                                      General
+                                    </span>
+                                  )}
 
-                                <div className="flex items-center gap-1">
+                                  {(() => {
+                                    const proj = projects.find(p => p.id === t.project_id);
+                                    if (!proj) return null;
+                                    return (
+                                      <span 
+                                        className="text-[10px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 border truncate max-w-[120px]"
+                                        style={{ 
+                                          backgroundColor: `${proj.color || '#6366f1'}20`, 
+                                          borderColor: `${proj.color || '#6366f1'}40`,
+                                          color: proj.color || '#a5b4fc' 
+                                        }}
+                                        title={`Proyecto: ${proj.title}`}
+                                      >
+                                        <FolderKanban className="w-2.5 h-2.5 flex-shrink-0" />
+                                        <span className="truncate">{proj.title}</span>
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+
+                                <div className="flex items-center gap-1 flex-shrink-0">
                                   {t.priority === 'urgent' && (
                                     <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-800/60 px-1.5 py-0.5 rounded font-mono font-bold flex items-center gap-0.5">
                                       <Flame className="w-3 h-3 text-red-400" /> Urgente
@@ -818,6 +839,26 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
                                 {/* Right Meta Columns */}
                                 <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                                  {/* Project pill */}
+                                  {(() => {
+                                    const proj = projects.find(p => p.id === t.project_id);
+                                    if (!proj) return null;
+                                    return (
+                                      <span 
+                                        className="text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1 border truncate max-w-[130px]"
+                                        style={{ 
+                                          backgroundColor: `${proj.color || '#6366f1'}20`, 
+                                          borderColor: `${proj.color || '#6366f1'}40`,
+                                          color: proj.color || '#a5b4fc' 
+                                        }}
+                                        title={`Proyecto: ${proj.title}`}
+                                      >
+                                        <FolderKanban className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate">{proj.title}</span>
+                                      </span>
+                                    );
+                                  })()}
+
                                   {/* List pill */}
                                   {taskList && (
                                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40">

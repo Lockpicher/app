@@ -1097,6 +1097,7 @@ export function App() {
                 onUpdateProject={handleUpdateProject}
                 onDeleteProject={handleDeleteProject}
                 onSelectProject={() => {}}
+                onCreateTask={handleCreateTask}
               />
             )}
 

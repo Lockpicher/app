@@ -139,6 +139,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [lightboxImgUrl, setLightboxImgUrl] = useState<string | null>(null);
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
 
+  const lastSelectionRef = useRef<{ from: number; to: number } | null>(null);
+
   // TipTap Editor initialization
   const editor = useEditor({
     extensions: [
@@ -194,7 +196,16 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       }
     },
     content: (() => {
-      if (note.content_json && typeof note.content_json === 'object') {
+      // If content_json exists, check whether note.content (HTML) contains images that might be missing in content_json
+      if (note.content_json && typeof note.content_json === 'object' && Object.keys(note.content_json).length > 0) {
+        const jsonStr = JSON.stringify(note.content_json);
+        const htmlHasImage = typeof note.content === 'string' && note.content.includes('<img');
+        const jsonHasImage = jsonStr.includes('"type":"image"') || jsonStr.includes('"image"');
+        
+        // If HTML has image tags but JSON missed them, prefer the HTML version to prevent disappearing images
+        if (htmlHasImage && !jsonHasImage) {
+          return note.content;
+        }
         return note.content_json;
       }
       if (note.content && typeof note.content === 'string') {
@@ -221,6 +232,10 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       }
       return '<p></p>';
     })(),
+    onSelectionUpdate: ({ editor: currentEditor }) => {
+      const { from, to } = currentEditor.state.selection;
+      lastSelectionRef.current = { from, to };
+    },
     onUpdate: () => {
       setSaveStatus('dirty');
     }
@@ -324,21 +339,77 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     return () => clearTimeout(timer);
   }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, tagsInput]);
 
+  // Robust insertion helper that restores cursor position, falls back cleanly and persists
+  const insertImageAtCursor = async (imageUrl: string, altText?: string) => {
+    if (!editor) return;
+
+    try {
+      // 1. Focus editor and restore last valid cursor position if available
+      editor.commands.focus();
+      if (lastSelectionRef.current && typeof lastSelectionRef.current.from === 'number') {
+        const docSize = editor.state.doc.content.size;
+        const targetPos = Math.min(Math.max(0, lastSelectionRef.current.from), docSize);
+        editor.commands.setTextSelection(targetPos);
+      }
+
+      // 2. Attempt to insert using TipTap setImage command
+      const executed = editor
+        .chain()
+        .focus()
+        .setImage({ src: imageUrl, alt: altText || 'Imagen adjunta' })
+        .insertContent('<p></p>')
+        .run();
+
+      // 3. Fallback if setImage failed for any schema or nested selection restriction
+      if (!executed) {
+        editor
+          .chain()
+          .focus()
+          .insertContent(`<p><img src="${imageUrl}" alt="${altText || 'Imagen adjunta'}" /></p><p></p>`)
+          .run();
+      }
+
+      // 4. Update save status and trigger save
+      setSaveStatus('dirty');
+      await handleSave();
+    } catch (insertErr) {
+      console.error('Error al insertar imagen en editor:', insertErr);
+    }
+  };
+
+  // Helper to insert non-image attachment link into the editor
+  const insertAttachmentLinkAtCursor = async (fileUrl: string, fileName: string) => {
+    if (!editor) return;
+
+    try {
+      editor.commands.focus();
+      if (lastSelectionRef.current && typeof lastSelectionRef.current.from === 'number') {
+        const docSize = editor.state.doc.content.size;
+        const targetPos = Math.min(Math.max(0, lastSelectionRef.current.from), docSize);
+        editor.commands.setTextSelection(targetPos);
+      }
+
+      editor
+        .chain()
+        .focus()
+        .insertContent(`<p>📎 <a href="${fileUrl}" target="_blank" rel="noopener noreferrer">${fileName}</a></p><p></p>`)
+        .run();
+
+      setSaveStatus('dirty');
+      await handleSave();
+    } catch (err) {
+      console.error('Error al insertar enlace de adjunto en editor:', err);
+    }
+  };
+
   // Insert Image from user desktop
   const handleInsertImage = async (file: File) => {
     try {
       setIsUploadingImage(true);
       const res = await r2Storage.uploadFile(file, `notes/${note.id}/images`);
-      if (editor) {
-        editor
-          .chain()
-          .focus()
-          .setImage({ src: res.url, alt: res.name })
-          .insertContent('<p></p>')
-          .run();
-        setSaveStatus('dirty');
-        setTimeout(() => handleSave(), 100);
-      }
+      
+      await insertImageAtCursor(res.url, res.name || file.name);
+
       try {
         await db.recordAttachment({
           entity_id: note.id,
@@ -1216,16 +1287,12 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                             return (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (editor) {
-                                    editor
-                                      .chain()
-                                      .focus()
-                                      .setImage({ src: att.file_url, alt: att.display_name || att.file_name })
-                                      .insertContent('<p></p>')
-                                      .run();
-                                    setSaveStatus('dirty');
-                                  }
+                                onMouseDown={(e) => {
+                                  // Prevent blur of editor so cursor selection is not lost
+                                  e.preventDefault();
+                                }}
+                                onClick={async () => {
+                                  await insertImageAtCursor(att.file_url, att.display_name || att.file_name);
                                 }}
                                 className={`w-full py-1.5 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1.5 ${
                                   isAlreadyInserted
@@ -1236,7 +1303,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                                 {isAlreadyInserted ? (
                                   <>
                                     <Check className="w-3 h-3 text-emerald-400" />
-                                    Insertada (Insertar otra vez)
+                                    Insertada (Insertar en posición actual)
                                   </>
                                 ) : (
                                   <>
@@ -1249,15 +1316,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                           })() : (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (editor) {
-                                  editor
-                                    .chain()
-                                    .focus()
-                                    .insertContent(`<p>📎 <a href="${att.file_url}" target="_blank">${att.display_name || att.file_name}</a></p>`)
-                                    .run();
-                                  setSaveStatus('dirty');
-                                }
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                              }}
+                              onClick={async () => {
+                                await insertAttachmentLinkAtCursor(att.file_url, att.display_name || att.file_name);
                               }}
                               className="w-full py-1 px-2 rounded bg-[#20202e] hover:bg-[#28283a] text-gray-300 border border-[#2b2b3e] text-[11px] font-medium transition flex items-center justify-center gap-1.5"
                             >
