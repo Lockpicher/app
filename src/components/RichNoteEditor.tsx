@@ -67,7 +67,9 @@ import {
   AlertCircle,
   FileText,
   Boxes,
-  Maximize2
+  Maximize2,
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 import { 
@@ -196,13 +198,26 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         return note.content_json;
       }
       if (note.content && typeof note.content === 'string') {
-        if (note.content.includes('<p>') || note.content.includes('<h1>') || note.content.includes('<br')) {
-          return note.content;
+        const trimmed = note.content.trim();
+        if (
+          trimmed.includes('<p>') || 
+          trimmed.includes('<h1>') || 
+          trimmed.includes('<h2>') || 
+          trimmed.includes('<h3>') || 
+          trimmed.includes('<img') || 
+          trimmed.includes('<br') ||
+          trimmed.includes('<ul>') ||
+          trimmed.includes('<ol>')
+        ) {
+          return trimmed;
         }
-        return note.content
+        return trimmed
           .split('\n')
           .map(line => `<p>${line || '<br>'}</p>`)
           .join('');
+      }
+      if (note.thumbnail_url) {
+        return `<p><img src="${note.thumbnail_url}" alt="${note.title || 'Imagen'}" /></p><p></p>`;
       }
       return '<p></p>';
     })(),
@@ -249,10 +264,19 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         .filter(Boolean);
 
       // Extract first image as thumbnail if available
-      let thumbUrl = note.thumbnail_url;
-      if (!thumbUrl) {
-        const imgMatch = html.match(/<img[^>]+src="([^">]+)"/);
-        if (imgMatch) thumbUrl = imgMatch[1];
+      const imgMatch = html.match(/<img[^>]+src="([^">]+)"/);
+      const thumbUrl = imgMatch ? imgMatch[1] : (note.thumbnail_url || null);
+
+      // Determine dynamic note_type: image if has images and no plain text, text otherwise, or preserve audio
+      let calculatedType: AppNote['note_type'] = note.note_type || 'text';
+      if (note.note_type !== 'audio') {
+        const hasImages = Boolean(imgMatch);
+        const hasText = plainText.trim().length > 0;
+        if (hasImages && !hasText) {
+          calculatedType = 'image';
+        } else {
+          calculatedType = 'text';
+        }
       }
 
       await onSave(note.id, {
@@ -265,6 +289,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         is_favorite: isFavorite,
         is_pinned: isPinned,
         tags,
+        note_type: calculatedType,
         thumbnail_url: thumbUrl
       });
 
@@ -825,14 +850,24 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             <button
               onClick={() => fileUploadInputRef.current?.click()}
               disabled={isUploadingImage}
-              className={`p-1.5 rounded transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition text-xs ${
                 isUploadingImage
-                  ? 'bg-cyan-500/20 text-cyan-300 cursor-wait'
-                  : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 cursor-wait'
+                  : 'text-gray-300 hover:text-white hover:bg-[#252538] border border-transparent'
               }`}
-              title={isUploadingImage ? 'Subiendo imagen a Storage...' : 'Subir Imagen a InsForge Storage'}
+              title={isUploadingImage ? 'Subiendo e insertando imagen...' : 'Insertar imagen en la nota'}
             >
-              <Upload className={`w-3.5 h-3.5 text-cyan-400 ${isUploadingImage ? 'animate-bounce' : ''}`} />
+              {isUploadingImage ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                  <span className="text-[11px] font-medium text-blue-300">Subiendo imagen...</span>
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden sm:inline text-[11px]">Imagen</span>
+                </>
+              )}
             </button>
 
             {/* Record Voice Note Button */}
@@ -1135,26 +1170,44 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                           </div>
 
                           {/* Quick Action: Insert in note content */}
-                          {isImg ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (editor) {
-                                  editor
-                                    .chain()
-                                    .focus()
-                                    .setImage({ src: att.file_url, alt: att.display_name || att.file_name })
-                                    .insertContent('<p></p>')
-                                    .run();
-                                  setSaveStatus('dirty');
-                                }
-                              }}
-                              className="w-full py-1 px-2 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-medium transition flex items-center justify-center gap-1.5"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Insertar en la nota
-                            </button>
-                          ) : (
+                          {isImg ? (() => {
+                            const currentHtml = editor ? editor.getHTML() : '';
+                            const isAlreadyInserted = currentHtml.includes(att.file_url) || (att.r2_key && currentHtml.includes(att.r2_key));
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editor) {
+                                    editor
+                                      .chain()
+                                      .focus()
+                                      .setImage({ src: att.file_url, alt: att.display_name || att.file_name })
+                                      .insertContent('<p></p>')
+                                      .run();
+                                    setSaveStatus('dirty');
+                                  }
+                                }}
+                                className={`w-full py-1.5 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1.5 ${
+                                  isAlreadyInserted
+                                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 hover:bg-emerald-900/50'
+                                    : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30'
+                                }`}
+                              >
+                                {isAlreadyInserted ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    Insertada (Insertar otra vez)
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3 h-3 text-blue-400" />
+                                    Insertar en la nota
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })() : (
                             <button
                               type="button"
                               onClick={() => {

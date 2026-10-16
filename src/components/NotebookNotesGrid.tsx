@@ -58,6 +58,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isUploadingImageNote, setIsUploadingImageNote] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
 
@@ -115,12 +116,14 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       try {
         const isImg = file.type.startsWith('image/');
         const res = await r2Storage.uploadFile(file, isImg ? 'notes/images' : 'notes/files');
+        const cleanTitle = file.name.replace(/\.[^/.]+$/, '').trim() || (isImg ? 'Imagen' : 'Archivo');
         
         await onCreateNote({
-          title: file.name.replace(/\.[^/.]+$/, ''),
+          title: cleanTitle,
           note_type: isImg ? 'image' : 'file',
           thumbnail_url: isImg ? res.url : undefined,
-          content: isImg ? `<img src="${res.url}" alt="${file.name}" />` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
+          content: isImg ? `<p><img src="${res.url}" alt="${cleanTitle}" /></p><p></p>` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
+          plain_text: '',
           notebook_id: notebook?.id || null
         });
       } catch (err: any) {
@@ -215,21 +218,28 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
             id="quick-image-note-upload"
             accept="image/*"
             className="hidden"
+            disabled={isUploadingImageNote}
             onChange={async (e) => {
               if (e.target.files && e.target.files[0]) {
                 const file = e.target.files[0];
                 try {
+                  setIsUploadingImageNote(true);
                   const res = await r2Storage.uploadFile(file, 'notes/images');
+                  const cleanTitle = file.name.replace(/\.[^/.]+$/, '').trim() || 'Imagen';
+                  const imgHtml = `<p><img src="${res.url}" alt="${cleanTitle}" /></p><p></p>`;
+
                   await onCreateNote({
-                    title: file.name.replace(/\.[^/.]+$/, ''),
+                    title: cleanTitle,
                     note_type: 'image',
                     thumbnail_url: res.url,
-                    content: `<img src="${res.url}" alt="${file.name}" /><p></p>`,
+                    content: imgHtml,
+                    plain_text: '',
                     notebook_id: notebook?.id || null
                   });
                 } catch (err: any) {
-                  alert('Error al subir imagen: ' + (err.message || 'Error de red'));
+                  alert('Error al subir imagen para la nota: ' + (err.message || 'Error de red'));
                 } finally {
+                  setIsUploadingImageNote(false);
                   e.target.value = '';
                 }
               }
@@ -237,11 +247,19 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           />
           <label
             htmlFor="quick-image-note-upload"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30 transition flex-shrink-0 cursor-pointer"
-            title="Crear nota a partir de una imagen de tu equipo"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex-shrink-0 cursor-pointer ${
+              isUploadingImageNote 
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 cursor-wait'
+                : 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border-emerald-500/30'
+            }`}
+            title="Crear nota de tipo imagen seleccionando un archivo de tu equipo"
           >
-            <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden xs:inline">Imagen</span>
+            {isUploadingImageNote ? (
+              <span className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="hidden xs:inline">{isUploadingImageNote ? 'Subiendo...' : 'Imagen'}</span>
           </label>
 
           {/* Quick Create Note Button */}
@@ -411,22 +429,31 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
                   </div>
 
                   {/* Thumbnail / Body Preview (Controlled Height) */}
-                  <div className="flex-1 overflow-hidden my-1">
-                    <h3 className="font-bold text-xs text-white line-clamp-1 mb-1.5 group-hover:text-blue-400 transition">
+                  <div className="flex-1 overflow-hidden my-1 flex flex-col justify-start">
+                    <h3 className="font-bold text-xs text-white line-clamp-1 mb-1.5 group-hover:text-blue-400 transition flex-shrink-0">
                       {noteItem.title || 'Sin título'}
                     </h3>
 
-                    {/* Image Preview Thumbnail */}
-                    {hasThumb ? (
-                      <div className="h-24 rounded-lg bg-[#111118] border border-[#20202e] overflow-hidden mb-1 relative">
-                        <img
-                          src={noteItem.thumbnail_url!}
-                          alt={noteItem.title}
-                          className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      </div>
-                    ) : isVoice ? (
+                    {/* Image Preview Thumbnail with 4:3 Aspect Ratio Container */}
+                    {hasThumb ? (() => {
+                      const imgCount = (noteItem.content || '').match(/<img[^>]+src=/gi)?.length || 1;
+                      return (
+                        <div className="w-full aspect-[4/3] max-h-32 rounded-xl bg-[#111118] border border-[#20202e] overflow-hidden mb-1.5 relative flex-shrink-0">
+                          <img
+                            src={noteItem.thumbnail_url!}
+                            alt={noteItem.title}
+                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                          {imgCount > 1 && (
+                            <span className="absolute bottom-1.5 right-1.5 bg-black/70 backdrop-blur-sm text-white font-mono text-[9px] px-1.5 py-0.5 rounded-md border border-white/10 flex items-center gap-1 shadow">
+                              <ImageIcon className="w-2.5 h-2.5 text-blue-400" />
+                              {imgCount}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })() : isVoice ? (
                       /* Voice Note Card snippet */
                       <div className="p-2.5 rounded-lg bg-red-950/20 border border-red-900/30 text-xs text-red-200 space-y-1">
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-red-400">
@@ -446,6 +473,13 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
                         {excerpt || 'Nota vacía...'}
                       </p>
                     )}
+
+                    {/* Secondary text snippet for image notes with text */}
+                    {hasThumb && excerpt ? (
+                      <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">
+                        {excerpt}
+                      </p>
+                    ) : null}
                   </div>
 
                   {/* Card Footer: Tags & Date */}
