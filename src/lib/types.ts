@@ -300,6 +300,12 @@ export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
     { key: 'email', label: 'Correo Electrónico', type: 'email' },
     { key: 'telefono', label: 'Teléfono', type: 'text' }
   ]},
+  { id: 'page', name: 'Páginas', icon: 'file-text', color: '#6366f1', category: 'General', fields: [
+    { key: 'subtitle', label: 'Subtítulo / Bajada', type: 'text' },
+    { key: 'cover_url', label: 'URL de Portada', type: 'url' },
+    { key: 'summary', label: 'Resumen Breve', type: 'textarea' },
+    { key: 'is_pinned', label: 'Fijar en barra lateral', type: 'checkbox' }
+  ]},
   { id: 'meeting', name: 'Reuniones', icon: 'calendar', color: '#f59e0b', category: 'General', fields: [
     { key: 'fecha', label: 'Fecha de Reunión', type: 'date' },
     { key: 'participantes', label: 'Participantes', type: 'text' },
@@ -348,7 +354,7 @@ export interface PersonCustomField {
 
 export interface AppObject {
   id: string;
-  object_type: 'person' | 'meeting' | 'resource' | 'book' | 'concept' | 'custom' | string;
+  object_type: 'page' | 'person' | 'meeting' | 'resource' | 'book' | 'concept' | 'custom' | string;
   title: string;
   description?: string;
   content?: string;

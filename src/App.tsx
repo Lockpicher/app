@@ -13,6 +13,9 @@ import { StorageView } from './components/StorageView';
 import { FilesManagerView } from './components/FilesManagerView';
 import { CalendarView } from './components/CalendarView';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobileDrawer } from './components/MobileDrawer';
+import { useTheme } from './lib/themeContext';
 import { ParaInboxView } from './components/ParaInboxView';
 import { ParaAreasView } from './components/ParaAreasView';
 import { ParaArchiveView } from './components/ParaArchiveView';
@@ -45,10 +48,14 @@ import {
   CheckSquare, 
   Calendar as CalendarIcon, 
   FolderKanban, 
-  HardDrive 
+  HardDrive,
+  Sun,
+  Moon,
+  Plus
 } from 'lucide-react';
 
 export function App() {
+  const { theme, toggleTheme } = useTheme();
   const [currentView, setCurrentView] = useState<ViewMode>('notebooks');
   const [loading, setLoading] = useState(true);
 
@@ -730,6 +737,71 @@ export function App() {
       setCurrentView('projects');
     } else if (type === 'object') {
       setIsEditingNote(false);
+      const foundObj = objects.find(o => o.id === id);
+      if (foundObj) {
+        setActiveObjectType(foundObj.object_type);
+      }
+      setCurrentView('objects');
+    } else if (type === 'notebook') {
+      setIsEditingNote(false);
+      setSelectedNotebookId(id);
+      setCurrentView('notebooks');
+    } else if (type === 'file') {
+      setIsEditingNote(false);
+      setCurrentView('files');
+    }
+  };
+
+  // Quick creation sheet dispatcher from mobile '+' button
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'person' | 'object') => {
+    if (type === 'note') {
+      await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
+    } else if (type === 'task') {
+      const created = await handleCreateTask({
+        title: 'Nueva Tarea',
+        status: 'todo',
+        priority: 'medium'
+      });
+      if (created) {
+        setIsEditingNote(false);
+        setCurrentView('tasks');
+      }
+    } else if (type === 'page') {
+      const created = await db.createObject({
+        title: 'Nueva Página',
+        object_type: 'page',
+        description: 'Página de conocimiento',
+        content: '# Nueva Página\n\nComienza a escribir tu documento estructurado...',
+        properties: {
+          subtitle: '',
+          is_pinned: false
+        }
+      });
+      if (created) {
+        setObjects(prev => [created, ...prev]);
+        setActiveObjectType('page');
+        setIsEditingNote(false);
+        setCurrentView('objects');
+      }
+    } else if (type === 'project') {
+      const created = await db.createProject({
+        title: 'Nuevo Proyecto',
+        status: 'active',
+        priority: 'medium',
+        progress: 0
+      });
+      if (created) {
+        setProjects(prev => [created, ...prev]);
+        setIsEditingNote(false);
+        setCurrentView('projects');
+      }
+    } else if (type === 'person') {
+      setActiveObjectType('person');
+      setIsEditingNote(false);
+      setCurrentView('objects');
+    } else if (type === 'object') {
+      setActiveObjectType('all');
+      setIsEditingNote(false);
       setCurrentView('objects');
     }
   };
@@ -786,11 +858,19 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Light / Dark Mode Toggle Button */}
           <button
-            onClick={() => handleNewNote()}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-medium shadow-sm transition"
+            type="button"
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#20202a] active:bg-[#282836] transition"
+            title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+            aria-label="Alternar tema claro u oscuro"
           >
-            <span>+ Nota</span>
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400" />
+            )}
           </button>
         </div>
       </header>
@@ -1181,78 +1261,68 @@ export function App() {
           </>
         )}
 
-        {/* Mobile Bottom Navigation Bar (visible on <lg screens) */}
-        <nav 
-          className="lg:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#121218]/95 backdrop-blur-md border-t border-[#23232f] flex items-center justify-around px-2 z-30"
-          aria-label="Navegación inferior móvil"
-        >
-          <button
-            onClick={() => {
-              setIsEditingNote(false);
-              setSelectedNotebookId(null);
-              setCurrentView('notebooks');
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
-              currentView === 'notebooks' || currentView === 'all_notes' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <Book className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] font-medium leading-none">Cuadernos</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setIsEditingNote(false);
-              setCurrentView('tasks');
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
-              currentView === 'tasks' ? 'text-amber-400' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <CheckSquare className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] font-medium leading-none">Tareas</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setIsEditingNote(false);
-              setCurrentView('calendar');
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
-              currentView === 'calendar' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <CalendarIcon className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] font-medium leading-none">Calendario</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setIsEditingNote(false);
-              setCurrentView('projects');
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
-              currentView === 'projects' ? 'text-purple-400' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <FolderKanban className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] font-medium leading-none">Proyectos</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setIsEditingNote(false);
-              setCurrentView('files');
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition ${
-              currentView === 'files' ? 'text-cyan-400' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <HardDrive className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] font-medium leading-none">Archivos</span>
-          </button>
-        </nav>
+        {/* Capacities-inspired Mobile Bottom Navigation Bar (5 touch points + New element sheet) */}
+        <MobileBottomNav
+          currentView={currentView}
+          onSelectView={(v) => {
+            setIsEditingNote(false);
+            if (v === 'notebooks') setSelectedNotebookId(null);
+            setCurrentView(v);
+          }}
+          onOpenQuickCreate={handleMobileQuickCreate}
+          onOpenSearch={() => setIsQuickSwitcherOpen(true)}
+          isEditorOpen={isEditingNote}
+        />
       </main>
+
+      {/* Capacities-inspired Mobile Drawer (Left panel) */}
+      <MobileDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        currentView={currentView}
+        onSelectView={(v) => {
+          setIsEditingNote(false);
+          if (v === 'notebooks') setSelectedNotebookId(null);
+          setCurrentView(v);
+        }}
+        notes={notes}
+        selectedNoteId={selectedNoteId}
+        onSelectNote={(id) => {
+          setSelectedNoteId(id);
+          setIsEditingNote(true);
+        }}
+        onTogglePinNote={(id) => {
+          const n = notes.find(item => item.id === id);
+          if (n) handleTogglePin(n);
+        }}
+        objects={objects}
+        objectTypes={[...DEFAULT_OBJECT_TYPES, ...customObjectTypes]}
+        activeObjectType={activeObjectType}
+        onSelectObjectType={(typeId) => {
+          setActiveObjectType(typeId);
+          setIsEditingNote(false);
+          setCurrentView('objects');
+        }}
+        onCreateCustomType={() => {
+          setCurrentView('objects');
+        }}
+        counts={{
+          notebooks: notebooks.filter(nb => !nb.is_archived).length,
+          notes: notes.length,
+          favorites: notes.filter(n => n.is_favorite).length,
+          reminders: reminders.filter(r => r.status === 'pending').length,
+          tasks: tasks.length,
+          projects: projects.filter(p => !p.is_archived && p.status !== 'completed').length,
+          objects: objects.filter(o => o.para_category !== 'archive').length,
+          inbox: notes.filter(n => !n.is_archived && (!n.para_category || n.para_category === 'inbox') && !n.project_id && !n.area_id).length +
+                 tasks.filter(t => t.status !== 'completed' && (!t.para_category || t.para_category === 'inbox') && !t.project_id && !t.area_id).length,
+          areas: areas.filter(a => !a.is_archived).length,
+          archives: projects.filter(p => p.is_archived || p.status === 'completed' || p.para_category === 'archive').length +
+                    notes.filter(n => n.is_archived || n.para_category === 'archive').length +
+                    areas.filter(a => a.is_archived).length +
+                    objects.filter(o => o.para_category === 'archive').length
+        }}
+      />
 
       {/* Global Notebook Modal (triggered from sidebar) */}
       <NotebookModal
@@ -1278,6 +1348,8 @@ export function App() {
         tasks={tasks}
         projects={projects}
         objects={objects}
+        notebooks={notebooks}
+        attachments={attachments}
         onSelectEntity={handleNavigateToEntity}
       />
     </div>

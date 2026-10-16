@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight } from 'lucide-react';
-import { AppNote, AppTask, AppProject, AppObject } from '../lib/types';
+import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User } from 'lucide-react';
+import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment } from '../lib/types';
 
 interface QuickSwitcherProps {
   isOpen: boolean;
@@ -9,7 +9,9 @@ interface QuickSwitcherProps {
   tasks: AppTask[];
   projects: AppProject[];
   objects: AppObject[];
-  onSelectEntity: (id: string, type: 'note' | 'task' | 'project' | 'object') => void;
+  notebooks?: AppNotebook[];
+  attachments?: AppAttachment[];
+  onSelectEntity: (id: string, type: 'note' | 'task' | 'project' | 'object' | 'notebook' | 'file') => void;
 }
 
 export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
@@ -19,6 +21,8 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   tasks,
   projects,
   objects,
+  notebooks = [],
+  attachments = [],
   onSelectEntity
 }) => {
   const [query, setQuery] = useState('');
@@ -32,15 +36,22 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   if (!isOpen) return null;
 
   const allItems = [
-    ...notes.map(n => ({ id: n.id, title: n.title, type: 'note' as const, subtitle: 'Nota Markdown' })),
-    ...projects.map(p => ({ id: p.id, title: p.title, type: 'project' as const, subtitle: 'Proyecto' })),
+    ...notebooks.map(nb => ({ id: nb.id, title: nb.name, type: 'notebook' as const, subtitle: 'Cuaderno de notas' })),
+    ...notes.map(n => ({ id: n.id, title: n.title, type: 'note' as const, subtitle: `Nota • ${n.note_type || 'texto'}` })),
+    ...projects.map(p => ({ id: p.id, title: p.title, type: 'project' as const, subtitle: `Proyecto • ${p.status}` })),
     ...tasks.map(t => ({ id: t.id, title: t.title, type: 'task' as const, subtitle: `Tarea • ${t.status}` })),
-    ...objects.map(o => ({ id: o.id, title: o.title, type: 'object' as const, subtitle: `Objeto • ${o.object_type}` }))
+    ...objects.map(o => ({ 
+      id: o.id, 
+      title: o.title, 
+      type: 'object' as const, 
+      subtitle: o.object_type === 'page' ? 'Página de conocimiento' : o.object_type === 'person' ? 'Contacto / Persona' : `Objeto • ${o.object_type}` 
+    })),
+    ...attachments.map(a => ({ id: a.id, title: a.display_name || a.file_name, type: 'file' as const, subtitle: `Archivo R2 • ${a.mime_type || 'archivo'}` }))
   ];
 
   const filtered = allItems.filter(item => 
-    item.title.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 8);
+    item.title.toLowerCase().includes(query.toLowerCase()) || item.subtitle.toLowerCase().includes(query.toLowerCase())
+  ).slice(0, 10);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -58,13 +69,20 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
     }
   };
 
-  const getIcon = (type: string) => {
-    switch (type) {
+  const getIcon = (item: typeof allItems[0]) => {
+    switch (item.type) {
+      case 'notebook': return <Book className="w-4 h-4 text-blue-400" />;
       case 'note': return <FileText className="w-4 h-4 text-purple-400" />;
       case 'project': return <FolderKanban className="w-4 h-4 text-blue-400" />;
       case 'task': return <CheckSquare className="w-4 h-4 text-amber-400" />;
-      case 'object': return <Boxes className="w-4 h-4 text-emerald-400" />;
-      default: return null;
+      case 'file': return <HardDrive className="w-4 h-4 text-cyan-400" />;
+      case 'object': {
+        const obj = objects.find(o => o.id === item.id);
+        if (obj?.object_type === 'page') return <Layers className="w-4 h-4 text-indigo-400" />;
+        if (obj?.object_type === 'person') return <User className="w-4 h-4 text-emerald-400" />;
+        return <Boxes className="w-4 h-4 text-pink-400" />;
+      }
+      default: return <Search className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -119,7 +137,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
               >
                 <div className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-md bg-[#121217] flex items-center justify-center border border-[#262635]">
-                    {getIcon(item.type)}
+                    {getIcon(item)}
                   </div>
                   <div>
                     <div className="text-xs font-semibold leading-tight">{item.title}</div>
