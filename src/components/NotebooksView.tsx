@@ -137,7 +137,7 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-6 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8 max-w-7xl mx-auto">
             {filteredNotebooks.map((nb) => {
               const nbNotes = notes.filter(n => n.notebook_id === nb.id && !n.is_archived);
               const preset = getCoverById(nb.cover_url);
@@ -146,76 +146,72 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
                 <div
                   key={nb.id}
                   onClick={() => onOpenNotebook(nb)}
-                  className="w-[144px] flex flex-col items-center group cursor-pointer select-none"
+                  className="flex flex-col items-center group cursor-pointer select-none text-center"
                 >
-                  {/* 144px x 200px Dimension Notebook Cover Card */}
-                  <div className="w-[144px] h-[200px] rounded-2xl shadow-lg relative overflow-hidden transition-all duration-300 transform group-hover:-translate-y-2 group-hover:shadow-2xl border border-white/10 group-hover:border-blue-500/50 flex flex-col justify-between p-3.5 flex-shrink-0">
-                    {/* Background: custom image, solid color, or preset gradient */}
+                  {/* Clean Visual Cover Card (3:4 ratio, clean corners, no spine, no text overlay) */}
+                  <div className="w-full max-w-[200px] aspect-[3/4] rounded-2xl shadow-md group-hover:shadow-xl relative overflow-hidden transition-all duration-300 transform group-hover:-translate-y-1.5 border border-white/10 group-hover:border-white/20 bg-[#1e1e2d] flex-shrink-0">
+                    {/* Cover Surface: custom image, solid color, or preset design */}
                     {nb.cover_type === 'custom' && nb.cover_url ? (
                       <img
                         src={nb.cover_url}
                         alt={nb.name}
-                        className="absolute inset-0 w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                         loading="lazy"
                       />
                     ) : nb.cover_type === 'color' ? (
                       <div
-                        className="absolute inset-0"
+                        className="w-full h-full transition-transform duration-300 group-hover:scale-[1.02]"
                         style={{ backgroundColor: nb.color || '#3b82f6' }}
                       />
                     ) : (
                       <div
-                        className={`absolute inset-0 bg-gradient-to-br ${preset.bgGradient}`}
+                        className={`w-full h-full bg-gradient-to-br ${preset.bgGradient} transition-transform duration-300 group-hover:scale-[1.02]`}
                         style={{ backgroundImage: preset.patternSvg }}
                       />
                     )}
 
-                    {/* Realistic notebook spine on the left */}
-                    <div className="absolute left-0 top-0 bottom-0 w-3.5 bg-black/35 backdrop-blur-[1px] border-r border-white/10" />
-
-                    {/* Ribbon bookmark / Default indicator */}
-                    <div className="relative z-10 flex items-center justify-between">
-                      {nb.is_default ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-900/80 text-blue-200 border border-blue-500/40 backdrop-blur-sm">
-                          Principal
-                        </span>
-                      ) : <div />}
-
-                      {/* Edit Button */}
+                    {/* Subtle hover edit button on top-right (no text overlay, accessible) */}
+                    <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
                       <button
                         onClick={(e) => handleOpenEdit(nb, e)}
-                        className="opacity-0 group-hover:opacity-100 transition p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur-md shadow"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur-md shadow"
                         title="Configurar cuaderno"
+                        aria-label={`Configurar cuaderno ${nb.name}`}
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    {/* Centered Cover Title Emblem */}
-                    <div className="relative z-10 my-auto text-center px-2 py-2.5 rounded-xl bg-black/45 backdrop-blur-md border border-white/15 shadow-sm">
-                      <p className="text-xs font-bold text-white line-clamp-2 leading-snug">
-                        {nb.name}
-                      </p>
-                    </div>
+                    {/* Subtle default indicator if notebook is primary */}
+                    {nb.is_default && (
+                      <div className="absolute top-2.5 left-2.5 z-10">
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-900/80 text-blue-200 border border-blue-500/40 backdrop-blur-sm">
+                          Principal
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
-                    {/* Bottom notes count pill */}
-                    <div className="relative z-10 flex justify-center">
-                      <span className="text-[10px] font-mono text-white/90 bg-black/50 px-2.5 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
+                  {/* Clean Content Composition Outside Cover */}
+                  <div className="mt-3 w-full max-w-[200px] flex flex-col items-center">
+                    {/* Notebook Name */}
+                    <h3 className="text-sm font-medium text-gray-100 group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
+                      {nb.name}
+                    </h3>
+
+                    {/* Brief Description */}
+                    {nb.description ? (
+                      <p className="text-xs text-gray-400 line-clamp-2 mt-1 leading-relaxed">
+                        {nb.description}
+                      </p>
+                    ) : null}
+
+                    {/* Discrete Notes Pill Indicator */}
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono text-gray-400 bg-[#20202e] border border-[#2b2b3e]">
                         {nbNotes.length} {nbNotes.length === 1 ? 'nota' : 'notas'}
                       </span>
                     </div>
-                  </div>
-
-                  {/* Name centered under cover */}
-                  <div className="mt-3 text-center max-w-full px-1">
-                    <h3 className="text-xs font-semibold text-gray-200 group-hover:text-blue-400 transition truncate">
-                      {nb.name}
-                    </h3>
-                    {nb.description && (
-                      <p className="text-[11px] text-gray-400 truncate max-w-[160px] mx-auto mt-0.5">
-                        {nb.description}
-                      </p>
-                    )}
                   </div>
                 </div>
               );

@@ -158,14 +158,29 @@ export const r2Storage = {
         }
 
         const proxyErr = await proxyRes.json().catch(() => ({}));
-        throw new Error(proxyErr.error || `Error subiendo archivo a R2 (${proxyRes.status})`);
+        throw new Error(proxyErr.error || `Error subiendo archivo a R2 (código HTTP ${proxyRes.status})`);
       } catch (r2Err: any) {
         console.error('Error cargando archivo a Cloudflare R2:', r2Err);
         throw new Error(`Fallo al subir a Cloudflare R2: ${r2Err.message || 'Error de red'}`);
       }
     }
 
-    throw new Error('Cloudflare R2 no está activo o configurado. Comprueba tus credenciales en el archivo .env.');
+    // 2. Si no respondió o configured es false, diagnosticar la causa exacta
+    try {
+      const res = await fetch('/api/r2/status');
+      if (res.status === 404) {
+        throw new Error('El backend de la aplicación no tiene desplegados los endpoints de Cloudflare R2 (/api/r2/*). Asegúrate de reconstruir y desplegar el contenedor Docker actualizado en EasyPanel.');
+      }
+      if (!res.ok) {
+        throw new Error(`El servidor respondió con estado HTTP ${res.status} al verificar la configuración de almacenamiento.`);
+      }
+    } catch (netErr: any) {
+      if (netErr.message && netErr.message.includes('EasyPanel')) {
+        throw netErr;
+      }
+    }
+
+    throw new Error('Cloudflare R2 no está activo o configurado. Comprueba que las variables R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY y R2_BUCKET_NAME estén definidas en EasyPanel.');
   },
 
   /**
