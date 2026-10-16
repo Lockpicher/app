@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Boxes, 
   Plus, 
@@ -11,10 +11,21 @@ import {
   Tag, 
   Filter,
   FolderKanban,
-  Edit2
+  Edit2,
+  Sparkles,
+  LayoutGrid,
+  List as ListIcon,
+  Image as ImageIcon,
+  ExternalLink,
+  Layers,
+  Search,
+  Eye
 } from 'lucide-react';
-import { AppObject, AppProject, AppAttachment } from '../lib/types';
+import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
+import { CustomTypeBuilderModal } from './CustomTypeBuilderModal';
+import { ObjectDetailModal } from './ObjectDetailModal';
+import { db } from '../lib/insforge';
 
 interface ObjectsViewProps {
   objects: AppObject[];
@@ -25,6 +36,9 @@ interface ObjectsViewProps {
   onCreateObject: (obj: Partial<AppObject>) => Promise<void>;
   onUpdateObject: (id: string, updates: Partial<AppObject>) => Promise<void>;
   onDeleteObject: (id: string) => Promise<void>;
+  notes?: AppNote[];
+  tasks?: AppTask[];
+  onOpenNote?: (note: AppNote) => void;
 }
 
 export const ObjectsView: React.FC<ObjectsViewProps> = ({
@@ -35,71 +49,132 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   onAttachmentDeleted = () => {},
   onCreateObject,
   onUpdateObject,
-  onDeleteObject
+  onDeleteObject,
+  notes = [],
+  tasks = [],
+  onOpenNote
 }) => {
   const [selectedType, setSelectedType] = useState<string>('all');
-  const [isCreating, setIsCreating] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Form state
+  // Modals state
+  const [isCreatingObject, setIsCreatingObject] = useState(false);
+  const [isTypeBuilderOpen, setIsTypeBuilderOpen] = useState(false);
+  const [selectedDetailObject, setSelectedDetailObject] = useState<AppObject | null>(null);
+
+  // Custom object types from InsForge
+  const [customTypes, setCustomTypes] = useState<ObjectTypeDefinition[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+
+  // Form for New Object
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<string>('person');
   const [newDescription, setNewDescription] = useState('');
   const [newProjectId, setNewProjectId] = useState('');
-  const [newProperties, setNewProperties] = useState<string>('{"rol": "", "contacto": ""}');
+  const [newThumbnailUrl, setNewThumbnailUrl] = useState('');
+  const [newFormProperties, setNewFormProperties] = useState<Record<string, any>>({});
 
-  const types = [
-    { id: 'all', label: 'Todos', icon: Boxes },
-    { id: 'person', label: 'Personas', icon: User, color: 'text-blue-400 bg-blue-950/40' },
-    { id: 'meeting', label: 'Reuniones', icon: Calendar, color: 'text-amber-400 bg-amber-950/40' },
-    { id: 'resource', label: 'Recursos', icon: LinkIcon, color: 'text-emerald-400 bg-emerald-950/40' },
-    { id: 'book', label: 'Libros', icon: BookOpen, color: 'text-purple-400 bg-purple-950/40' },
-    { id: 'concept', label: 'Conceptos', icon: Lightbulb, color: 'text-yellow-400 bg-yellow-950/40' }
+  // Load custom types on mount
+  useEffect(() => {
+    const fetchTypes = async () => {
+      try {
+        setIsLoadingTypes(true);
+        const types = await db.getCustomObjectTypes();
+        setCustomTypes(types);
+      } catch (err) {
+        console.warn('Error fetching custom object types:', err);
+      } finally {
+        setIsLoadingTypes(false);
+      }
+    };
+    fetchTypes();
+  }, []);
+
+  // Standard predefined types
+  const defaultTypes: ObjectTypeDefinition[] = [
+    { id: 'person', name: 'Personas', icon: 'user', color: '#3b82f6', category: 'General', fields: [
+      { key: 'rol', label: 'Rol / Cargo', type: 'text' },
+      { key: 'email', label: 'Correo Electrónico', type: 'email' },
+      { key: 'telefono', label: 'Teléfono', type: 'text' }
+    ]},
+    { id: 'meeting', name: 'Reuniones', icon: 'calendar', color: '#f59e0b', category: 'General', fields: [
+      { key: 'fecha', label: 'Fecha de Reunión', type: 'date' },
+      { key: 'participantes', label: 'Participantes', type: 'text' },
+      { key: 'acuerdos', label: 'Acuerdos Principales', type: 'textarea' }
+    ]},
+    { id: 'resource', name: 'Recursos', icon: 'link', color: '#10b981', category: 'General', fields: [
+      { key: 'url', label: 'URL / Enlace', type: 'url' },
+      { key: 'tipo_recurso', label: 'Tipo de Recurso', type: 'text' }
+    ]},
+    { id: 'book', name: 'Libros', icon: 'book', color: '#8b5cf6', category: 'Conocimiento', fields: [
+      { key: 'autor', label: 'Autor', type: 'text' },
+      { key: 'año', label: 'Año de Publicación', type: 'number' },
+      { key: 'calificacion', label: 'Calificación (1-5)', type: 'number' }
+    ]},
+    { id: 'concept', name: 'Conceptos', icon: 'lightbulb', color: '#eab308', category: 'Conocimiento', fields: [
+      { key: 'disciplina', label: 'Disciplina / Área', type: 'text' },
+      { key: 'fuente', label: 'Fuente de Origen', type: 'text' }
+    ]}
   ];
 
-  const filteredObjects = objects.filter(obj => {
-    if (selectedType !== 'all' && obj.object_type !== selectedType) return false;
-    return true;
-  });
+  // Combined type definitions
+  const allTypeDefinitions: ObjectTypeDefinition[] = [...defaultTypes, ...customTypes];
 
-  const handleCreate = async (e: React.FormEvent) => {
+  // Helper to get active type definition
+  const currentTypeDef = allTypeDefinitions.find(t => t.id === newType);
+
+  const handleSaveCustomType = async (typeDef: ObjectTypeDefinition) => {
+    const saved = await db.saveCustomObjectType(typeDef);
+    if (saved) {
+      setCustomTypes(prev => [...prev.filter(t => t.id !== saved.id), saved]);
+      setSelectedType(saved.id);
+      setNewType(saved.id);
+    }
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-
-    let parsedProps = {};
-    try {
-      parsedProps = JSON.parse(newProperties);
-    } catch (e) {
-      parsedProps = { raw: newProperties };
-    }
 
     await onCreateObject({
       title: newTitle.trim(),
       object_type: newType,
       description: newDescription.trim() || undefined,
       project_id: newProjectId || undefined,
-      properties: parsedProps
+      thumbnail_url: newThumbnailUrl.trim() || undefined,
+      properties: newFormProperties
     });
 
     setNewTitle('');
     setNewDescription('');
-    setNewProperties('{"rol": "", "contacto": ""}');
-    setIsCreating(false);
+    setNewThumbnailUrl('');
+    setNewFormProperties({});
+    setIsCreatingObject(false);
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'person': return <User className="w-4 h-4 text-blue-400" />;
-      case 'meeting': return <Calendar className="w-4 h-4 text-amber-400" />;
-      case 'resource': return <LinkIcon className="w-4 h-4 text-emerald-400" />;
-      case 'book': return <BookOpen className="w-4 h-4 text-purple-400" />;
-      case 'concept': return <Lightbulb className="w-4 h-4 text-yellow-400" />;
-      default: return <Boxes className="w-4 h-4 text-gray-400" />;
+  // Filter objects by type and search query
+  const filteredObjects = objects.filter(obj => {
+    if (selectedType !== 'all' && obj.object_type !== selectedType) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = obj.title.toLowerCase().includes(q);
+      const matchDesc = obj.description?.toLowerCase().includes(q);
+      const matchProps = JSON.stringify(obj.properties || {}).toLowerCase().includes(q);
+      return matchTitle || matchDesc || matchProps;
     }
+    return true;
+  });
+
+  const getTypeMeta = (typeId: string) => {
+    const def = allTypeDefinitions.find(t => t.id === typeId);
+    if (def) return def;
+    return { id: typeId, name: typeId, color: '#3b82f6', icon: 'box', fields: [] };
   };
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden">
-      {/* Header */}
+      {/* Top Header */}
       <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
@@ -107,127 +182,229 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
             <span>Objetos y Entidades</span>
           </h2>
           <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">
-            Estructura conceptos, personas, libros y recursos con propiedades dinámicas.
+            Dossiers estructurados, entidades de conocimiento, atributos dinámicos y archivos R2.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsCreating(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-900/30 whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo Objeto</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Create Custom Type Button */}
+          <button
+            onClick={() => setIsTypeBuilderOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e1e2c] hover:bg-[#28283a] text-purple-300 border border-purple-500/30 transition shadow-sm"
+            title="Crear tu propia plantilla de entidad"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>Crear la tuya</span>
+          </button>
+
+          {/* New Object Button */}
+          <button
+            onClick={() => {
+              setNewFormProperties({});
+              setIsCreatingObject(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-900/30 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Objeto</span>
+          </button>
+        </div>
       </div>
 
-      {/* Filter Tabs by Object Type */}
-      <div className="px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-[#131318] border-b border-[#23232f] flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {types.map(t => {
-          const Icon = t.icon;
-          const count = t.id === 'all' 
-            ? objects.length 
-            : objects.filter(o => o.object_type === t.id).length;
-          return (
+      {/* Subheader: Search, Filter Tabs & View Modes */}
+      <div className="px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-[#131318] border-b border-[#23232f] flex items-center justify-between gap-3 flex-wrap">
+        {/* Type pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full sm:max-w-xl">
+          <button
+            onClick={() => setSelectedType('all')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+              selectedType === 'all'
+                ? 'bg-[#22222e] text-white border border-[#3b3b4f]'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-[#1a1a22]'
+            }`}
+          >
+            <Boxes className="w-3.5 h-3.5" />
+            <span>Todos</span>
+            <span className="text-[10px] px-1.5 rounded bg-[#292936] text-gray-400">
+              {objects.length}
+            </span>
+          </button>
+
+          {allTypeDefinitions.map(t => {
+            const count = objects.filter(o => o.object_type === t.id).length;
+            const isSelected = selectedType === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setSelectedType(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                  isSelected
+                    ? 'bg-[#22222e] text-white border border-[#3b3b4f]'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-[#1a1a22]'
+                }`}
+              >
+                <span 
+                  className="w-2 h-2 rounded-full" 
+                  style={{ backgroundColor: t.color || '#3b82f6' }} 
+                />
+                <span>{t.name}</span>
+                <span className="text-[10px] px-1.5 rounded bg-[#292936] text-gray-400">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search & View Switcher */}
+        <div className="flex items-center gap-2.5 ml-auto">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Buscar entidad..."
+              className="pl-8 pr-3 py-1 bg-[#1a1a24] border border-[#2b2b3a] rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-emerald-500 w-36 sm:w-48 transition"
+            />
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-[#181822] border border-[#29293a] rounded-lg p-0.5">
             <button
-              key={t.id}
-              onClick={() => setSelectedType(t.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
-                selectedType === t.id
-                  ? 'bg-[#22222e] text-white border border-[#3b3b4f]'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1a1a22]'
-              }`}
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Cuadrícula"
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{t.label}</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#292936] text-gray-400">
-                {count}
-              </span>
+              <LayoutGrid className="w-3.5 h-3.5" />
             </button>
-          );
-        })}
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Lista"
+            >
+              <ListIcon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode('gallery')}
+              className={`p-1.5 rounded ${viewMode === 'gallery' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Galería"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Objects Grid */}
+      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredObjects.length === 0 ? (
-            <div className="col-span-full text-center py-12 text-gray-400 text-xs">
-              No hay objetos creados en esta categoría. Haz clic en "Nuevo Objeto" para registrar uno.
-            </div>
-          ) : (
-            filteredObjects.map(obj => {
+        {filteredObjects.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center gap-3">
+            <Boxes className="w-10 h-10 text-gray-600 stroke-[1.5]" />
+            <p>No hay objetos registrados en esta vista.</p>
+            <button
+              onClick={() => setIsCreatingObject(true)}
+              className="px-4 py-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition text-xs font-medium"
+            >
+              Crear Nuevo Objeto
+            </button>
+          </div>
+        ) : viewMode === 'grid' ? (
+          /* Grid View: Symmetrical, clean cards */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredObjects.map(obj => {
               const project = projects.find(p => p.id === obj.project_id);
+              const typeMeta = getTypeMeta(obj.object_type);
               const props = obj.properties || {};
 
               return (
                 <div
                   key={obj.id}
-                  className="bg-[#1a1a24] rounded-xl border border-[#292938] hover:border-[#38384d] transition p-5 flex flex-col justify-between shadow-sm group"
+                  onClick={() => setSelectedDetailObject(obj)}
+                  className="bg-[#191923] rounded-2xl border border-[#28283a] hover:border-[#3d3d54] transition p-5 flex flex-col justify-between shadow-sm cursor-pointer group hover:shadow-xl"
                 >
                   <div>
-                    {/* Top Type & Title */}
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#20202c] border border-[#2f2f40] flex items-center justify-center">
-                          {getTypeIcon(obj.object_type)}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-sm text-white leading-tight">
-                            {obj.title}
-                          </h3>
-                          <span className="text-[10px] text-gray-400 uppercase tracking-wider font-mono">
-                            {obj.object_type}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar objeto "${obj.title}"?`)) {
-                            onDeleteObject(obj.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition p-1"
-                        title="Eliminar objeto"
+                    {/* Top Type Pill & Actions */}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span 
+                        className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider flex items-center gap-1.5"
+                        style={{ backgroundColor: `${typeMeta.color}20`, color: typeMeta.color }}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: typeMeta.color }} />
+                        {typeMeta.name}
+                      </span>
+
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetailObject(obj)}
+                          className="p-1 rounded bg-[#20202e] hover:bg-[#2b2b3e] text-emerald-400 transition"
+                          title="Ver Ficha Completa"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`¿Eliminar objeto "${obj.title}"?`)) {
+                              onDeleteObject(obj.id);
+                            }
+                          }}
+                          className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition"
+                          title="Eliminar objeto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Image Thumbnail Preview (if any) */}
+                    {obj.thumbnail_url && (
+                      <div className="mb-3 rounded-xl overflow-hidden aspect-video bg-[#121218] border border-[#252535]">
+                        <img 
+                          src={obj.thumbnail_url} 
+                          alt={obj.title} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                      </div>
+                    )}
+
+                    {/* Title & Description */}
+                    <h3 className="font-bold text-sm text-white mb-1 group-hover:text-emerald-400 transition leading-snug">
+                      {obj.title}
+                    </h3>
+
                     {obj.description && (
-                      <p className="text-xs text-gray-400 mb-3 line-clamp-2">
+                      <p className="text-xs text-gray-400 mb-3 line-clamp-2 leading-relaxed">
                         {obj.description}
                       </p>
                     )}
 
-                    {/* Key-Value Properties table */}
+                    {/* Compact Attributes List */}
                     {Object.keys(props).length > 0 && (
-                      <div className="bg-[#14141a] rounded-lg p-2.5 border border-[#232330] space-y-1 mb-3 text-[11px]">
-                        {Object.entries(props).map(([k, v]) => (
+                      <div className="bg-[#13131a] rounded-xl p-2.5 border border-[#232330] space-y-1 mb-3 text-[11px]">
+                        {Object.entries(props).slice(0, 3).map(([k, v]) => (
                           <div key={k} className="flex justify-between items-center text-gray-400">
-                            <span className="font-mono text-gray-400 capitalize">{k}:</span>
-                            <span className="text-gray-200 truncate max-w-[150px]">{String(v)}</span>
+                            <span className="font-mono text-gray-400 capitalize truncate max-w-[100px]">{k}:</span>
+                            <span className="text-gray-200 truncate max-w-[140px] font-medium">{String(v)}</span>
                           </div>
                         ))}
+                        {Object.keys(props).length > 3 && (
+                          <div className="text-[10px] text-gray-500 text-right pt-0.5">
+                            +{Object.keys(props).length - 3} atributos más
+                          </div>
+                        )}
                       </div>
                     )}
-
-                    {/* R2 Attachments for this Object */}
-                    <EntityAttachmentsSection
-                      entityId={obj.id}
-                      entityType="object"
-                      attachments={attachments}
-                      onAttachmentCreated={onAttachmentCreated}
-                      onAttachmentDeleted={onAttachmentDeleted}
-                    />
                   </div>
 
                   {/* Footer */}
-                  <div className="pt-3 border-t border-[#232332] flex items-center justify-between text-xs text-gray-400">
+                  <div className="pt-3 border-t border-[#232332] flex items-center justify-between text-xs text-gray-400 mt-2">
                     {project ? (
-                      <span className="flex items-center gap-1 text-[11px] text-blue-300">
-                        <FolderKanban className="w-3 h-3" />
-                        {project.title}
+                      <span className="flex items-center gap-1 text-[11px] text-blue-300 truncate max-w-[140px]">
+                        <FolderKanban className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{project.title}</span>
                       </span>
                     ) : (
                       <span className="text-[11px] text-gray-400">Sin proyecto</span>
@@ -239,101 +416,302 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        ) : viewMode === 'list' ? (
+          /* List View: Structured Table */
+          <div className="bg-[#181822] rounded-2xl border border-[#28283a] overflow-hidden shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#13131c] text-gray-400 font-medium border-b border-[#242436]">
+                <tr>
+                  <th className="py-3 px-4">Entidad / Título</th>
+                  <th className="py-3 px-4">Tipo</th>
+                  <th className="py-3 px-4">Proyecto</th>
+                  <th className="py-3 px-4">Atributos Destacados</th>
+                  <th className="py-3 px-4">Fecha</th>
+                  <th className="py-3 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#222232]">
+                {filteredObjects.map(obj => {
+                  const project = projects.find(p => p.id === obj.project_id);
+                  const typeMeta = getTypeMeta(obj.object_type);
+                  const props = obj.properties || {};
+
+                  return (
+                    <tr 
+                      key={obj.id}
+                      onClick={() => setSelectedDetailObject(obj)}
+                      className="hover:bg-[#1d1d2b] cursor-pointer transition"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          {obj.thumbnail_url ? (
+                            <img src={obj.thumbnail_url} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                          ) : (
+                            <div 
+                              className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px]"
+                              style={{ backgroundColor: `${typeMeta.color}25`, color: typeMeta.color }}
+                            >
+                              {obj.title.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-semibold text-white block">{obj.title}</span>
+                            {obj.description && (
+                              <span className="text-[11px] text-gray-400 truncate max-w-xs block">
+                                {obj.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span 
+                          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                          style={{ backgroundColor: `${typeMeta.color}20`, color: typeMeta.color }}
+                        >
+                          {typeMeta.name}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-gray-300">
+                        {project ? project.title : <span className="text-gray-600">—</span>}
+                      </td>
+
+                      <td className="py-3 px-4 text-gray-400">
+                        <div className="flex items-center gap-2 truncate max-w-sm">
+                          {Object.entries(props).slice(0, 2).map(([k, v]) => (
+                            <span key={k} className="text-[11px] bg-[#14141c] px-2 py-0.5 rounded border border-[#232332]">
+                              <span className="text-gray-500 mr-1">{k}:</span>
+                              <span className="text-gray-200">{String(v)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 font-mono text-[11px] text-gray-400">
+                        {new Date(obj.created_at).toLocaleDateString()}
+                      </td>
+
+                      <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`¿Eliminar "${obj.title}"?`)) {
+                              onDeleteObject(obj.id);
+                            }
+                          }}
+                          className="p-1.5 text-gray-500 hover:text-red-400 transition rounded hover:bg-red-950/30"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Gallery View: Visual Cover Focus */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {filteredObjects.map(obj => {
+              const typeMeta = getTypeMeta(obj.object_type);
+
+              return (
+                <div
+                  key={obj.id}
+                  onClick={() => setSelectedDetailObject(obj)}
+                  className="group relative bg-[#181822] rounded-2xl border border-[#28283a] hover:border-emerald-500/50 overflow-hidden cursor-pointer transition shadow-sm hover:shadow-xl flex flex-col aspect-[3/4]"
+                >
+                  {obj.thumbnail_url ? (
+                    <img
+                      src={obj.thumbnail_url}
+                      alt={obj.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : (
+                    <div 
+                      className="w-full h-full flex flex-col items-center justify-center p-4 text-center"
+                      style={{ backgroundColor: `${typeMeta.color}15` }}
+                    >
+                      <Boxes className="w-10 h-10 mb-2 opacity-50" style={{ color: typeMeta.color }} />
+                      <span className="font-bold text-sm text-white line-clamp-2">{obj.title}</span>
+                    </div>
+                  )}
+
+                  {/* Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-3.5">
+                    <span 
+                      className="text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider self-start mb-1"
+                      style={{ backgroundColor: `${typeMeta.color}35`, color: typeMeta.color }}
+                    >
+                      {typeMeta.name}
+                    </span>
+                    <h4 className="font-bold text-xs sm:text-sm text-white line-clamp-2 drop-shadow">
+                      {obj.title}
+                    </h4>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Modal Nuevo Objeto */}
-      {isCreating && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
-          <form onSubmit={handleCreate} className="bg-[#1a1a24] border border-[#2f2f40] rounded-xl max-w-md w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-              <Boxes className="w-4 h-4 text-emerald-400" />
-              Nuevo Objeto / Entidad
-            </h3>
+      {/* Modal Crear Nuevo Objeto */}
+      {isCreatingObject && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50">
+          <form 
+            onSubmit={handleCreateSubmit} 
+            className="bg-[#191924] border border-[#2f2f42] rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[#28283a]">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-emerald-400" />
+                <span>Nuevo Objeto / Entidad</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCreatingObject(false)}
+                className="text-gray-400 hover:text-white p-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
 
+            {/* Type selector */}
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Tipo de Objeto</label>
+              <label className="text-xs text-gray-300 font-medium block mb-1">
+                Tipo de Entidad
+              </label>
               <select
                 value={newType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewType(val);
-                  if (val === 'person') setNewProperties('{"rol": "Diseñador", "email": "contacto@mail.com"}');
-                  else if (val === 'book') setNewProperties('{"autor": "", "año": 2026, "calificacion": 5}');
-                  else if (val === 'meeting') setNewProperties('{"fecha": "2026-10-20", "participantes": "Equipo"}');
-                  else setNewProperties('{}');
-                }}
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none cursor-pointer"
+                onChange={e => setNewType(e.target.value)}
+                className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none cursor-pointer"
               >
-                <option value="person">Persona (Contacto / Colaborador)</option>
-                <option value="meeting">Reunión / Minuta</option>
-                <option value="resource">Recurso / Link / Herramienta</option>
-                <option value="book">Libro / Artículo</option>
-                <option value="concept">Concepto / Idea</option>
-                <option value="custom">Personalizado</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Nombre o Título</label>
-              <input
-                type="text"
-                required
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Ej. Ana Morales, Atomic Habits, Minuta Sprint 4..."
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Descripción</label>
-              <textarea
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Resumen o notas sobre este objeto..."
-                rows={2}
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none focus:border-emerald-500 resize-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Proyecto Vinculado</label>
-              <select
-                value={newProjectId}
-                onChange={(e) => setNewProjectId(e.target.value)}
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none cursor-pointer"
-              >
-                <option value="">Sin Proyecto</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
+                {allTypeDefinitions.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.is_custom ? '(Personalizado)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
 
+            {/* Title */}
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Propiedades (JSON clave-valor)</label>
-              <textarea
-                value={newProperties}
-                onChange={(e) => setNewProperties(e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs font-mono text-purple-300 outline-none focus:border-emerald-500 resize-none"
+              <label className="text-xs text-gray-300 font-medium block mb-1">
+                Nombre o Título *
+              </label>
+              <input
+                type="text"
+                required
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                placeholder="Ej. Carlos Mendoza, Reunión Sprint, Clean Architecture..."
+                className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            {/* Description */}
+            <div>
+              <label className="text-xs text-gray-300 font-medium block mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={newDescription}
+                onChange={e => setNewDescription(e.target.value)}
+                placeholder="Resumen o descripción introductoria..."
+                rows={2}
+                className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500 resize-none"
+              />
+            </div>
+
+            {/* Project & Thumbnail */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-300 font-medium block mb-1">
+                  Proyecto Vinculado
+                </label>
+                <select
+                  value={newProjectId}
+                  onChange={e => setNewProjectId(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none cursor-pointer"
+                >
+                  <option value="">Sin Proyecto</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-300 font-medium block mb-1">
+                  URL Portada / Imagen
+                </label>
+                <input
+                  type="url"
+                  value={newThumbnailUrl}
+                  onChange={e => setNewThumbnailUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Form Attributes according to Type Definition */}
+            {currentTypeDef && currentTypeDef.fields && currentTypeDef.fields.length > 0 && (
+              <div className="border-t border-[#262638] pt-3 space-y-3">
+                <span className="text-xs font-semibold text-gray-300 block">
+                  Atributos de {currentTypeDef.name}
+                </span>
+
+                <div className="space-y-2.5">
+                  {currentTypeDef.fields.map(field => (
+                    <div key={field.key}>
+                      <label className="text-[11px] text-gray-400 block mb-1">
+                        {field.label} {field.required && <span className="text-red-400">*</span>}
+                      </label>
+                      {field.type === 'select' ? (
+                        <select
+                          value={newFormProperties[field.key] || ''}
+                          onChange={e => setNewFormProperties(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          className="w-full px-3 py-1.5 bg-[#121217] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none"
+                        >
+                          <option value="">Seleccionar...</option>
+                          {(field.options || []).map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                          value={newFormProperties[field.key] || ''}
+                          onChange={e => setNewFormProperties(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.label}
+                          className="w-full px-3 py-1.5 bg-[#121217] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-emerald-500"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#252538]">
               <button
                 type="button"
-                onClick={() => setIsCreating(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-[#252533] transition"
+                onClick={() => setIsCreatingObject(false)}
+                className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-[#252533] transition"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md"
+                className="px-5 py-2 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md"
               >
                 Crear Objeto
               </button>
@@ -341,6 +719,31 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
           </form>
         </div>
       )}
+
+      {/* Modal Constructor de Tipos Personalizados */}
+      <CustomTypeBuilderModal
+        isOpen={isTypeBuilderOpen}
+        onClose={() => setIsTypeBuilderOpen(false)}
+        onSave={handleSaveCustomType}
+        existingTypes={allTypeDefinitions}
+      />
+
+      {/* Modal Ficha Completa del Objeto (Dossier) */}
+      <ObjectDetailModal
+        object={selectedDetailObject}
+        isOpen={Boolean(selectedDetailObject)}
+        onClose={() => setSelectedDetailObject(null)}
+        onUpdate={onUpdateObject}
+        onDelete={onDeleteObject}
+        projects={projects}
+        typeDef={selectedDetailObject ? getTypeMeta(selectedDetailObject.object_type) : undefined}
+        attachments={attachments}
+        onAttachmentCreated={onAttachmentCreated}
+        onAttachmentDeleted={onAttachmentDeleted}
+        notes={notes}
+        tasks={tasks}
+        onOpenNote={onOpenNote}
+      />
     </div>
   );
 };

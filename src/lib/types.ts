@@ -176,6 +176,40 @@ export interface TaskCategory {
   es_activo?: boolean;
 }
 
+export type ObjectFieldType = 
+  | 'text' 
+  | 'textarea' 
+  | 'number' 
+  | 'date' 
+  | 'url' 
+  | 'email' 
+  | 'checkbox' 
+  | 'select' 
+  | 'multiselect';
+
+export interface ObjectFieldDefinition {
+  key: string;
+  label: string;
+  type: ObjectFieldType;
+  required?: boolean;
+  order?: number;
+  options?: string[]; // for select / multiselect
+  visible?: boolean;
+  placeholder?: string;
+}
+
+export interface ObjectTypeDefinition {
+  id: string; // unique slug e.g. 'podcast', 'movie', 'person'
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  category?: string;
+  fields: ObjectFieldDefinition[];
+  is_custom?: boolean;
+  meta_id?: string; // id in app_objects table if stored as __meta_type__
+}
+
 export interface AppObject {
   id: string;
   object_type: 'person' | 'meeting' | 'resource' | 'book' | 'concept' | 'custom' | string;
@@ -187,6 +221,7 @@ export interface AppObject {
   properties?: Record<string, any>;
   color?: string;
   icon?: string;
+  thumbnail_url?: string | null;
   created_at: string;
   updated_at: string;
 }

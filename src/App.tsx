@@ -85,21 +85,15 @@ export function App() {
     });
   };
 
-  // Load initial data from InsForge
+  // Load initial data from InsForge in progressive stages for instant startup
   const loadData = async () => {
     try {
       setLoading(true);
-      const [nbs, n, rems, p, t, o, l, a, flds, cats] = await Promise.all([
+
+      // Phase 1: Critical data for first screen (Notebooks and Notes)
+      const [nbs, n] = await Promise.all([
         db.getNotebooks(),
-        db.getNotes(),
-        db.getReminders(),
-        db.getProjects(),
-        db.getTasks(),
-        db.getObjects(),
-        db.getLinks(),
-        db.getAttachments(),
-        db.getFileFolders(),
-        db.getTaskCategories()
+        db.getNotes()
       ]);
 
       // If no notebooks exist yet, create a default one
@@ -119,21 +113,38 @@ export function App() {
 
       setNotebooks(finalNbs);
       setNotes(n);
-      setReminders(rems);
-      setProjects(p);
-      setTasks(t);
-      setObjects(o);
-      setLinks(l);
-      setAttachments(a);
-      setFolders(flds);
-      setCategories(cats);
-
       if (n.length > 0 && !selectedNoteId) {
         setSelectedNoteId(n[0].id);
       }
+
+      // Dismiss full-screen blocking loader right away!
+      setLoading(false);
+
+      // Phase 2: Deferred load for other views (Projects, Tasks, Objects, Reminders, Files, Links)
+      Promise.all([
+        db.getReminders().catch(() => []),
+        db.getProjects().catch(() => []),
+        db.getTasks().catch(() => []),
+        db.getObjects().catch(() => []),
+        db.getLinks().catch(() => []),
+        db.getAttachments().catch(() => []),
+        db.getFileFolders().catch(() => []),
+        db.getTaskCategories().catch(() => [])
+      ]).then(([rems, p, t, o, l, a, flds, cats]) => {
+        setReminders(rems);
+        setProjects(p);
+        setTasks(t);
+        setObjects(o);
+        setLinks(l);
+        setAttachments(a);
+        setFolders(flds);
+        setCategories(cats);
+      }).catch(err => {
+        console.warn('Background sync error (non-fatal):', err);
+      });
+
     } catch (err) {
       console.error('Error cargando datos de InsForge:', err);
-    } finally {
       setLoading(false);
     }
   };
@@ -592,7 +603,22 @@ export function App() {
           setSelectedNoteId(id);
           setIsEditingNote(true);
         }}
-        onNewNote={() => handleNewNote()}
+        onNewNote={() => handleNewNote({ note_type: 'text', title: 'Nueva Nota' })}
+        onNewTaskNote={() => {
+          const defaultTaskListHtml = `
+            <ul data-type="taskList">
+              <li data-type="taskItem" data-checked="false"><label><input type="checkbox"></label><div>Primera tarea</div></li>
+              <li data-type="taskItem" data-checked="false"><label><input type="checkbox"></label><div>Segunda tarea</div></li>
+              <li data-type="taskItem" data-checked="false"><label><input type="checkbox"></label><div>Nueva tarea...</div></li>
+            </ul>
+          `.trim();
+          handleNewNote({
+            title: 'Lista de Tareas',
+            note_type: 'tasks',
+            content: defaultTaskListHtml,
+            plain_text: 'Primera tarea\nSegunda tarea\nNueva tarea...'
+          });
+        }}
         onNewNotebook={() => {
           setEditingNotebook(null);
           setIsNotebookModalOpen(true);
@@ -765,6 +791,9 @@ export function App() {
                 onCreateObject={handleCreateObject}
                 onUpdateObject={handleUpdateObject}
                 onDeleteObject={handleDeleteObject}
+                notes={notes}
+                tasks={tasks}
+                onOpenNote={handleOpenNote}
               />
             )}
 

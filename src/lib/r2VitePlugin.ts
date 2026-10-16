@@ -192,13 +192,16 @@ export function r2Middleware(req: IncomingMessage, res: ServerResponse, next: ()
         if (s3Res.ContentType) {
           res.setHeader('Content-Type', s3Res.ContentType);
         }
-        if (s3Res.ContentLength !== undefined) {
-          res.setHeader('Content-Length', s3Res.ContentLength.toString());
-        }
         if (s3Res.ContentRange) {
           res.setHeader('Content-Range', s3Res.ContentRange);
+          if (s3Res.ContentLength !== undefined) {
+            res.setHeader('Content-Length', s3Res.ContentLength.toString());
+          }
           res.statusCode = 206; // Partial Content
         } else {
+          if (s3Res.ContentLength !== undefined && !(s3Res as any).ContentEncoding) {
+            res.setHeader('Content-Length', s3Res.ContentLength.toString());
+          }
           res.statusCode = 200;
         }
 

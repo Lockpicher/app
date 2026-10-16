@@ -4,7 +4,8 @@ import {
   AppNotebook,
   AppProject, 
   AppTask, 
-  AppObject, 
+  AppObject,
+  ObjectTypeDefinition, 
   AppLink, 
   AppAttachment,
   AppFolder,
@@ -574,11 +575,12 @@ export const db = {
     return (data as unknown as AppTask[])?.[0] || null;
   },
 
-  // Objetos personalizados
+  // Objetos y Entidades
   async getObjects(): Promise<AppObject[]> {
     const { data, error } = await insforge.database
       .from('app_objects')
       .select()
+      .neq('object_type', '__meta_type__')
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching objects:', error);
     return (data as unknown as AppObject[]) || [];
@@ -619,6 +621,90 @@ export const db = {
       throw error;
     }
     return true;
+  },
+
+  // Tipos de Objeto Personalizados (Persistidos en InsForge como __meta_type__)
+  async getCustomObjectTypes(): Promise<ObjectTypeDefinition[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', '__meta_type__');
+      if (error || !data) return [];
+      
+      return data.map((row: any) => {
+        const props = row.properties || {};
+        return {
+          id: props.type_id || row.title.toLowerCase().replace(/\s+/g, '_'),
+          name: row.title,
+          description: row.description || props.description,
+          icon: row.icon || props.icon || 'boxes',
+          color: row.color || props.color || '#3b82f6',
+          category: props.category || 'Personalizado',
+          fields: Array.isArray(props.fields) ? props.fields : [],
+          is_custom: true,
+          meta_id: row.id
+        } as ObjectTypeDefinition;
+      });
+    } catch (e) {
+      console.warn('Error recuperando tipos personalizados:', e);
+      return [];
+    }
+  },
+
+  async saveCustomObjectType(typeDef: ObjectTypeDefinition): Promise<ObjectTypeDefinition | null> {
+    try {
+      const metaPayload = {
+        object_type: '__meta_type__',
+        title: typeDef.name,
+        description: typeDef.description || '',
+        icon: typeDef.icon || 'boxes',
+        color: typeDef.color || '#3b82f6',
+        properties: {
+          type_id: typeDef.id,
+          name: typeDef.name,
+          description: typeDef.description,
+          icon: typeDef.icon,
+          color: typeDef.color,
+          category: typeDef.category,
+          fields: typeDef.fields
+        }
+      };
+
+      if (typeDef.meta_id) {
+        const { data, error } = await insforge.database
+          .from('app_objects')
+          .update({ ...metaPayload, updated_at: new Date().toISOString() })
+          .eq('id', typeDef.meta_id)
+          .select();
+        if (error) throw error;
+        return { ...typeDef, meta_id: data[0].id };
+      } else {
+        const { data, error } = await insforge.database
+          .from('app_objects')
+          .insert([metaPayload])
+          .select();
+        if (error) throw error;
+        return { ...typeDef, meta_id: data[0].id };
+      }
+    } catch (e) {
+      console.error('Error guardando tipo personalizado:', e);
+      throw e;
+    }
+  },
+
+  async deleteCustomObjectType(metaId: string): Promise<boolean> {
+    try {
+      const { error } = await insforge.database
+        .from('app_objects')
+        .delete()
+        .eq('id', metaId);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error eliminando tipo personalizado:', e);
+      throw e;
+    }
   },
 
   // Enlaces y Grafo

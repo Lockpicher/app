@@ -330,11 +330,14 @@ const server = http.createServer(async (req, res) => {
       const s3Res = await client.send(command);
 
       if (s3Res.ContentType) res.setHeader('Content-Type', s3Res.ContentType);
-      if (s3Res.ContentLength !== undefined) res.setHeader('Content-Length', s3Res.ContentLength.toString());
       if (s3Res.ContentRange) {
         res.setHeader('Content-Range', s3Res.ContentRange);
+        if (s3Res.ContentLength !== undefined) res.setHeader('Content-Length', s3Res.ContentLength.toString());
         res.statusCode = 206;
       } else {
+        if (s3Res.ContentLength !== undefined && !s3Res.ContentEncoding) {
+          res.setHeader('Content-Length', s3Res.ContentLength.toString());
+        }
         res.statusCode = 200;
       }
 
