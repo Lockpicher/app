@@ -265,7 +265,7 @@ export function App() {
   };
 
   const handleSaveNote = async (noteId: string, updates: Partial<AppNote>) => {
-    // 1. Optimistic UI update
+    // 1. Optimistic UI update so local state stays fresh
     setNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...updates, updated_at: new Date().toISOString() } : n));
 
     try {
@@ -280,8 +280,9 @@ export function App() {
         setReminders(freshReminders);
       }
     } catch (err: any) {
-      console.error('Error guardando nota:', err);
-      alert('Error al guardar cambios en la nota: ' + (err.message || 'Error desconocido'));
+      console.error('Error guardando nota en backend:', err);
+      // Propagate error so editor knows saving failed and can allow retry without losing text
+      throw err;
     }
   };
 

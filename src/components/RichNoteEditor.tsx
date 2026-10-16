@@ -250,10 +250,12 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     }
   };
 
-  // Perform Save
+  // Perform Save with robust error handling and classification
+  const isSavingRef = useRef(false);
   const handleSave = async () => {
-    if (!editor) return;
+    if (!editor || isSavingRef.current) return;
     try {
+      isSavingRef.current = true;
       setSaveStatus('saving');
       const json = editor.getJSON();
       const html = editor.getHTML();
@@ -267,16 +269,25 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       const imgMatch = html.match(/<img[^>]+src="([^">]+)"/);
       const thumbUrl = imgMatch ? imgMatch[1] : (note.thumbnail_url || null);
 
-      // Determine dynamic note_type: image if has images and no plain text, text otherwise, or preserve audio
+      // Check for Task Items in content
+      const hasTaskList = html.includes('data-type="taskList"') || 
+                          html.includes('data-type="taskItem"') || 
+                          Boolean(html.match(/<li[^>]+data-type="taskItem"/i)) ||
+                          (json && JSON.stringify(json).includes('"type":"taskList"'));
+
+      const hasImages = Boolean(imgMatch);
+      const hasText = plainText.trim().length > 0;
+
+      // Determine dynamic note_type
       let calculatedType: AppNote['note_type'] = note.note_type || 'text';
-      if (note.note_type !== 'audio') {
-        const hasImages = Boolean(imgMatch);
-        const hasText = plainText.trim().length > 0;
-        if (hasImages && !hasText) {
-          calculatedType = 'image';
-        } else {
-          calculatedType = 'text';
-        }
+      if (note.note_type === 'audio') {
+        calculatedType = 'audio';
+      } else if (hasTaskList) {
+        calculatedType = 'tasks';
+      } else if (hasImages && !hasText) {
+        calculatedType = 'image';
+      } else {
+        calculatedType = 'text';
       }
 
       await onSave(note.id, {
@@ -295,8 +306,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
       setSaveStatus('saved');
     } catch (err: any) {
-      console.error('Error guardando nota:', err);
+      console.error('Error guardando nota en InsForge:', err);
+      // Keep local content dirty so user does not lose changes and can retry
       setSaveStatus('dirty');
+    } finally {
+      isSavingRef.current = false;
     }
   };
 
@@ -589,10 +603,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+            disabled={saveStatus === 'saving'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-sm transition ${
+              saveStatus === 'saving' 
+                ? 'bg-blue-800 cursor-wait opacity-80' 
+                : 'bg-blue-600 hover:bg-blue-500'
+            }`}
           >
             <Save className="w-3.5 h-3.5" />
-            Guardar
+            {saveStatus === 'saving' ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -980,9 +999,29 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                   editor.commands.focus('end');
                 }
               }}
-              className="w-full min-h-[500px] text-gray-100 cursor-text pb-40"
+              className="w-full min-h-[450px] text-gray-100 cursor-text pb-10"
             >
               <EditorContent editor={editor} className="outline-none" />
+            </div>
+
+            {/* Zoho Notebook Style: Quick Add Task Bar */}
+            <div className="pt-2 pb-32 border-t border-[#20202e] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (editor) {
+                    editor.chain().focus('end').toggleTaskList().run();
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 transition group"
+              >
+                <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                <span>+ Agregar elemento de tarea</span>
+              </button>
+
+              <span className="text-[11px] font-mono text-gray-500">
+                Presiona Enter dentro de una tarea para crear otra automáticamente
+              </span>
             </div>
           </div>
         </div>
