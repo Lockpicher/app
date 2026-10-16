@@ -759,32 +759,94 @@ export const db = {
       .neq('object_type', 'person_relationship')
       .order('created_at', { ascending: false });
     if (error) console.error('Error fetching objects:', error);
-    return (data as unknown as AppObject[]) || [];
+    if (!data) return [];
+
+    return (data as any[]).map(row => {
+      const p = row.properties || {};
+      return {
+        ...row,
+        thumbnail_url: row.thumbnail_url || p.thumbnail_url || p.cover_url || null,
+        area_id: row.area_id || p.area_id || null,
+        para_category: row.para_category || p.para_category || undefined
+      } as AppObject;
+    });
   },
 
   async createObject(obj: Partial<AppObject>): Promise<AppObject | null> {
+    const { thumbnail_url, area_id, para_category, ...directFields } = obj as any;
+    const finalProperties = {
+      ...(obj.properties || {}),
+      ...(thumbnail_url ? { thumbnail_url, cover_url: thumbnail_url } : {}),
+      ...(area_id ? { area_id } : {}),
+      ...(para_category ? { para_category } : {})
+    };
+
+    const payload = {
+      ...directFields,
+      properties: finalProperties
+    };
+
     const { data, error } = await insforge.database
       .from('app_objects')
-      .insert([obj])
+      .insert([payload])
       .select();
     if (error) {
       console.error('Error creating object:', error);
       throw error;
     }
-    return (data as unknown as AppObject[])?.[0] || null;
+    const created = (data as unknown as AppObject[])?.[0] || null;
+    if (!created) return null;
+
+    const p = (created as any).properties || {};
+    return {
+      ...created,
+      thumbnail_url: created.thumbnail_url || p.thumbnail_url || p.cover_url || null,
+      area_id: created.area_id || p.area_id || null,
+      para_category: created.para_category || p.para_category || undefined
+    };
   },
 
   async updateObject(id: string, updates: Partial<AppObject>): Promise<AppObject | null> {
+    const { thumbnail_url, area_id, para_category, ...directFields } = updates as any;
+    
+    // Merge properties if provided
+    let finalProperties = updates.properties;
+    if (thumbnail_url !== undefined || area_id !== undefined || para_category !== undefined || finalProperties) {
+      finalProperties = {
+        ...(finalProperties || {}),
+        ...(thumbnail_url !== undefined ? { thumbnail_url, cover_url: thumbnail_url } : {}),
+        ...(area_id !== undefined ? { area_id } : {}),
+        ...(para_category !== undefined ? { para_category } : {})
+      };
+    }
+
+    const payload: Record<string, any> = {
+      ...directFields,
+      updated_at: new Date().toISOString()
+    };
+    if (finalProperties !== undefined) {
+      payload.properties = finalProperties;
+    }
+
     const { data, error } = await insforge.database
       .from('app_objects')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
       .select();
     if (error) {
       console.error('Error updating object:', error);
       throw error;
     }
-    return (data as unknown as AppObject[])?.[0] || null;
+    const updated = (data as unknown as AppObject[])?.[0] || null;
+    if (!updated) return null;
+
+    const p = (updated as any).properties || {};
+    return {
+      ...updated,
+      thumbnail_url: updated.thumbnail_url || p.thumbnail_url || p.cover_url || null,
+      area_id: updated.area_id || p.area_id || null,
+      para_category: updated.para_category || p.para_category || undefined
+    };
   },
 
   async deleteObject(id: string): Promise<boolean> {

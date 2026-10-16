@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Boxes, 
   Plus, 
@@ -23,14 +23,22 @@ import {
   Building2,
   Briefcase,
   Mail,
-  Phone
+  Phone,
+  Paperclip,
+  Upload,
+  Loader2,
+  Music,
+  Film,
+  FileText,
+  Check
 } from 'lucide-react';
-import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask } from '../lib/types';
+import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { CustomTypeBuilderModal } from './CustomTypeBuilderModal';
 import { ObjectDetailModal } from './ObjectDetailModal';
 import { PersonDetailModal } from './PersonDetailModal';
 import { db } from '../lib/insforge';
+import { r2Storage } from '../lib/r2Client';
 
 interface ObjectsViewProps {
   objects: AppObject[];
@@ -113,38 +121,21 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     fetchTypes();
   }, []);
 
-  // Standard predefined types
-  const defaultTypes: ObjectTypeDefinition[] = [
-    { id: 'person', name: 'Personas', icon: 'user', color: '#3b82f6', category: 'General', fields: [
-      { key: 'rol', label: 'Rol / Cargo', type: 'text' },
-      { key: 'email', label: 'Correo Electrónico', type: 'email' },
-      { key: 'telefono', label: 'Teléfono', type: 'text' }
-    ]},
-    { id: 'meeting', name: 'Reuniones', icon: 'calendar', color: '#f59e0b', category: 'General', fields: [
-      { key: 'fecha', label: 'Fecha de Reunión', type: 'date' },
-      { key: 'participantes', label: 'Participantes', type: 'text' },
-      { key: 'acuerdos', label: 'Acuerdos Principales', type: 'textarea' }
-    ]},
-    { id: 'resource', name: 'Recursos', icon: 'link', color: '#10b981', category: 'General', fields: [
-      { key: 'url', label: 'URL / Enlace', type: 'url' },
-      { key: 'tipo_recurso', label: 'Tipo de Recurso', type: 'text' }
-    ]},
-    { id: 'book', name: 'Libros', icon: 'book', color: '#8b5cf6', category: 'Conocimiento', fields: [
-      { key: 'autor', label: 'Autor', type: 'text' },
-      { key: 'año', label: 'Año de Publicación', type: 'number' },
-      { key: 'calificacion', label: 'Calificación (1-5)', type: 'number' }
-    ]},
-    { id: 'concept', name: 'Conceptos', icon: 'lightbulb', color: '#eab308', category: 'Conocimiento', fields: [
-      { key: 'disciplina', label: 'Disciplina / Área', type: 'text' },
-      { key: 'fuente', label: 'Fuente de Origen', type: 'text' }
-    ]}
-  ];
+  // Standard predefined types from centralized system (includes page, person, meeting, resource, book, concept)
+  const defaultTypes: ObjectTypeDefinition[] = DEFAULT_OBJECT_TYPES;
 
   // Combined type definitions
   const allTypeDefinitions: ObjectTypeDefinition[] = [...defaultTypes, ...customTypes];
 
   // Helper to get active type definition
   const currentTypeDef = allTypeDefinitions.find(t => t.id === newType);
+
+  // File uploading states for New Object creation modal
+  const [newUploadedFiles, setNewUploadedFiles] = useState<File[]>([]);
+  const [isUploadingNewFiles, setIsUploadingNewFiles] = useState(false);
+  const [isUploadingNewCover, setIsUploadingNewCover] = useState(false);
+  const newFileInputRef = useRef<HTMLInputElement>(null);
+  const newCoverInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveCustomType = async (typeDef: ObjectTypeDefinition) => {
     const saved = await db.saveCustomObjectType(typeDef);
@@ -174,20 +165,71 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
       }
     }
 
-    await onCreateObject({
-      title: newTitle.trim(),
-      object_type: newType,
-      description: newDescription.trim() || undefined,
-      project_id: newProjectId || undefined,
-      thumbnail_url: newThumbnailUrl.trim() || undefined,
-      properties: newFormProperties
-    });
+    try {
+      setIsUploadingNewFiles(true);
 
-    setNewTitle('');
-    setNewDescription('');
-    setNewThumbnailUrl('');
-    setNewFormProperties({});
-    setIsCreatingObject(false);
+      // Default rich starter content for pages
+      const defaultContent = newType === 'page' 
+        ? `<h1>${newTitle.trim()}</h1><p>${newDescription.trim() || 'Comienza a escribir tu contenido enriquecido...'}</p>`
+        : undefined;
+
+      const createdObj = await db.createObject({
+        title: newTitle.trim(),
+        object_type: newType,
+        description: newDescription.trim() || undefined,
+        content: defaultContent,
+        project_id: newProjectId || undefined,
+        thumbnail_url: newThumbnailUrl.trim() || undefined,
+        properties: newFormProperties
+      });
+
+      if (createdObj) {
+        // Upload any pending attached files directly to R2 under this object's folder
+        if (newUploadedFiles.length > 0) {
+          for (const file of newUploadedFiles) {
+            try {
+              const res = await r2Storage.uploadFile(file, `objects/${createdObj.id}/attachments`);
+              const rec = await db.recordAttachment({
+                entity_id: createdObj.id,
+                entity_type: 'object',
+                file_name: res.name,
+                display_name: file.name,
+                file_url: res.url,
+                file_path: res.r2Key,
+                r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+                bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+                storage_provider: res.provider,
+                file_size: res.size,
+                mime_type: res.mime,
+                migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+              });
+              if (rec) {
+                onAttachmentCreated(rec);
+              }
+            } catch (attErr) {
+              console.warn('Error subiendo archivo adjunto a R2:', attErr);
+            }
+          }
+        }
+
+        // Notify parent onCreateObject (or directly add)
+        await onCreateObject(createdObj);
+
+        // If it's a page or user wants to edit right away, open it
+        setSelectedDetailObject(createdObj);
+      }
+
+      setNewTitle('');
+      setNewDescription('');
+      setNewThumbnailUrl('');
+      setNewFormProperties({});
+      setNewUploadedFiles([]);
+      setIsCreatingObject(false);
+    } catch (err: any) {
+      alert('Error al crear el objeto: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setIsUploadingNewFiles(false);
+    }
   };
 
   // Filter objects by type and search query
@@ -835,14 +877,145 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 <label className="text-xs text-gray-300 font-medium block mb-1">
                   URL Portada / Imagen
                 </label>
-                <input
-                  type="url"
-                  value={newThumbnailUrl}
-                  onChange={e => setNewThumbnailUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={newThumbnailUrl}
+                    onChange={e => setNewThumbnailUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="file"
+                    ref={newCoverInputRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      if (!e.target.files || !e.target.files[0]) return;
+                      const file = e.target.files[0];
+                      try {
+                        setIsUploadingNewCover(true);
+                        const res = await r2Storage.uploadFile(file, 'objects/covers');
+                        setNewThumbnailUrl(res.url);
+                        setNewFormProperties(prev => ({ ...prev, cover_url: res.url }));
+                      } catch (err: any) {
+                        alert('Error subiendo portada a R2: ' + err.message);
+                      } finally {
+                        setIsUploadingNewCover(false);
+                        if (newCoverInputRef.current) newCoverInputRef.current.value = '';
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => newCoverInputRef.current?.click()}
+                    disabled={isUploadingNewCover}
+                    className="px-3 py-2 rounded-xl bg-[#222232] hover:bg-[#2b2b3e] text-xs text-gray-300 hover:text-white border border-[#35354a] transition flex items-center gap-1.5 flex-shrink-0"
+                    title="Subir archivo a Cloudflare R2"
+                  >
+                    {isUploadingNewCover ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                    )}
+                    <span className="hidden sm:inline">Subir R2</span>
+                  </button>
+                </div>
               </div>
+            </div>
+
+            {/* Archivos Adjuntos Iniciales (Imágenes, Audio, Documentos R2) */}
+            <div className="border-t border-[#262638] pt-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Archivos Adjuntos ({newUploadedFiles.length})</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 font-mono">
+                    R2 Cloudflare
+                  </span>
+                </span>
+                <input
+                  type="file"
+                  ref={newFileInputRef}
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      const added = Array.from(e.target.files);
+                      setNewUploadedFiles(prev => [...prev, ...added]);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => newFileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#1e1e2d] hover:bg-[#2a2a3e] text-cyan-300 border border-[#2d2d42] transition"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Adjuntar Archivos</span>
+                </button>
+              </div>
+
+              {newUploadedFiles.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {newUploadedFiles.map((file, idx) => {
+                    const isImg = file.type.startsWith('image/');
+                    const isAudio = file.type.startsWith('audio/');
+                    const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+
+                    return (
+                      <div 
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-[#14141c] border border-[#232332] flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 overflow-hidden flex-1">
+                          <div className="w-8 h-8 rounded-lg bg-[#1c1c28] border border-[#2a2a3c] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {isImg ? (
+                              <img 
+                                src={URL.createObjectURL(file)} 
+                                alt="" 
+                                className="w-full h-full object-cover" 
+                              />
+                            ) : isAudio ? (
+                              <Music className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <FileText className="w-4 h-4 text-cyan-400" />
+                            )}
+                          </div>
+                          <div className="overflow-hidden flex-1">
+                            <p className="text-xs font-medium text-white truncate">{file.name}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">
+                              {(file.size / 1024).toFixed(1)} KB • {file.type || 'Archivo'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Audio quick preview preview controller */}
+                        {isAudio && (
+                          <audio 
+                            controls 
+                            src={URL.createObjectURL(file)} 
+                            className="h-7 max-w-[150px] sm:max-w-[200px]" 
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setNewUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition flex-shrink-0"
+                          title="Quitar archivo antes de guardar"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-500 italic">
+                  Puedes adjuntar imágenes, audios o documentos PDF. Se subirán de forma persistente y sin pérdida a Cloudflare R2 al crear el objeto.
+                </p>
+              )}
             </div>
 
             {/* Form Attributes according to Type Definition */}
@@ -894,9 +1067,17 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md"
+                disabled={isUploadingNewFiles}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md disabled:opacity-50 flex items-center gap-1.5"
               >
-                Crear Objeto
+                {isUploadingNewFiles ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Guardando en R2 e InsForge...</span>
+                  </>
+                ) : (
+                  <span>Crear Objeto</span>
+                )}
               </button>
             </div>
           </form>
@@ -946,7 +1127,9 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
           onAttachmentDeleted={onAttachmentDeleted}
           notes={notes}
           tasks={tasks}
+          allObjects={objects}
           onOpenNote={onOpenNote}
+          onNavigateToObject={(o) => setSelectedDetailObject(o)}
         />
       )}
     </div>
