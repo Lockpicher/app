@@ -3,9 +3,11 @@ import { Sidebar } from './components/Sidebar';
 import { NotebooksView } from './components/NotebooksView';
 import { NotebookNotesGrid } from './components/NotebookNotesGrid';
 import { RichNoteEditor } from './components/RichNoteEditor';
+import { HomeView } from './components/HomeView';
 import { RemindersView } from './components/RemindersView';
 import { NotebookModal } from './components/NotebookModal';
 import { TasksView } from './components/TasksView';
+import { TaskModal } from './components/TaskModal';
 import { ProjectsView } from './components/ProjectsView';
 import { ObjectsView } from './components/ObjectsView';
 import { GraphView } from './components/GraphView';
@@ -56,7 +58,7 @@ import {
 
 export function App() {
   const { theme, toggleTheme } = useTheme();
-  const [currentView, setCurrentView] = useState<ViewMode>('notebooks');
+  const [currentView, setCurrentView] = useState<ViewMode>('home');
   const [loading, setLoading] = useState(true);
 
   // Core Data
@@ -85,6 +87,10 @@ export function App() {
   // Notebook creation modal from sidebar
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [editingNotebook, setEditingNotebook] = useState<AppNotebook | null>(null);
+
+  // Global Task Modal state (for HomeView and quick creation)
+  const [isGlobalTaskModalOpen, setIsGlobalTaskModalOpen] = useState(false);
+  const [globalEditingTask, setGlobalEditingTask] = useState<AppTask | null>(null);
 
   // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -837,6 +843,7 @@ export function App() {
               <span className="text-xs font-bold">SC</span>
             </div>
             <span className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-xs">
+              {currentView === 'home' && 'Inicio'}
               {currentView === 'para_inbox' && 'Capturar (Inbox)'}
               {currentView === 'para_projects' && 'Proyectos (PARA)'}
               {currentView === 'para_areas' && 'Áreas de Responsabilidad'}
@@ -961,6 +968,41 @@ export function App() {
           />
         ) : (
           <>
+            {/* Home / Inicio View */}
+            {currentView === 'home' && (
+              <HomeView
+                tasks={tasks}
+                notes={notes}
+                projects={projects}
+                onToggleTaskComplete={async (task) => {
+                  const nextStatus = task.status === 'completed' ? 'todo' : 'completed';
+                  await handleUpdateTask(task.id, { 
+                    status: nextStatus,
+                    completed_at: nextStatus === 'completed' ? new Date().toISOString() : null
+                  });
+                }}
+                onOpenTask={(task) => {
+                  setGlobalEditingTask(task);
+                  setIsGlobalTaskModalOpen(true);
+                }}
+                onOpenNote={(note) => {
+                  setSelectedNoteId(note.id);
+                  setIsEditingNote(true);
+                }}
+                onToggleFavoriteNote={handleToggleFavorite}
+                onNewTask={() => {
+                  setGlobalEditingTask(null);
+                  setIsGlobalTaskModalOpen(true);
+                }}
+                onNewNote={() => handleNewNote({ note_type: 'text', title: 'Nueva Nota' })}
+                onNavigateToView={(v) => {
+                  setIsEditingNote(false);
+                  setCurrentView(v);
+                }}
+                onOpenSearch={() => setIsQuickSwitcherOpen(true)}
+              />
+            )}
+
             {/* Cuadernos View */}
             {currentView === 'notebooks' && (
               selectedNotebookId && selectedNotebook ? (
@@ -1328,6 +1370,33 @@ export function App() {
           setIsNotebookModalOpen(false);
         }}
         onDelete={handleDeleteNotebook}
+      />
+
+      {/* Global Task Modal (triggered from HomeView and quick creation) */}
+      <TaskModal
+        isOpen={isGlobalTaskModalOpen}
+        onClose={() => {
+          setIsGlobalTaskModalOpen(false);
+          setGlobalEditingTask(null);
+        }}
+        task={globalEditingTask}
+        projects={projects}
+        notes={notes}
+        categories={categories}
+        onSave={async (taskData) => {
+          if (globalEditingTask?.id) {
+            await handleUpdateTask(globalEditingTask.id, taskData);
+          } else {
+            await handleCreateTask(taskData);
+          }
+          setIsGlobalTaskModalOpen(false);
+          setGlobalEditingTask(null);
+        }}
+        onDelete={async (taskId) => {
+          await handleDeleteTask(taskId);
+          setIsGlobalTaskModalOpen(false);
+          setGlobalEditingTask(null);
+        }}
       />
 
       {/* Global Quick Switcher (Ctrl+K) */}

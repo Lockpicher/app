@@ -21,7 +21,8 @@ import {
   Plus,
   Sparkles,
   X,
-  ShieldCheck
+  ShieldCheck,
+  Home
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 
@@ -169,6 +170,20 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
         {/* Scrollable Navigation Body */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3.5 no-scrollbar">
+
+          {/* VISTA PRINCIPAL: INICIO */}
+          <button
+            type="button"
+            onClick={() => handleNav('home')}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition ${
+              currentView === 'home' ? 'bg-purple-600/20 text-purple-300 font-semibold border border-purple-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
+            }`}
+          >
+            <span className="flex items-center gap-2.5 truncate">
+              <Home className="w-4 h-4 text-purple-400 flex-shrink-0" />
+              <span className="truncate">Inicio</span>
+            </span>
+          </button>
 
           {/* 1. SECCIÓN: CAPTURA & ORGANIZACIÓN (SISTEMA PARA) */}
           <div>

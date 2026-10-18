@@ -439,6 +439,7 @@ export type ViewMode =
   | 'para_archives' // Archivo Histórico
   | 'para_review'   // Revisiones periódicas
   // Functional views
+  | 'home'         // Vista Principal / Dashboard de Inicio
   | 'notebooks'    // Cuadernos (Zoho Notebook style)
   | 'notes'        // Alias for compatibility
   | 'all_notes'    // Todas las notas

@@ -50,7 +50,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   }, [isMenuOpen]);
 
   // Determine active states
-  const isHomeActive = currentView === 'notebooks' || currentView === 'all_notes' || currentView === 'para_inbox';
+  const isHomeActive = currentView === 'home';
   const isCalendarActive = currentView === 'calendar';
   const isTasksActive = currentView === 'tasks';
 
@@ -184,7 +184,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 1. Inicio */}
         <button
           type="button"
-          onClick={() => onSelectView('notebooks')}
+          onClick={() => onSelectView('home')}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition active:scale-95 ${
             isHomeActive ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}

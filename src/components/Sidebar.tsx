@@ -24,7 +24,8 @@ import {
   Inbox,
   Archive,
   BookOpen,
-  X
+  X,
+  Home
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -449,6 +450,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Scrollable Navigation Body */}
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3 no-scrollbar">
+
+          {/* ==================================================== */}
+          {/* VISTA PRINCIPAL: INICIO / HOME                        */}
+          {/* ==================================================== */}
+          <div className="space-y-0.5">
+            {renderNavItem('home', 'Inicio', <Home className="w-4 h-4 text-purple-400" />, {
+              activeCondition: currentView === 'home',
+              activeBgColor: 'bg-purple-600/15',
+              activeTextColor: 'text-purple-300',
+              activeBorderColor: 'border-purple-500/30'
+            })}
+          </div>
 
           {/* ==================================================== */}
           {/* GRUPO 1: CAPTURA & ORGANIZACIÓN (SISTEMA PARA)        */}
