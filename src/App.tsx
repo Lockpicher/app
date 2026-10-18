@@ -875,18 +875,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Floating Re-expand Button for Desktop when Sidebar is collapsed */}
-      {isSidebarCollapsed && (
-        <button
-          onClick={toggleSidebarCollapse}
-          className="hidden lg:flex fixed left-3 top-3 z-40 p-2 rounded-xl bg-[#1a1a24] border border-[#2b2b3a] hover:border-purple-500/50 text-gray-300 hover:text-white shadow-xl hover:scale-105 transition duration-200 items-center gap-1.5 text-xs font-medium"
-          title="Mostrar Segundo Cerebro"
-          aria-label="Expandir navegación lateral"
-        >
-          <ChevronRight className="w-4 h-4 text-purple-400" />
-          <span className="text-[11px] font-semibold text-gray-200">Menú</span>
-        </button>
-      )}
+
 
       {/* Left Sidebar (Desktop responsive / Mobile drawer) */}
       <Sidebar

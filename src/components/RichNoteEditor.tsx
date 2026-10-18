@@ -158,7 +158,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       TableCell,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image.configure({ inline: false, allowBase64: false }),
+      Image.configure({ inline: true, allowBase64: true }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -352,16 +352,29 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         editor.commands.setTextSelection(targetPos);
       }
 
-      // 2. Attempt to insert using TipTap setImage command
-      const executed = editor
+      // 2. Primary insertion: insert image block/node
+      let inserted = editor
         .chain()
         .focus()
-        .setImage({ src: imageUrl, alt: altText || 'Imagen adjunta' })
+        .insertContent({
+          type: 'image',
+          attrs: { src: imageUrl, alt: altText || 'Imagen adjunta' }
+        })
         .insertContent('<p></p>')
         .run();
 
-      // 3. Fallback if setImage failed for any schema or nested selection restriction
-      if (!executed) {
+      // 3. Fallback: setImage command
+      if (!inserted) {
+        inserted = editor
+          .chain()
+          .focus()
+          .setImage({ src: imageUrl, alt: altText || 'Imagen adjunta' })
+          .insertContent('<p></p>')
+          .run();
+      }
+
+      // 4. Fallback 2: HTML snippet
+      if (!inserted) {
         editor
           .chain()
           .focus()
@@ -369,7 +382,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           .run();
       }
 
-      // 4. Update save status and trigger save
+      // 5. Update save status and trigger save
       setSaveStatus('dirty');
       await handleSave();
     } catch (insertErr) {
