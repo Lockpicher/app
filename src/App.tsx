@@ -985,10 +985,12 @@ export function App() {
                   setGlobalEditingTask(task);
                   setIsGlobalTaskModalOpen(true);
                 }}
+                onDeleteTask={handleDeleteTask}
                 onOpenNote={(note) => {
                   setSelectedNoteId(note.id);
                   setIsEditingNote(true);
                 }}
+                onDeleteNote={handleDeleteNote}
                 onToggleFavoriteNote={handleToggleFavorite}
                 onNewTask={() => {
                   setGlobalEditingTask(null);

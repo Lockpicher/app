@@ -18,7 +18,9 @@ import {
   Book,
   Boxes,
   ExternalLink,
-  Layers
+  Layers,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { AppTask, AppNote, AppProject, TaskPriority } from '../lib/types';
 
@@ -28,7 +30,9 @@ interface HomeViewProps {
   projects: AppProject[];
   onToggleTaskComplete: (task: AppTask) => Promise<void>;
   onOpenTask: (task: AppTask) => void;
+  onDeleteTask?: (taskId: string) => Promise<void>;
   onOpenNote: (note: AppNote) => void;
+  onDeleteNote?: (noteId: string) => Promise<void>;
   onToggleFavoriteNote: (note: AppNote) => Promise<void>;
   onNewTask: () => void;
   onNewNote: () => void;
@@ -70,7 +74,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
   projects,
   onToggleTaskComplete,
   onOpenTask,
+  onDeleteTask,
   onOpenNote,
+  onDeleteNote,
   onToggleFavoriteNote,
   onNewTask,
   onNewNote,
@@ -78,6 +84,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenSearch
 }) => {
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
 
   // Projects lookup map for fast title & color resolution
   const projectsMap = useMemo(() => {
@@ -212,6 +220,38 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
   };
 
+  // Handler for deleting a task from Home
+  const handleDeleteTask = async (e: React.MouseEvent, t: AppTask) => {
+    e.stopPropagation();
+    if (!onDeleteTask) return;
+    if (!window.confirm(`¿Eliminar la tarea "${t.title}"?`)) return;
+
+    try {
+      setDeletingTaskId(t.id);
+      await onDeleteTask(t.id);
+    } catch (err: any) {
+      alert('Error eliminando tarea: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
+  // Handler for deleting a note from Home
+  const handleDeleteNote = async (e: React.MouseEvent, n: AppNote) => {
+    e.stopPropagation();
+    if (!onDeleteNote) return;
+    if (!window.confirm(`¿Eliminar la nota "${n.title || 'Sin título'}"?`)) return;
+
+    try {
+      setDeletingNoteId(n.id);
+      await onDeleteNote(n.id);
+    } catch (err: any) {
+      alert('Error eliminando nota: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#111116] overflow-y-auto text-gray-100 select-none pb-16 lg:pb-8">
       {/* ==================================================== */}
@@ -331,9 +371,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </div>
                         </div>
 
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ml-2 flex-shrink-0 ${priorityCfg.bg} ${priorityCfg.color}`}>
-                          {priorityCfg.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
+                            {priorityCfg.label}
+                          </span>
+                          {onDeleteTask && (
+                            <button
+                              type="button"
+                              disabled={deletingTaskId === t.id}
+                              onClick={(e) => handleDeleteTask(e, t)}
+                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              title="Eliminar tarea"
+                            >
+                              {deletingTaskId === t.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -422,10 +479,25 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                           <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
                             {priorityCfg.label}
                           </span>
+                          {onDeleteTask && (
+                            <button
+                              type="button"
+                              disabled={deletingTaskId === t.id}
+                              onClick={(e) => handleDeleteTask(e, t)}
+                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              title="Eliminar tarea"
+                            >
+                              {deletingTaskId === t.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -492,9 +564,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </div>
                         </div>
 
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ml-2 flex-shrink-0 ${priorityCfg.bg} ${priorityCfg.color}`}>
-                          {priorityCfg.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
+                            {priorityCfg.label}
+                          </span>
+                          {onDeleteTask && (
+                            <button
+                              type="button"
+                              disabled={deletingTaskId === t.id}
+                              onClick={(e) => handleDeleteTask(e, t)}
+                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              title="Eliminar tarea"
+                            >
+                              {deletingTaskId === t.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -567,9 +656,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                 )}
                               </div>
 
-                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ml-2 flex-shrink-0 ${priorityCfg.bg} ${priorityCfg.color}`}>
-                                {priorityCfg.label}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
+                                  {priorityCfg.label}
+                                </span>
+                                {onDeleteTask && (
+                                  <button
+                                    type="button"
+                                    disabled={deletingTaskId === t.id}
+                                    onClick={(e) => handleDeleteTask(e, t)}
+                                    className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                                    title="Eliminar tarea"
+                                  >
+                                    {deletingTaskId === t.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin text-red-400" />
+                                    ) : (
+                                      <Trash2 className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -649,22 +755,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Favorite star */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleFavoriteNote(n);
-                          }}
-                          className={`p-1 rounded transition flex-shrink-0 ${
-                            n.is_favorite 
-                              ? 'text-amber-400 hover:text-amber-300' 
-                              : 'text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100'
-                          }`}
-                          title={n.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-                        >
-                          <Star className={`w-3.5 h-3.5 ${n.is_favorite ? 'fill-amber-400' : ''}`} />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* Favorite star */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleFavoriteNote(n);
+                            }}
+                            className={`p-1 rounded transition ${
+                              n.is_favorite 
+                                ? 'text-amber-400 hover:text-amber-300' 
+                                : 'text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100'
+                            }`}
+                            title={n.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                          >
+                            <Star className={`w-3.5 h-3.5 ${n.is_favorite ? 'fill-amber-400' : ''}`} />
+                          </button>
+
+                          {/* Delete note button */}
+                          {onDeleteNote && (
+                            <button
+                              type="button"
+                              disabled={deletingNoteId === n.id}
+                              onClick={(e) => handleDeleteNote(e, n)}
+                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              title="Eliminar nota"
+                            >
+                              {deletingNoteId === n.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -718,17 +843,35 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleFavoriteNote(n);
-                        }}
-                        className="text-amber-400 hover:text-gray-400 transition p-1"
-                        title="Quitar de favoritos"
-                      >
-                        <Star className="w-3.5 h-3.5 fill-amber-400" />
-                      </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavoriteNote(n);
+                          }}
+                          className="text-amber-400 hover:text-gray-400 transition p-1"
+                          title="Quitar de favoritos"
+                        >
+                          <Star className="w-3.5 h-3.5 fill-amber-400" />
+                        </button>
+
+                        {onDeleteNote && (
+                          <button
+                            type="button"
+                            disabled={deletingNoteId === n.id}
+                            onClick={(e) => handleDeleteNote(e, n)}
+                            className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                            title="Eliminar nota"
+                          >
+                            {deletingNoteId === n.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
