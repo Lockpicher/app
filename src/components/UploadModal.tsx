@@ -91,8 +91,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
+      // Solicitar máxima resolución nativa soportada por el sensor del dispositivo (hasta 4K/UHD)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: facingMode } },
+        video: { 
+          facingMode: { ideal: facingMode },
+          width: { ideal: 3840, min: 1280 },
+          height: { ideal: 2160, min: 720 }
+        },
         audio: false
       });
       streamRef.current = stream;
@@ -102,9 +107,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         videoRef.current.play().catch(() => {});
       }
     } catch (err: any) {
-      console.warn('No se pudo acceder al stream de la cámara directamente:', err);
-      // Fallback automático al input nativo con capture="environment"
-      cameraInputRef.current?.click();
+      console.warn('No se pudo acceder al stream de la cámara directamente con máxima resolución:', err);
+      // Fallback a resolución por defecto
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false
+        });
+        streamRef.current = fallbackStream;
+        setIsLiveCameraActive(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = fallbackStream;
+          videoRef.current.play().catch(() => {});
+        }
+      } catch (fallbackErr) {
+        cameraInputRef.current?.click();
+      }
     }
   };
 
@@ -117,8 +135,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const handleCapturePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
+    // Capturar a la resolución real y completa del sensor de video
+    const width = video.videoWidth || 1920;
+    const height = video.videoHeight || 1080;
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -133,13 +152,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
     ctx.drawImage(video, 0, 0, width, height);
 
+    // Guardar con máxima calidad 1.0 (sin compresión destructiva)
     canvas.toBlob((blob) => {
       if (!blob) return;
-      const fileName = `foto_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+      const fileName = `foto_original_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
       const file = new File([blob], fileName, { type: 'image/jpeg' });
       stopLiveCamera();
       handleFilesSelected([file] as unknown as FileList);
-    }, 'image/jpeg', 0.95);
+    }, 'image/jpeg', 1.0);
   };
 
   if (!isOpen) return null;
