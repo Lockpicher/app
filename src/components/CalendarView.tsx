@@ -21,7 +21,7 @@ import {
   Columns,
   ExternalLink
 } from 'lucide-react';
-import { AppTask, AppNote, AppProject, AppReminder, AppObject, TaskPriority, TaskStatus } from '../lib/types';
+import { AppTask, AppNote, AppProject, AppReminder, AppObject, AppHabit, AppHabitLog, TaskPriority, TaskStatus, HabitLogStatus } from '../lib/types';
 import { calculateAge } from '../lib/birthdays';
 import { db } from '../lib/insforge';
 
@@ -34,12 +34,22 @@ export interface CalendarBirthdayItem {
   age: number | null;
 }
 
+export interface CalendarHabitOccurrence {
+  id: string;
+  habit: AppHabit;
+  dateKey: string;
+  status: HabitLogStatus | 'none';
+}
+
 interface CalendarViewProps {
   tasks: AppTask[];
   notes: AppNote[];
   projects: AppProject[];
   reminders: AppReminder[];
   objects?: AppObject[];
+  habits?: AppHabit[];
+  habitLogs?: AppHabitLog[];
+  onToggleHabitLog?: (habitId: string, date: string, status?: HabitLogStatus) => Promise<void>;
   onUpdateTask: (id: string, updates: Partial<AppTask>) => Promise<void>;
   onCreateTask: (task: Partial<AppTask>) => Promise<AppTask | null>;
   onOpenNote?: (id: string) => void;
@@ -53,6 +63,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   projects,
   reminders,
   objects = [],
+  habits = [],
+  habitLogs = [],
+  onToggleHabitLog,
   onUpdateTask,
   onCreateTask,
   onOpenNote,
@@ -75,6 +88,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [showReminders, setShowReminders] = useState(true);
   const [showNotes, setShowNotes] = useState(true);
   const [showProjects, setShowProjects] = useState(true);
+  const [showHabits, setShowHabits] = useState(true);
 
   // Drag & drop state
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: 'task' | 'reminder' | 'note' } | null>(null);
@@ -137,11 +151,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       notes: AppNote[];
       projects: AppProject[];
       birthdays: CalendarBirthdayItem[];
+      habits: CalendarHabitOccurrence[];
     }>();
 
     const getBucket = (dateKey: string) => {
       if (!map.has(dateKey)) {
-        map.set(dateKey, { tasks: [], reminders: [], notes: [], projects: [], birthdays: [] });
+        map.set(dateKey, { tasks: [], reminders: [], notes: [], projects: [], birthdays: [], habits: [] });
       }
       return map.get(dateKey)!;
     };
@@ -182,6 +197,50 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       });
     }
 
+    // Fast lookup map for habit logs: `${habit_id}_${date}` -> status
+    const habitLogMap = new Map<string, HabitLogStatus>();
+    habitLogs.forEach(l => {
+      habitLogMap.set(`${l.habit_id}_${l.date}`, l.status);
+    });
+
+    // Project habits for dates in the visible calendar month (including adjacent weeks)
+    if (showHabits && habits.length > 0) {
+      // Generate date keys for the visible month window (-7 days to +38 days)
+      const baseYear = currentDate.getFullYear();
+      const baseMonth = currentDate.getMonth();
+      const firstOfMonth = new Date(baseYear, baseMonth, 1);
+      const startScan = new Date(firstOfMonth);
+      startScan.setDate(startScan.getDate() - 10);
+      const endScan = new Date(baseYear, baseMonth + 1, 15);
+
+      for (let cur = new Date(startScan); cur <= endScan; cur.setDate(cur.getDate() + 1)) {
+        const dKey = cur.toISOString().split('T')[0];
+        const jsDay = cur.getDay();
+        const isoDay = jsDay === 0 ? 7 : jsDay;
+
+        habits.forEach(h => {
+          if (h.start_date && dKey < h.start_date) return;
+          if (h.end_date && dKey > h.end_date) return;
+
+          let isScheduled = false;
+          if (h.frequency === 'daily') isScheduled = true;
+          else if (h.frequency === 'weekdays') isScheduled = isoDay >= 1 && isoDay <= 5;
+          else if (h.frequency === 'weekends') isScheduled = isoDay === 6 || isoDay === 7;
+          else if (h.frequency === 'custom') isScheduled = (h.frequency_days || []).includes(isoDay);
+
+          if (isScheduled) {
+            const status = habitLogMap.get(`${h.id}_${dKey}`) || 'none';
+            getBucket(dKey).habits.push({
+              id: `${h.id}-${dKey}`,
+              habit: h,
+              dateKey: dKey,
+              status
+            });
+          }
+        });
+      }
+    }
+
     // Integrate Contact Birthdays with Annual Recurrence (without duplicating records)
     const currentYear = currentDate.getFullYear();
     const years = [currentYear - 1, currentYear, currentYear + 1];
@@ -209,7 +268,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     });
 
     return map;
-  }, [tasks, reminders, notes, projects, objects, showTasks, showReminders, showNotes, showProjects, currentDate]);
+  }, [tasks, reminders, notes, projects, objects, habits, habitLogs, showTasks, showReminders, showNotes, showProjects, showHabits, currentDate]);
 
   // Unscheduled tasks (Bandeja de pendientes sin fecha)
   const unscheduledTasks = useMemo(() => {
@@ -484,6 +543,38 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             </button>
           </div>
 
+          {/* Category Filter Pills (Tasks, Reminders, Notes, Projects, Habits) */}
+          <div className="hidden md:flex items-center gap-1 bg-[#1c1c28] p-1 rounded-xl border border-[#2c2c3e] text-xs">
+            <button
+              onClick={() => setShowHabits(!showHabits)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition font-medium text-[11px] ${
+                showHabits
+                  ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Mostrar u ocultar hábitos programados"
+            >
+              <Flame className="w-3 h-3 text-amber-400" />
+              <span>Hábitos ({habits.length})</span>
+            </button>
+            <button
+              onClick={() => setShowTasks(!showTasks)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg transition text-[11px] ${
+                showTasks ? 'text-blue-300 font-medium' : 'text-gray-500'
+              }`}
+            >
+              Tareas
+            </button>
+            <button
+              onClick={() => setShowReminders(!showReminders)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg transition text-[11px] ${
+                showReminders ? 'text-amber-300 font-medium' : 'text-gray-500'
+              }`}
+            >
+              Recordatorios
+            </button>
+          </div>
+
           {/* Mobile Pendientes Toggle */}
           <button
             onClick={() => setIsMobileTrayOpen(!isMobileTrayOpen)}
@@ -620,7 +711,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     (dayItems?.reminders.length || 0) + 
                     (dayItems?.notes.length || 0) + 
                     (dayItems?.projects.length || 0) +
-                    (dayItems?.birthdays.length || 0);
+                    (dayItems?.birthdays.length || 0) +
+                    (dayItems?.habits.length || 0);
 
                   return (
                     <div
@@ -675,6 +767,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             {b.age !== null && (
                               <span className="text-[9px] font-mono text-amber-400">({b.age})</span>
                             )}
+                          </div>
+                        ))}
+
+                        {/* Habits (Visual tracker chip) */}
+                        {dayItems?.habits.map(hOcc => (
+                          <div
+                            key={hOcc.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onToggleHabitLog) {
+                                onToggleHabitLog(hOcc.habit.id, hOcc.dateKey);
+                              }
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium truncate flex items-center gap-1 border transition cursor-pointer ${
+                              hOcc.status === 'completed'
+                                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                                : hOcc.status === 'skipped'
+                                ? 'bg-amber-950/40 text-amber-400 border-amber-800/40'
+                                : 'bg-[#1b1b26] text-gray-300 border-[#2d2d3e] hover:border-blue-400'
+                            }`}
+                            title={`Hábito: ${hOcc.habit.title} (${hOcc.status === 'completed' ? 'Completado' : hOcc.status === 'skipped' ? 'Omitido' : 'Pendiente'}). Clic para alternar estado.`}
+                          >
+                            <span 
+                              className={`w-2 h-2 rounded-full flex-shrink-0 flex items-center justify-center text-[7px] ${
+                                hOcc.status === 'completed' ? 'bg-emerald-400 text-black font-bold' : ''
+                              }`}
+                              style={hOcc.status !== 'completed' ? { backgroundColor: hOcc.habit.color || '#3b82f6' } : {}}
+                            >
+                              {hOcc.status === 'completed' ? '✓' : ''}
+                            </span>
+                            <span className="truncate">{hOcc.habit.title}</span>
                           </div>
                         ))}
 
@@ -810,6 +933,71 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               </div>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Habits on this day */}
+                      {dayItems.habits.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                            <Flame className="w-3 h-3 text-amber-400" />
+                            Hábitos Programados ({dayItems.habits.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {dayItems.habits.map(hOcc => (
+                              <div
+                                key={hOcc.id}
+                                className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
+                                  hOcc.status === 'completed'
+                                    ? 'bg-emerald-950/30 border-emerald-800/40'
+                                    : hOcc.status === 'skipped'
+                                    ? 'bg-amber-950/20 border-amber-800/30'
+                                    : 'bg-[#14141d] border-[#242436]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <span 
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: hOcc.habit.color || '#3b82f6' }}
+                                  />
+                                  <div className="min-w-0">
+                                    <p className={`text-xs font-semibold truncate ${hOcc.status === 'completed' ? 'text-emerald-300' : 'text-gray-200'}`}>
+                                      {hOcc.habit.title}
+                                    </p>
+                                    {hOcc.habit.reminder_time && (
+                                      <p className="text-[10px] text-gray-500 font-mono">
+                                        {hOcc.habit.reminder_time.slice(0, 5)}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => onToggleHabitLog && onToggleHabitLog(hOcc.habit.id, hOcc.dateKey, 'completed')}
+                                    className={`px-2 py-1 rounded-md text-[11px] font-semibold transition ${
+                                      hOcc.status === 'completed'
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-[#20202e] text-gray-400 hover:text-white hover:bg-emerald-900/40'
+                                    }`}
+                                  >
+                                    {hOcc.status === 'completed' ? '✓ Hecho' : 'Completar'}
+                                  </button>
+                                  <button
+                                    onClick={() => onToggleHabitLog && onToggleHabitLog(hOcc.habit.id, hOcc.dateKey, 'skipped')}
+                                    className={`px-2 py-1 rounded-md text-[11px] transition ${
+                                      hOcc.status === 'skipped'
+                                        ? 'bg-amber-600 text-white font-semibold'
+                                        : 'bg-[#20202e] text-gray-400 hover:text-white'
+                                    }`}
+                                    title="Omitir este día"
+                                  >
+                                    {hOcc.status === 'skipped' ? 'Omitido' : 'Omitir'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
 

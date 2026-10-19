@@ -18,6 +18,7 @@ import {
   Moon,
   Settings,
   ChevronRight,
+  Flame,
   X
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
@@ -45,6 +46,7 @@ interface MobileDrawerProps {
     tasks: number;
     projects: number;
     objects: number;
+    habits?: number;
     inbox?: number;
     areas?: number;
     archives?: number;
@@ -238,6 +240,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
             <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 px-3 block mb-1">
               Gestión & Medios
             </span>
+            {renderRow('habits', 'Hábitos & Rutinas', <Flame className="w-5 h-5 text-amber-400" />, counts.habits)}
             {renderRow('reminders', 'Recordatorios', <Bell className="w-5 h-5 text-amber-400" />, counts.reminders)}
             {renderRow('para_review', 'Revisión periódica', <Sparkles className="w-5 h-5 text-cyan-400" />)}
             {renderRow('files', 'Archivos y medios', <HardDrive className="w-5 h-5 text-cyan-400" />)}

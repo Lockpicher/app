@@ -22,6 +22,8 @@ import { ParaInboxView } from './components/ParaInboxView';
 import { ParaAreasView } from './components/ParaAreasView';
 import { ParaArchiveView } from './components/ParaArchiveView';
 import { ParaReviewView } from './components/ParaReviewView';
+import { HabitsView } from './components/HabitsView';
+import { UploadModal } from './components/UploadModal';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
 import { registerServiceWorker, syncPersonBirthdayReminders } from './lib/birthdays';
@@ -36,6 +38,9 @@ import {
   AppAttachment, 
   AppFolder,
   AppArea,
+  AppHabit,
+  AppHabitLog,
+  HabitLogStatus,
   PARACategory,
   TaskCategory,
   ViewMode,
@@ -73,6 +78,8 @@ export function App() {
   const [folders, setFolders] = useState<AppFolder[]>([]);
   const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [areas, setAreas] = useState<AppArea[]>([]);
+  const [habits, setHabits] = useState<AppHabit[]>([]);
+  const [habitLogs, setHabitLogs] = useState<AppHabitLog[]>([]);
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
@@ -91,6 +98,8 @@ export function App() {
   // Global Task Modal state (for HomeView and quick creation)
   const [isGlobalTaskModalOpen, setIsGlobalTaskModalOpen] = useState(false);
   const [globalEditingTask, setGlobalEditingTask] = useState<AppTask | null>(null);
+  const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -147,7 +156,7 @@ export function App() {
       // Dismiss full-screen blocking loader right away!
       setLoading(false);
 
-      // Phase 2: Deferred load for other views (Projects, Tasks, Objects, Reminders, Files, Links)
+      // Phase 2: Deferred load for other views (Projects, Tasks, Objects, Reminders, Files, Links, Habits)
       Promise.all([
         db.getReminders().catch(() => []),
         db.getProjects().catch(() => []),
@@ -158,8 +167,10 @@ export function App() {
         db.getFileFolders().catch(() => []),
         db.getTaskCategories().catch(() => []),
         db.getCustomObjectTypes().catch(() => []),
-        db.getAreas().catch(() => [])
-      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars]) => {
+        db.getAreas().catch(() => []),
+        db.getHabits().catch(() => []),
+        db.getHabitLogs().catch(() => [])
+      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs]) => {
         setReminders(rems);
         setProjects(p);
         setTasks(t);
@@ -170,6 +181,8 @@ export function App() {
         setCategories(cats);
         setCustomObjectTypes(cTypes);
         setAreas(ars);
+        setHabits(hbs);
+        setHabitLogs(hLogs);
       }).catch(err => {
         console.warn('Background sync error (non-fatal):', err);
       });
@@ -363,8 +376,8 @@ export function App() {
     }
   };
 
-  const handleDeleteNote = async (noteId: string) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta nota permanentemente?')) return;
+  const handleDeleteNote = async (noteId: string, skipConfirm = false) => {
+    if (!skipConfirm && !window.confirm('¿Seguro que deseas eliminar esta nota permanentemente?')) return;
     try {
       await db.deleteNote(noteId);
       setNotes(prev => prev.filter(n => n.id !== noteId));
@@ -374,6 +387,7 @@ export function App() {
       }
     } catch (err: any) {
       alert('Error eliminando nota: ' + err.message);
+      throw err;
     }
   };
 
@@ -521,6 +535,20 @@ export function App() {
   // OBJECTS ACTIONS
   // ==========================================
   const handleCreateObject = async (obj: Partial<AppObject>) => {
+    // If the object already has an id (it was already created by the child component), just add to state
+    if (obj.id) {
+      setObjects(prev => {
+        const exists = prev.some(o => o.id === obj.id);
+        return exists ? prev : [obj as AppObject, ...prev];
+      });
+      if (obj.object_type === 'person') {
+        syncPersonBirthdayReminders(obj as AppObject, reminders).then(newRems => {
+          if (newRems.length > 0) setReminders(prev => [...prev, ...newRems]);
+        }).catch(console.warn);
+      }
+      return;
+    }
+
     const created = await db.createObject(obj);
     if (created) {
       setObjects(prev => [created, ...prev]);
@@ -566,6 +594,65 @@ export function App() {
   const handleFoldersChanged = async () => {
     const flds = await db.getFileFolders();
     setFolders(flds);
+  };
+
+  // ==========================================
+  // HABITS ACTIONS & LOGS
+  // ==========================================
+  const handleCreateHabit = async (habitData: Partial<AppHabit>): Promise<AppHabit | null> => {
+    try {
+      const created = await db.createHabit(habitData);
+      if (created) {
+        setHabits(prev => [...prev, created]);
+      }
+      return created;
+    } catch (err: any) {
+      alert('Error creando hábito: ' + err.message);
+      return null;
+    }
+  };
+
+  const handleUpdateHabit = async (id: string, updates: Partial<AppHabit>) => {
+    try {
+      const updated = await db.updateHabit(id, updates);
+      if (updated) {
+        setHabits(prev => prev.map(h => h.id === id ? updated : h));
+      }
+    } catch (err: any) {
+      alert('Error actualizando hábito: ' + err.message);
+    }
+  };
+
+  const handleDeleteHabit = async (id: string) => {
+    try {
+      await db.deleteHabit(id);
+      setHabits(prev => prev.filter(h => h.id !== id));
+      setHabitLogs(prev => prev.filter(l => l.habit_id !== id));
+    } catch (err: any) {
+      alert('Error eliminando hábito: ' + err.message);
+    }
+  };
+
+  const handleToggleHabitLog = async (habitId: string, date: string, desiredStatus?: HabitLogStatus) => {
+    try {
+      const res = await db.toggleHabitLog(habitId, date, desiredStatus);
+      if (res.status === 'none') {
+        // Log removed
+        setHabitLogs(prev => prev.filter(l => !(l.habit_id === habitId && l.date === date)));
+      } else if (res.log) {
+        // Log added or updated
+        setHabitLogs(prev => {
+          const exists = prev.some(l => l.habit_id === habitId && l.date === date);
+          if (exists) {
+            return prev.map(l => (l.habit_id === habitId && l.date === date ? res.log! : l));
+          } else {
+            return [res.log!, ...prev];
+          }
+        });
+      }
+    } catch (err: any) {
+      console.error('Error alternando cumplimiento de hábito:', err);
+    }
   };
 
   // ==========================================
@@ -762,6 +849,9 @@ export function App() {
     } else if (type === 'project') {
       setIsEditingNote(false);
       setCurrentView('projects');
+    } else if (type === 'area') {
+      setIsEditingNote(false);
+      setCurrentView('para_areas');
     } else if (type === 'object') {
       setIsEditingNote(false);
       const foundObj = objects.find(o => o.id === id);
@@ -780,7 +870,7 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file') => {
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
     } else if (type === 'task') {
@@ -833,6 +923,8 @@ export function App() {
       setActiveObjectType('all');
       setIsEditingNote(false);
       setCurrentView('objects');
+    } else if (type === 'file') {
+      setIsUploadModalOpen(true);
     }
   };
 
@@ -874,6 +966,7 @@ export function App() {
                 {currentView === 'para_resources' && 'Recursos'}
                 {currentView === 'para_archives' && 'Archivo Histórico'}
                 {currentView === 'para_review' && 'Revisión Periódica'}
+                {currentView === 'habits' && 'Hábitos'}
                 {currentView === 'notebooks' && 'Cuadernos'}
                 {currentView === 'all_notes' && 'Todas las notas'}
                 {currentView === 'favorites' && 'Favoritos'}
@@ -943,6 +1036,7 @@ export function App() {
           setEditingNotebook(null);
           setIsNotebookModalOpen(true);
         }}
+        onUploadFile={() => setIsUploadModalOpen(true)}
         counts={{
           notebooks: notebooks.filter(nb => !nb.is_archived).length,
           notes: notes.length,
@@ -951,6 +1045,7 @@ export function App() {
           tasks: tasks.length,
           projects: projects.filter(p => !p.is_archived && p.status !== 'completed').length,
           objects: objects.filter(o => o.para_category !== 'archive').length,
+          habits: habits.filter(h => !h.is_archived).length,
           inbox: notes.filter(n => !n.is_archived && (!n.para_category || n.para_category === 'inbox') && !n.project_id && !n.area_id).length +
                  tasks.filter(t => t.status !== 'completed' && (!t.para_category || t.para_category === 'inbox') && !t.project_id && !t.area_id).length,
           areas: areas.filter(a => !a.is_archived).length,
@@ -990,9 +1085,11 @@ export function App() {
             projects={projects}
             tasks={tasks}
             objects={objects}
+            areas={areas}
+            customTypes={customObjectTypes}
             onBack={handleCloseEditor}
             onSave={handleSaveNote}
-            onDelete={handleDeleteNote}
+            onDelete={(noteId) => handleDeleteNote(noteId, true)}
             onNavigateToEntity={handleNavigateToEntity}
             onCreateTaskFromNote={handleCreateTaskFromNote}
           />
@@ -1004,6 +1101,9 @@ export function App() {
                 tasks={tasks}
                 notes={notes}
                 projects={projects}
+                habits={habits}
+                habitLogs={habitLogs}
+                onToggleHabitLog={handleToggleHabitLog}
                 onToggleTaskComplete={async (task) => {
                   const nextStatus = task.status === 'completed' ? 'todo' : 'completed';
                   await handleUpdateTask(task.id, { 
@@ -1040,6 +1140,19 @@ export function App() {
                 onQuickCapture={async (type, data) => {
                   await handleQuickCapture(type, data);
                 }}
+              />
+            )}
+
+            {/* Hábitos View */}
+            {currentView === 'habits' && (
+              <HabitsView
+                habits={habits}
+                habitLogs={habitLogs}
+                onToggleLog={handleToggleHabitLog}
+                onCreateHabit={handleCreateHabit}
+                onUpdateHabit={handleUpdateHabit}
+                onDeleteHabit={handleDeleteHabit}
+                onNavigateToCalendar={() => setCurrentView('calendar')}
               />
             )}
 
@@ -1125,6 +1238,9 @@ export function App() {
                 projects={projects}
                 objects={objects}
                 reminders={reminders}
+                habits={habits}
+                habitLogs={habitLogs}
+                onToggleHabitLog={handleToggleHabitLog}
                 onUpdateTask={handleUpdateTask}
                 onCreateTask={handleCreateTask}
                 onOpenNote={(id: string) => {
@@ -1154,6 +1270,10 @@ export function App() {
                   setIsEditingNote(true);
                   setCurrentView('notebooks');
                 }}
+                onNavigateToProject={(projId) => {
+                  setTargetProjectId(projId);
+                  setCurrentView('projects');
+                }}
               />
             )}
 
@@ -1169,6 +1289,7 @@ export function App() {
                 onDeleteProject={handleDeleteProject}
                 onSelectProject={() => {}}
                 onCreateTask={handleCreateTask}
+                initialSelectedProjectId={targetProjectId}
               />
             )}
 
@@ -1221,6 +1342,8 @@ export function App() {
                 objects={objects.filter(o => o.para_category !== 'archive')}
                 projects={projects}
                 attachments={attachments}
+                areas={areas}
+                links={links}
                 onAttachmentCreated={handleAttachmentCreated}
                 onAttachmentDeleted={handleAttachmentDeleted}
                 onCreateObject={handleCreateObject}
@@ -1229,6 +1352,7 @@ export function App() {
                 notes={notes}
                 tasks={tasks}
                 onOpenNote={handleOpenNote}
+                onNavigateToEntity={handleNavigateToEntity}
                 activeType={activeObjectType}
                 onSelectType={setActiveObjectType}
                 customTypes={customObjectTypes}
@@ -1282,6 +1406,8 @@ export function App() {
                 objects={objects}
                 projects={projects}
                 attachments={attachments}
+                areas={areas}
+                links={links}
                 onAttachmentCreated={handleAttachmentCreated}
                 onAttachmentDeleted={handleAttachmentDeleted}
                 onCreateObject={handleCreateObject}
@@ -1290,6 +1416,7 @@ export function App() {
                 notes={notes}
                 tasks={tasks}
                 onOpenNote={handleOpenNote}
+                onNavigateToEntity={handleNavigateToEntity}
                 activeType={activeObjectType}
                 onSelectType={setActiveObjectType}
                 customTypes={customObjectTypes}
@@ -1452,6 +1579,20 @@ export function App() {
         notebooks={notebooks}
         attachments={attachments}
         onSelectEntity={handleNavigateToEntity}
+      />
+
+      {/* Global Cloudflare R2 Upload Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onFileUploaded={(newAtt) => {
+          handleAttachmentCreated(newAtt);
+        }}
+        folders={folders}
+        onNavigateToFiles={() => {
+          setIsEditingNote(false);
+          setCurrentView('files');
+        }}
       />
     </div>
   );

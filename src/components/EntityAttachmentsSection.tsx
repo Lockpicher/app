@@ -94,16 +94,16 @@ export const EntityAttachmentsSection: React.FC<EntityAttachmentsSectionProps> =
 
   return (
     <div className="mt-6 border-t border-[#262638] pt-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-gray-300 flex items-center gap-2">
-          <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Archivos Adjuntos ({relevantAttachments.length})</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 font-mono">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <h4 className="text-xs font-semibold text-gray-300 flex items-center gap-2 flex-wrap min-w-0">
+          <Paperclip className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+          <span className="truncate">Archivos adjuntos ({relevantAttachments.length})</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/40 font-mono flex-shrink-0">
             R2 Cloudflare
           </span>
         </h4>
 
-        <div>
+        <div className="flex-shrink-0">
           <input
             type="file"
             ref={fileInputRef}
@@ -115,10 +115,10 @@ export const EntityAttachmentsSection: React.FC<EntityAttachmentsSectionProps> =
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e1e2c] hover:bg-[#272738] text-cyan-300 border border-[#2d2d42] transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#1e1e2c] hover:bg-[#272738] text-blue-300 border border-[#2d2d42] transition shadow-sm max-w-full truncate"
           >
-            <Upload className={`w-3 h-3 ${isUploading ? 'animate-bounce' : ''}`} />
-            <span>{isUploading ? 'Subiendo a R2...' : 'Adjuntar Archivo'}</span>
+            <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isUploading ? 'animate-bounce' : ''}`} />
+            <span className="truncate">{isUploading ? 'Subiendo a R2...' : 'Adjuntar archivo'}</span>
           </button>
         </div>
       </div>

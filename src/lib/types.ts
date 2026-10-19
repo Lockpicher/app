@@ -213,6 +213,8 @@ export type ObjectFieldType =
   | 'date' 
   | 'url' 
   | 'email' 
+  | 'phone'
+  | 'relation'
   | 'checkbox' 
   | 'select' 
   | 'multiselect';
@@ -224,6 +226,7 @@ export interface ObjectFieldDefinition {
   required?: boolean;
   order?: number;
   options?: string[]; // for select / multiselect
+  target_type?: string; // for 'relation' type: e.g. 'company', 'project', 'person'
   visible?: boolean;
   placeholder?: string;
 }
@@ -295,10 +298,16 @@ export interface PersonRelationship {
 
 export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
   { id: 'person', name: 'Personas', icon: 'user', color: '#3b82f6', category: 'General', fields: [
-    { key: 'birthday', label: 'Fecha de Cumpleaños', type: 'date', required: true },
-    { key: 'rol', label: 'Rol / Cargo', type: 'text' },
+    { key: 'rol', label: 'Cargo / Rol', type: 'text' },
     { key: 'email', label: 'Correo Electrónico', type: 'email' },
-    { key: 'telefono', label: 'Teléfono', type: 'text' }
+    { key: 'telefono', label: 'Teléfono', type: 'phone' },
+    { key: 'birthday', label: 'Fecha de Cumpleaños', type: 'date', required: false },
+    { key: 'empresa_id', label: 'Empresa', type: 'relation', target_type: 'company' }
+  ]},
+  { id: 'company', name: 'Empresas', icon: 'building-2', color: '#0ea5e9', category: 'General', fields: [
+    { key: 'sector', label: 'Sector / Industria', type: 'text' },
+    { key: 'website', label: 'Sitio Web', type: 'url' },
+    { key: 'ubicacion', label: 'Ubicación / Ciudad', type: 'text' }
   ]},
   { id: 'page', name: 'Páginas', icon: 'file-text', color: '#6366f1', category: 'General', fields: [
     { key: 'subtitle', label: 'Subtítulo / Bajada', type: 'text' },
@@ -309,7 +318,8 @@ export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
   { id: 'meeting', name: 'Reuniones', icon: 'calendar', color: '#f59e0b', category: 'General', fields: [
     { key: 'fecha', label: 'Fecha de Reunión', type: 'date' },
     { key: 'participantes', label: 'Participantes', type: 'text' },
-    { key: 'acuerdos', label: 'Acuerdos Principales', type: 'textarea' }
+    { key: 'acuerdos', label: 'Acuerdos Principales', type: 'textarea' },
+    { key: 'proyecto_id', label: 'Proyecto', type: 'relation', target_type: 'project' }
   ]},
   { id: 'resource', name: 'Recursos', icon: 'link', color: '#10b981', category: 'General', fields: [
     { key: 'url', label: 'URL / Enlace', type: 'url' },
@@ -370,15 +380,24 @@ export interface AppObject {
   updated_at: string;
 }
 
+export type EntityType = 'object' | 'project' | 'note' | 'task' | 'area';
+
 export interface AppLink {
   id: string;
-  source_id: string;
-  source_type: 'note' | 'task' | 'project' | 'object' | 'area';
-  target_id: string;
-  target_type: 'note' | 'task' | 'project' | 'object' | 'area';
-  target_title?: string;
-  link_type: 'wikilink' | 'relates_to' | 'parent_of' | 'depends_on';
+  from_id: string;
+  from_type: EntityType;
+  to_id: string;
+  to_type: EntityType;
+  relation_label: string; // e.g. 'project', 'company', 'mention', 'related', 'parent_of'
   created_at: string;
+
+  // Compatibility aliases for legacy code
+  source_id?: string;
+  source_type?: EntityType;
+  target_id?: string;
+  target_type?: EntityType;
+  target_title?: string;
+  link_type?: string;
 }
 
 export interface AppFolder {
@@ -430,6 +449,38 @@ export interface AppTag {
   created_at: string;
 }
 
+export interface AppHabit {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  frequency: 'daily' | 'weekdays' | 'weekends' | 'custom';
+  frequency_days: number[]; // 1=Lunes, 2=Martes... 7=Domingo
+  target_per_day?: number;
+  start_date: string; // YYYY-MM-DD
+  end_date?: string | null;
+  reminder_time?: string | null; // HH:mm
+  is_archived?: boolean;
+  order_index?: number;
+  properties?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type HabitLogStatus = 'completed' | 'skipped';
+
+export interface AppHabitLog {
+  id: string;
+  habit_id: string;
+  date: string; // YYYY-MM-DD
+  status: HabitLogStatus;
+  notes?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ViewMode = 
   // Core PARA Views
   | 'para_inbox'    // Capturar / Bandeja de Entrada Universal
@@ -440,6 +491,7 @@ export type ViewMode =
   | 'para_review'   // Revisiones periódicas
   // Functional views
   | 'home'         // Vista Principal / Dashboard de Inicio
+  | 'habits'       // Módulo de Hábitos y Seguimiento
   | 'notebooks'    // Cuadernos (Zoho Notebook style)
   | 'notes'        // Alias for compatibility
   | 'all_notes'    // Todas las notas
@@ -452,3 +504,4 @@ export type ViewMode =
   | 'graph'        // Vista de Red
   | 'files'        // Sección central Archivos (Cloudflare R2)
   | 'storage';     // Almacenamiento (compatibilidad)
+

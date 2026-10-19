@@ -32,11 +32,10 @@ import {
   FileText,
   Check
 } from 'lucide-react';
-import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, DEFAULT_OBJECT_TYPES } from '../lib/types';
+import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, AppArea, AppLink, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { CustomTypeBuilderModal } from './CustomTypeBuilderModal';
-import { ObjectDetailModal } from './ObjectDetailModal';
-import { PersonDetailModal } from './PersonDetailModal';
+import { ObjectPagePanel } from './ObjectPagePanel';
 import { db } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 
@@ -44,6 +43,7 @@ interface ObjectsViewProps {
   objects: AppObject[];
   projects: AppProject[];
   attachments?: AppAttachment[];
+  links?: AppLink[];
   onAttachmentCreated?: (attachment: AppAttachment) => void;
   onAttachmentDeleted?: (id: string, path: string) => void;
   onCreateObject: (obj: Partial<AppObject>) => Promise<void>;
@@ -51,7 +51,9 @@ interface ObjectsViewProps {
   onDeleteObject: (id: string) => Promise<void>;
   notes?: AppNote[];
   tasks?: AppTask[];
+  areas?: AppArea[];
   onOpenNote?: (note: AppNote) => void;
+  onNavigateToEntity?: (id: string, type: string) => void;
   activeType?: string;
   onSelectType?: (typeId: string) => void;
   customTypes?: ObjectTypeDefinition[];
@@ -69,7 +71,10 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   onDeleteObject,
   notes = [],
   tasks = [],
+  areas = [],
+  links = [],
   onOpenNote,
+  onNavigateToEntity,
   activeType,
   onSelectType,
   customTypes: externalCustomTypes,
@@ -82,8 +87,10 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     setInternalSelectedType(t);
   };
 
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
+  // Default to compact table ('list') as requested in Phase 5
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'gallery'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterLinkId, setFilterLinkId] = useState<string>('all'); // Filter by related entity (e.g. company, project)
 
   // Modals state
   const [isCreatingObject, setIsCreatingObject] = useState(false);
@@ -124,6 +131,34 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   // Standard predefined types from centralized system (includes page, person, meeting, resource, book, concept)
   const defaultTypes: ObjectTypeDefinition[] = DEFAULT_OBJECT_TYPES;
 
+  // Global 'N' shortcut when inside ObjectsView
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.key === 'n' || e.key === 'N') &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        const target = e.target as HTMLElement | null;
+        const isInput = target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.ProseMirror')
+        );
+        if (!isInput && !isCreatingObject && !selectedDetailObject && !isTypeBuilderOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setNewFormProperties({});
+          setIsCreatingObject(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isCreatingObject, selectedDetailObject, isTypeBuilderOpen]);
+
   // Combined type definitions
   const allTypeDefinitions: ObjectTypeDefinition[] = [...defaultTypes, ...customTypes];
 
@@ -152,19 +187,6 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    if (newType === 'person') {
-      const bday = newFormProperties.birthday;
-      if (!bday || !String(bday).trim()) {
-        alert('La Fecha de Cumpleaños es obligatoria para registrar un nuevo contacto.');
-        return;
-      }
-      const bdayDate = new Date(bday);
-      if (isNaN(bdayDate.getTime())) {
-        alert('Por favor introduce una fecha de cumpleaños válida.');
-        return;
-      }
-    }
-
     try {
       setIsUploadingNewFiles(true);
 
@@ -173,7 +195,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         ? `<h1>${newTitle.trim()}</h1><p>${newDescription.trim() || 'Comienza a escribir tu contenido enriquecido...'}</p>`
         : undefined;
 
-      const createdObj = await db.createObject({
+      const payload: Partial<AppObject> = {
         title: newTitle.trim(),
         object_type: newType,
         description: newDescription.trim() || undefined,
@@ -181,7 +203,9 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         project_id: newProjectId || undefined,
         thumbnail_url: newThumbnailUrl.trim() || undefined,
         properties: newFormProperties
-      });
+      };
+
+      const createdObj = await db.createObject(payload);
 
       if (createdObj) {
         // Upload any pending attached files directly to R2 under this object's folder
@@ -203,7 +227,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 mime_type: res.mime,
                 migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
               });
-              if (rec) {
+              if (rec && onAttachmentCreated) {
                 onAttachmentCreated(rec);
               }
             } catch (attErr) {
@@ -212,10 +236,12 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
           }
         }
 
-        // Notify parent onCreateObject (or directly add)
-        await onCreateObject(createdObj);
+        // Notify parent state without re-invoking database insert
+        if (onCreateObject) {
+          await onCreateObject(createdObj);
+        }
 
-        // If it's a page or user wants to edit right away, open it
+        // Open newly created object detail
         setSelectedDetailObject(createdObj);
       }
 
@@ -232,16 +258,46 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     }
   };
 
-  // Filter objects by type and search query
+  // Potential linked entities for filter (Companies, Projects, etc.)
+  const filterLinkOptions = [
+    ...projects.map(p => ({ id: p.id, title: p.title, type: 'project' as const, label: `Proyecto: ${p.title}` })),
+    ...objects.filter(o => o.object_type === 'company').map(c => ({ id: c.id, title: c.title, type: 'company' as const, label: `Empresa: ${c.title}` }))
+  ];
+
+  // Filter objects by type, search query and related link
   const filteredObjects = objects.filter(obj => {
+    // 1. Filter by object type
     if (selectedType !== 'all' && obj.object_type !== selectedType) return false;
+
+    // 2. Filter by specific related link (bidirectional check)
+    if (filterLinkId !== 'all') {
+      const isDirectlyLinked = links.some(l => 
+        (l.from_id === obj.id && l.to_id === filterLinkId) ||
+        (l.to_id === obj.id && l.from_id === filterLinkId)
+      );
+      // Legacy fallback check for project_id
+      const isLegacyProjectLinked = obj.project_id === filterLinkId;
+      if (!isDirectlyLinked && !isLegacyProjectLinked) return false;
+    }
+
+    // 3. Search query: Title, description, properties and related entities titles
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = obj.title.toLowerCase().includes(q);
       const matchDesc = obj.description?.toLowerCase().includes(q);
       const matchProps = JSON.stringify(obj.properties || {}).toLowerCase().includes(q);
-      return matchTitle || matchDesc || matchProps;
+
+      // Also check if any linked entity title matches query (e.g. search "Google" finds people linked to Google)
+      const linkedEntityIds = links
+        .filter(l => l.from_id === obj.id || l.to_id === obj.id)
+        .map(l => l.from_id === obj.id ? l.to_id : l.from_id);
+      
+      const matchLinkedEntity = objects.some(o => linkedEntityIds.includes(o.id) && o.title.toLowerCase().includes(q)) ||
+                                projects.some(p => (linkedEntityIds.includes(p.id) || obj.project_id === p.id) && p.title.toLowerCase().includes(q));
+
+      return matchTitle || matchDesc || matchProps || matchLinkedEntity;
     }
+
     return true;
   });
 
@@ -257,11 +313,11 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
       <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-            <Boxes className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-            <span>Objetos y Entidades</span>
+            <Boxes className="w-5 h-5 text-blue-400 flex-shrink-0" />
+            <span>Objetos y entidades</span>
           </h2>
           <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">
-            Dossiers estructurados, entidades de conocimiento, atributos dinámicos y archivos R2.
+            Dossiers estructurados, entidades de conocimiento, atributos y vínculos.
           </p>
         </div>
 
@@ -269,11 +325,11 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
           {/* Create Custom Type Button */}
           <button
             onClick={() => setIsTypeBuilderOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e1e2c] hover:bg-[#28283a] text-purple-300 border border-purple-500/30 transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[#1e1e2c] hover:bg-[#28283a] text-blue-300 border border-blue-500/30 transition shadow-sm"
             title="Crear tu propia plantilla de entidad"
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>Crear la tuya</span>
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span>Crear plantilla</span>
           </button>
 
           {/* New Object Button */}
@@ -282,10 +338,10 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
               setNewFormProperties({});
               setIsCreatingObject(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-900/30 whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm whitespace-nowrap active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>Nuevo Objeto</span>
+            <span>Nuevo objeto</span>
           </button>
         </div>
       </div>
@@ -336,7 +392,36 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         </div>
 
         {/* Search & View Switcher */}
-        <div className="flex items-center gap-2.5 flex-shrink-0 self-end md:self-auto">
+        <div className="flex items-center gap-2.5 flex-shrink-0 self-end md:self-auto flex-wrap">
+          {/* Link Filter (e.g. "todo lo relacionado con [empresa o proyecto]") */}
+          {filterLinkOptions.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-[#1a1a24] border border-[#2b2b3a] rounded-xl px-2.5 py-1 text-xs text-gray-300">
+              <LinkIcon className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <select
+                value={filterLinkId}
+                onChange={e => setFilterLinkId(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none cursor-pointer max-w-[130px] sm:max-w-[170px] truncate"
+              >
+                <option value="all">Todos los vínculos</option>
+                {filterLinkOptions.map(opt => (
+                  <option key={opt.id} value={opt.id} className="bg-[#181824] text-white">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {filterLinkId !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setFilterLinkId('all')}
+                  className="text-gray-400 hover:text-white p-0.5 rounded text-[11px]"
+                  title="Limpiar filtro de vínculo"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Search Bar */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -344,31 +429,31 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar entidad..."
-              className="pl-8 pr-3 py-1.5 bg-[#1a1a24] border border-[#2b2b3a] rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-emerald-500 w-36 sm:w-48 transition"
+              placeholder="Buscar por texto o vínculo..."
+              className="pl-8 pr-3 py-1.5 bg-[#1a1a24] border border-[#2b2b3a] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 w-40 sm:w-56 transition"
             />
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-[#181822] border border-[#29293a] rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
-              title="Vista de Cuadrícula"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
+          <div className="flex items-center bg-[#181822] border border-[#29293a] rounded-xl p-0.5">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
-              title="Vista de Lista"
+              className={`p-1.5 rounded-lg ${viewMode === 'list' ? 'bg-blue-600/30 text-white border border-blue-500/40' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Tabla (Predeterminada)"
             >
               <ListIcon className="w-3.5 h-3.5" />
             </button>
             <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg ${viewMode === 'grid' ? 'bg-blue-600/30 text-white border border-blue-500/40' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Tarjetas Compactas"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => setViewMode('gallery')}
-              className={`p-1.5 rounded ${viewMode === 'gallery' ? 'bg-[#29293b] text-white' : 'text-gray-400 hover:text-gray-200'}`}
-              title="Vista de Galería"
+              className={`p-1.5 rounded-lg ${viewMode === 'gallery' ? 'bg-blue-600/30 text-white border border-blue-500/40' : 'text-gray-400 hover:text-gray-200'}`}
+              title="Vista de Galería Visual"
             >
               <ImageIcon className="w-3.5 h-3.5" />
             </button>
@@ -644,47 +729,72 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
             })}
           </div>
         ) : viewMode === 'list' ? (
-          /* List View: Structured Table */
-          <div className="bg-[#181822] rounded-2xl border border-[#28283a] overflow-hidden shadow-sm">
-            <table className="w-full text-left text-xs">
+          /* List View: Compact Structured Table (Default) */
+          <div className="bg-[#181822] rounded-2xl border border-[#28283a] overflow-x-auto shadow-sm">
+            <table className="w-full text-left text-xs min-w-[620px]">
               <thead className="bg-[#13131c] text-gray-400 font-medium border-b border-[#242436]">
                 <tr>
-                  <th className="py-3 px-4">Entidad / Título</th>
-                  <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Proyecto</th>
-                  <th className="py-3 px-4">Atributos Destacados</th>
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4 text-right">Acciones</th>
+                  <th className="py-3.5 px-4 font-semibold text-gray-300">Entidad / Nombre</th>
+                  <th className="py-3.5 px-3 font-semibold text-gray-300">Tipo</th>
+                  <th className="py-3.5 px-3 font-semibold text-gray-300">Vínculos principales</th>
+                  <th className="py-3.5 px-3 font-semibold text-gray-300">Propiedades clave</th>
+                  <th className="py-3.5 px-3 font-semibold text-gray-300">Fecha</th>
+                  <th className="py-3.5 px-4 text-right font-semibold text-gray-300">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#222232]">
                 {filteredObjects.map(obj => {
-                  const project = projects.find(p => p.id === obj.project_id);
                   const typeMeta = getTypeMeta(obj.object_type);
                   const props = obj.properties || {};
+
+                  // Related entities from links
+                  const relatedEntityIds = links
+                    .filter(l => l.from_id === obj.id || l.to_id === obj.id)
+                    .map(l => l.from_id === obj.id ? l.to_id : l.from_id);
+
+                  const relatedEntities = [
+                    ...objects.filter(o => relatedEntityIds.includes(o.id)).map(o => ({ id: o.id, title: o.title, type: 'object' })),
+                    ...projects.filter(p => relatedEntityIds.includes(p.id) || obj.project_id === p.id).map(p => ({ id: p.id, title: p.title, type: 'project' }))
+                  ];
+
+                  // Key property chips based on type
+                  const relevantProps = Object.entries(props).filter(([k, v]) => {
+                    if (['subtitle', 'is_pinned', 'thumbnail_url', 'cover_url'].includes(k)) return false;
+                    return v !== undefined && v !== null && String(v).trim() !== '';
+                  }).slice(0, 2);
 
                   return (
                     <tr 
                       key={obj.id}
                       onClick={() => setSelectedDetailObject(obj)}
-                      className="hover:bg-[#1d1d2b] cursor-pointer transition"
+                      className="hover:bg-[#1f1f2e] cursor-pointer transition min-h-[56px] group"
                     >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
+                      <td className="py-3 px-4 min-h-[56px]">
+                        <div className="flex items-center gap-3">
                           {obj.thumbnail_url ? (
-                            <img src={obj.thumbnail_url} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                            <img 
+                              src={obj.thumbnail_url} 
+                              alt="" 
+                              className="w-9 h-9 rounded-xl object-cover border border-[#2a2a3e] flex-shrink-0" 
+                            />
                           ) : (
                             <div 
-                              className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px]"
-                              style={{ backgroundColor: `${typeMeta.color}25`, color: typeMeta.color }}
+                              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 border"
+                              style={{ 
+                                backgroundColor: `${typeMeta.color}18`, 
+                                color: typeMeta.color,
+                                borderColor: `${typeMeta.color}35`
+                              }}
                             >
                               {obj.title.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <div>
-                            <span className="font-semibold text-white block">{obj.title}</span>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-white group-hover:text-blue-400 transition block truncate text-sm">
+                              {obj.title}
+                            </span>
                             {obj.description && (
-                              <span className="text-[11px] text-gray-400 truncate max-w-xs block">
+                              <span className="text-[11px] text-gray-400 truncate max-w-xs block mt-0.5">
                                 {obj.description}
                               </span>
                             )}
@@ -692,31 +802,63 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-3">
                         <span 
-                          className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                          style={{ backgroundColor: `${typeMeta.color}20`, color: typeMeta.color }}
+                          className="text-[10px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 border"
+                          style={{ 
+                            backgroundColor: `${typeMeta.color}15`, 
+                            color: typeMeta.color,
+                            borderColor: `${typeMeta.color}30`
+                          }}
                         >
-                          {typeMeta.name}
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: typeMeta.color }} />
+                          <span>{typeMeta.name}</span>
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 text-gray-300">
-                        {project ? project.title : <span className="text-gray-600">—</span>}
+                      <td className="py-3 px-3">
+                        {relatedEntities.length > 0 ? (
+                          <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                            {relatedEntities.slice(0, 2).map(r => (
+                              <span 
+                                key={r.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onNavigateToEntity) onNavigateToEntity(r.id, r.type);
+                                }}
+                                className="text-[11px] px-2 py-0.5 rounded-lg bg-[#14141c] hover:bg-[#1b1b26] text-blue-300 border border-[#262638] flex items-center gap-1 truncate max-w-[140px] transition"
+                              >
+                                <LinkIcon className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span className="truncate">{r.title}</span>
+                              </span>
+                            ))}
+                            {relatedEntities.length > 2 && (
+                              <span className="text-[10px] text-gray-500 font-mono">
+                                +{relatedEntities.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-600">—</span>
+                        )}
                       </td>
 
-                      <td className="py-3 px-4 text-gray-400">
-                        <div className="flex items-center gap-2 truncate max-w-sm">
-                          {Object.entries(props).slice(0, 2).map(([k, v]) => (
-                            <span key={k} className="text-[11px] bg-[#14141c] px-2 py-0.5 rounded border border-[#232332]">
-                              <span className="text-gray-500 mr-1">{k}:</span>
-                              <span className="text-gray-200">{String(v)}</span>
-                            </span>
-                          ))}
-                        </div>
+                      <td className="py-3 px-3 text-gray-400">
+                        {relevantProps.length > 0 ? (
+                          <div className="flex items-center gap-1.5 flex-wrap max-w-sm">
+                            {relevantProps.map(([k, v]) => (
+                              <span key={k} className="text-[11px] bg-[#14141c] px-2 py-0.5 rounded-lg border border-[#232332]">
+                                <span className="text-gray-400 mr-1 capitalize">{k.replace('_', ' ')}:</span>
+                                <span className="text-gray-200 font-medium">{String(v)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-600 text-[11px]">—</span>
+                        )}
                       </td>
 
-                      <td className="py-3 px-4 font-mono text-[11px] text-gray-400">
+                      <td className="py-3 px-3 text-[11px] text-gray-400 font-mono">
                         {new Date(obj.created_at).toLocaleDateString()}
                       </td>
 
@@ -728,10 +870,11 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                               onDeleteObject(obj.id);
                             }
                           }}
-                          className="p-1.5 text-gray-500 hover:text-red-400 transition rounded hover:bg-red-950/30"
-                          title="Eliminar"
+                          className="p-2 text-gray-400 hover:text-red-400 transition rounded-lg hover:bg-red-950/30"
+                          title="Eliminar objeto"
+                          aria-label="Eliminar objeto"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
@@ -787,17 +930,21 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         )}
       </div>
 
-      {/* Modal Crear Nuevo Objeto */}
+      {/* Modal Creación Rápida de Objeto (Estilo Capacities/Obsidian) */}
       {isCreatingObject && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50">
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50"
+          onClick={() => setIsCreatingObject(false)}
+        >
           <form 
             onSubmit={handleCreateSubmit} 
-            className="bg-[#191924] border border-[#2f2f42] rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+            className="bg-[#181824] border border-[#2c2c3e] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-[#28283a]">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Boxes className="w-4 h-4 text-emerald-400" />
-                <span>Nuevo Objeto / Entidad</span>
+            <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-blue-400" />
+                <span>Nuevo objeto</span>
               </h3>
               <button
                 type="button"
@@ -810,273 +957,88 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
 
             {/* Type selector */}
             <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">
-                Tipo de Entidad
+              <label className="text-xs text-gray-400 font-medium block mb-1.5">
+                Tipo de objeto
               </label>
-              <select
-                value={newType}
-                onChange={e => setNewType(e.target.value)}
-                className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none cursor-pointer"
-              >
-                {allTypeDefinitions.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} {t.is_custom ? '(Personalizado)' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                {allTypeDefinitions.map(t => {
+                  const isSelected = newType === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setNewType(t.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium border text-left transition ${
+                        isSelected
+                          ? 'bg-blue-600/20 text-white border-blue-500/60'
+                          : 'bg-[#14141c] text-gray-300 border-[#232332] hover:bg-[#1f1f2d]'
+                      }`}
+                    >
+                      <span 
+                        className="w-2 h-2 rounded-full flex-shrink-0" 
+                        style={{ backgroundColor: t.color || '#3b82f6' }} 
+                      />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Title */}
+            {/* Title / Name (Required) */}
             <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">
-                Nombre o Título *
+              <label className="text-xs text-gray-400 font-medium block mb-1.5">
+                Nombre o título *
               </label>
               <input
                 type="text"
+                autoFocus
                 required
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
-                placeholder="Ej. Carlos Mendoza, Reunión Sprint, Clean Architecture..."
-                className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
+                placeholder="Ej. Carlos Mendoza, Reunión de Sprint, Clean Code..."
+                className="w-full px-3.5 py-2.5 bg-[#121218] border border-[#2a2a3c] rounded-xl text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
               />
             </div>
 
-            {/* Description */}
+            {/* Description (Optional) */}
             <div>
-              <label className="text-xs text-gray-300 font-medium block mb-1">
-                Descripción
+              <label className="text-xs text-gray-400 font-medium block mb-1.5">
+                Descripción corta <span className="text-gray-500 font-normal">(opcional)</span>
               </label>
-              <textarea
+              <input
+                type="text"
                 value={newDescription}
                 onChange={e => setNewDescription(e.target.value)}
-                placeholder="Resumen o descripción introductoria..."
-                rows={2}
-                className="w-full px-3.5 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500 resize-none"
+                placeholder="Breve contexto..."
+                className="w-full px-3.5 py-2 bg-[#121218] border border-[#2a2a3c] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
               />
             </div>
 
-            {/* Project & Thumbnail */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-300 font-medium block mb-1">
-                  Proyecto Vinculado
-                </label>
-                <select
-                  value={newProjectId}
-                  onChange={e => setNewProjectId(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none cursor-pointer"
-                >
-                  <option value="">Sin Proyecto</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>{p.title}</option>
-                  ))}
-                </select>
-              </div>
+            <p className="text-[11px] text-gray-400 leading-relaxed pt-1">
+              Las propiedades, portada, adjuntos en R2 y vínculos se completan al abrir el panel del objeto.
+            </p>
 
-              <div>
-                <label className="text-xs text-gray-300 font-medium block mb-1">
-                  URL Portada / Imagen
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    value={newThumbnailUrl}
-                    onChange={e => setNewThumbnailUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 px-3 py-2 bg-[#121217] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-emerald-500"
-                  />
-                  <input
-                    type="file"
-                    ref={newCoverInputRef}
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      if (!e.target.files || !e.target.files[0]) return;
-                      const file = e.target.files[0];
-                      try {
-                        setIsUploadingNewCover(true);
-                        const res = await r2Storage.uploadFile(file, 'objects/covers');
-                        setNewThumbnailUrl(res.url);
-                        setNewFormProperties(prev => ({ ...prev, cover_url: res.url }));
-                      } catch (err: any) {
-                        alert('Error subiendo portada a R2: ' + err.message);
-                      } finally {
-                        setIsUploadingNewCover(false);
-                        if (newCoverInputRef.current) newCoverInputRef.current.value = '';
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => newCoverInputRef.current?.click()}
-                    disabled={isUploadingNewCover}
-                    className="px-3 py-2 rounded-xl bg-[#222232] hover:bg-[#2b2b3e] text-xs text-gray-300 hover:text-white border border-[#35354a] transition flex items-center gap-1.5 flex-shrink-0"
-                    title="Subir archivo a Cloudflare R2"
-                  >
-                    {isUploadingNewCover ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                    ) : (
-                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                    )}
-                    <span className="hidden sm:inline">Subir R2</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Archivos Adjuntos Iniciales (Imágenes, Audio, Documentos R2) */}
-            <div className="border-t border-[#262638] pt-3 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                  <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Archivos Adjuntos ({newUploadedFiles.length})</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 font-mono">
-                    R2 Cloudflare
-                  </span>
-                </span>
-                <input
-                  type="file"
-                  ref={newFileInputRef}
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      const added = Array.from(e.target.files);
-                      setNewUploadedFiles(prev => [...prev, ...added]);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => newFileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#1e1e2d] hover:bg-[#2a2a3e] text-cyan-300 border border-[#2d2d42] transition"
-                >
-                  <Upload className="w-3 h-3" />
-                  <span>Adjuntar Archivos</span>
-                </button>
-              </div>
-
-              {newUploadedFiles.length > 0 ? (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {newUploadedFiles.map((file, idx) => {
-                    const isImg = file.type.startsWith('image/');
-                    const isAudio = file.type.startsWith('audio/');
-                    const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
-
-                    return (
-                      <div 
-                        key={idx}
-                        className="p-2.5 rounded-xl bg-[#14141c] border border-[#232332] flex items-center justify-between gap-3 text-xs"
-                      >
-                        <div className="flex items-center gap-2.5 overflow-hidden flex-1">
-                          <div className="w-8 h-8 rounded-lg bg-[#1c1c28] border border-[#2a2a3c] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                            {isImg ? (
-                              <img 
-                                src={URL.createObjectURL(file)} 
-                                alt="" 
-                                className="w-full h-full object-cover" 
-                              />
-                            ) : isAudio ? (
-                              <Music className="w-4 h-4 text-emerald-400" />
-                            ) : (
-                              <FileText className="w-4 h-4 text-cyan-400" />
-                            )}
-                          </div>
-                          <div className="overflow-hidden flex-1">
-                            <p className="text-xs font-medium text-white truncate">{file.name}</p>
-                            <p className="text-[10px] text-gray-400 font-mono">
-                              {(file.size / 1024).toFixed(1)} KB • {file.type || 'Archivo'}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Audio quick preview preview controller */}
-                        {isAudio && (
-                          <audio 
-                            controls 
-                            src={URL.createObjectURL(file)} 
-                            className="h-7 max-w-[150px] sm:max-w-[200px]" 
-                          />
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setNewUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
-                          className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition flex-shrink-0"
-                          title="Quitar archivo antes de guardar"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-[11px] text-gray-500 italic">
-                  Puedes adjuntar imágenes, audios o documentos PDF. Se subirán de forma persistente y sin pérdida a Cloudflare R2 al crear el objeto.
-                </p>
-              )}
-            </div>
-
-            {/* Form Attributes according to Type Definition */}
-            {currentTypeDef && currentTypeDef.fields && currentTypeDef.fields.length > 0 && (
-              <div className="border-t border-[#262638] pt-3 space-y-3">
-                <span className="text-xs font-semibold text-gray-300 block">
-                  Atributos de {currentTypeDef.name}
-                </span>
-
-                <div className="space-y-2.5">
-                  {currentTypeDef.fields.map(field => (
-                    <div key={field.key}>
-                      <label className="text-[11px] text-gray-400 block mb-1">
-                        {field.label} {field.required && <span className="text-red-400">*</span>}
-                      </label>
-                      {field.type === 'select' ? (
-                        <select
-                          value={newFormProperties[field.key] || ''}
-                          onChange={e => setNewFormProperties(prev => ({ ...prev, [field.key]: e.target.value }))}
-                          className="w-full px-3 py-1.5 bg-[#121217] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none"
-                        >
-                          <option value="">Seleccionar...</option>
-                          {(field.options || []).map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                          value={newFormProperties[field.key] || ''}
-                          onChange={e => setNewFormProperties(prev => ({ ...prev, [field.key]: e.target.value }))}
-                          placeholder={field.label}
-                          className="w-full px-3 py-1.5 bg-[#121217] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-emerald-500"
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-[#252538]">
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#232332]">
               <button
                 type="button"
                 onClick={() => setIsCreatingObject(false)}
-                className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-[#252533] transition"
+                className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-[#20202c] transition"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                disabled={isUploadingNewFiles}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                disabled={isUploadingNewFiles || !newTitle.trim()}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition shadow-md disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isUploadingNewFiles ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Guardando en R2 e InsForge...</span>
+                    <span>Creando...</span>
                   </>
                 ) : (
-                  <span>Crear Objeto</span>
+                  <span>Crear objeto</span>
                 )}
               </button>
             </div>
@@ -1092,29 +1054,9 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         existingTypes={allTypeDefinitions}
       />
 
-      {/* Modal Ficha Personal Evolutiva (Personas) */}
-      {selectedDetailObject && selectedDetailObject.object_type === 'person' && (
-        <PersonDetailModal
-          person={selectedDetailObject}
-          isOpen={true}
-          onClose={() => setSelectedDetailObject(null)}
-          onUpdate={onUpdateObject}
-          onDelete={onDeleteObject}
-          projects={projects}
-          allPeople={objects.filter(o => o.object_type === 'person')}
-          attachments={attachments}
-          onAttachmentCreated={onAttachmentCreated}
-          onAttachmentDeleted={onAttachmentDeleted}
-          notes={notes}
-          tasks={tasks}
-          onOpenNote={onOpenNote}
-          onSelectPerson={(p) => setSelectedDetailObject(p)}
-        />
-      )}
-
-      {/* Modal Ficha Completa del Objeto (Dossier estándar para otros tipos) */}
-      {selectedDetailObject && selectedDetailObject.object_type !== 'person' && (
-        <ObjectDetailModal
+      {/* Página/Panel Unificado del Objeto (Estilo Capacities & Obsidian) */}
+      {selectedDetailObject && (
+        <ObjectPagePanel
           object={selectedDetailObject}
           isOpen={true}
           onClose={() => setSelectedDetailObject(null)}
@@ -1128,8 +1070,11 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
           notes={notes}
           tasks={tasks}
           allObjects={objects}
+          areas={areas}
+          customTypes={customTypes}
           onOpenNote={onOpenNote}
           onNavigateToObject={(o) => setSelectedDetailObject(o)}
+          onNavigateToEntity={onNavigateToEntity}
         />
       )}
     </div>

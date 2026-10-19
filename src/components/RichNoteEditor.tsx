@@ -69,7 +69,10 @@ import {
   Boxes,
   Maximize2,
   Loader2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ChevronDown,
+  Rows,
+  Columns
 } from 'lucide-react';
 
 import { 
@@ -79,11 +82,14 @@ import {
   AppTask, 
   AppObject, 
   AppReminder, 
-  AppAttachment 
+  AppAttachment,
+  AppArea,
+  ObjectTypeDefinition
 } from '../lib/types';
 import { db, storage } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 import { AudioRecorderModal } from './AudioRecorderModal';
+import { UniversalLinkSelectorModal, UniversalLinkItem } from './UniversalLinkSelectorModal';
 
 interface RichNoteEditorProps {
   note: AppNote;
@@ -91,6 +97,8 @@ interface RichNoteEditorProps {
   projects: AppProject[];
   tasks: AppTask[];
   objects: AppObject[];
+  areas?: AppArea[];
+  customTypes?: ObjectTypeDefinition[];
   onBack: () => void;
   onSave: (noteId: string, updates: Partial<AppNote>) => Promise<void>;
   onDelete: (noteId: string) => Promise<void>;
@@ -104,6 +112,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   projects,
   tasks,
   objects,
+  areas = [],
+  customTypes = [],
   onBack,
   onSave,
   onDelete,
@@ -117,6 +127,10 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [isPinned, setIsPinned] = useState(!!note.is_pinned);
   const [tagsInput, setTagsInput] = useState((note.tags || []).join(', '));
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty'>('saved');
+
+  // Universal Link Selector state & Trigger
+  const [isUniversalLinkModalOpen, setIsUniversalLinkModalOpen] = useState(false);
+  const [linkInitialQuery, setLinkInitialQuery] = useState('');
 
   // Sidebar Tabs inside editor
   const [sidebarTab, setSidebarTab] = useState<'none' | 'reminders' | 'tasks' | 'entities' | 'attachments'>('none');
@@ -133,13 +147,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [isReTranscribing, setIsReTranscribing] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
 
+  // Table management menu state
+  const [isTableMenuOpen, setIsTableMenuOpen] = useState(false);
+  const tableMenuRef = useRef<HTMLDivElement>(null);
+
   // Drag & drop file overlay
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [lightboxImgUrl, setLightboxImgUrl] = useState<string | null>(null);
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
-
   const lastSelectionRef = useRef<{ from: number; to: number } | null>(null);
+
+  // Delete note state & modal
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // TipTap Editor initialization
   const editor = useEditor({
@@ -236,8 +258,38 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       const { from, to } = currentEditor.state.selection;
       lastSelectionRef.current = { from, to };
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: currentEditor }) => {
       setSaveStatus('dirty');
+
+      // Check for [[ or @ trigger at cursor position
+      try {
+        const { from } = currentEditor.state.selection;
+        const textBefore = currentEditor.state.doc.textBetween(Math.max(0, from - 30), from, '\n', '\n');
+
+        // Check for double bracket [[
+        const bracketIndex = textBefore.lastIndexOf('[[');
+        if (bracketIndex !== -1) {
+          const queryAfterBracket = textBefore.slice(bracketIndex + 2);
+          if (!queryAfterBracket.includes(']]') && queryAfterBracket.length < 25) {
+            setLinkInitialQuery(queryAfterBracket.trim());
+            setIsUniversalLinkModalOpen(true);
+            return;
+          }
+        }
+
+        // Check for @ mention trigger
+        const atIndex = textBefore.lastIndexOf('@');
+        if (atIndex !== -1 && (atIndex === 0 || /\s/.test(textBefore[atIndex - 1]))) {
+          const queryAfterAt = textBefore.slice(atIndex + 1);
+          if (!queryAfterAt.includes(' ') && queryAfterAt.length < 20) {
+            setLinkInitialQuery(queryAfterAt.trim());
+            setIsUniversalLinkModalOpen(true);
+            return;
+          }
+        }
+      } catch (err) {
+        // Silently continue
+      }
     }
   });
 
@@ -338,6 +390,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     }, 800);
     return () => clearTimeout(timer);
   }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, tagsInput]);
+
+  // Close table dropdown menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tableMenuRef.current && !tableMenuRef.current.contains(event.target as Node)) {
+        setIsTableMenuOpen(false);
+      }
+    };
+    if (isTableMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTableMenuOpen]);
 
   // Robust insertion helper that restores cursor position, falls back cleanly and persists
   const insertImageAtCursor = async (imageUrl: string, altText?: string) => {
@@ -455,10 +522,49 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
   // Insert Link
   const handleAddLink = () => {
-    const url = prompt('Ingresa la URL del enlace (https://...):');
-    if (!url) return;
-    if (editor) {
-      editor.chain().focus().setLink({ href: url }).run();
+    setIsUniversalLinkModalOpen(true);
+  };
+
+  // Insert linked entity chip into TipTap editor and record in links table
+  const handleUniversalLinkSelect = async (item: UniversalLinkItem, relationLabel = 'mention') => {
+    if (!editor) return;
+
+    try {
+      editor.commands.focus();
+
+      // Clean up [[ or @ prefix if user had typed it
+      const { from } = editor.state.selection;
+      const textBefore = editor.state.doc.textBetween(Math.max(0, from - 30), from, '\n', '\n');
+      
+      let replaceFrom = from;
+      const bracketIdx = textBefore.lastIndexOf('[[');
+      const atIdx = textBefore.lastIndexOf('@');
+
+      if (bracketIdx !== -1) {
+        replaceFrom = from - (textBefore.length - bracketIdx);
+      } else if (atIdx !== -1) {
+        replaceFrom = from - (textBefore.length - atIdx);
+      }
+
+      if (replaceFrom < from) {
+        editor.chain().deleteRange({ from: replaceFrom, to: from }).run();
+      }
+
+      // Capacities-style interactive chip HTML
+      const chipHtml = `<a href="#entity/${item.type}/${item.id}" data-entity-id="${item.id}" data-entity-type="${item.type}" class="inline-flex items-center gap-1 px-2 py-0.5 my-0.5 rounded-md text-xs font-semibold bg-blue-950/60 text-blue-300 border border-blue-800/50 hover:bg-blue-900/60 transition no-underline"><span>🔗</span><span>${item.title}</span></a> `;
+
+      editor
+        .chain()
+        .focus()
+        .insertContent(chipHtml)
+        .run();
+
+      // Record link in database
+      await db.createUniversalLink(note.id, 'note', item.id, item.type, relationLabel);
+
+      setSaveStatus('dirty');
+    } catch (err) {
+      console.error('Error insertando vínculo universal:', err);
     }
   };
 
@@ -581,6 +687,43 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
   const noteTasks = tasks.filter(t => t.note_id === note.id);
 
+  // Trigger delete modal or discard unsaved changes
+  const handleDeleteClick = () => {
+    // If the note does not exist yet in DB or has no valid ID
+    if (!note.id) {
+      if (window.confirm('Esta nota no ha sido guardada en la base de datos. ¿Deseas descartar los cambios y salir?')) {
+        onBack();
+      }
+      return;
+    }
+
+    setDeleteError(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Perform permanent deletion through existing onDelete prop
+  const handleDeleteConfirm = async () => {
+    if (!note.id || isDeleting) return;
+
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+
+      // Call parent deletion handler
+      await onDelete(note.id);
+
+      // Close modal and navigate back to the origin notes list/notebook
+      setIsDeleteModalOpen(false);
+      onBack();
+    } catch (err: any) {
+      console.error('Error eliminando la nota desde el editor:', err);
+      // Keep note open and display informative error message
+      setDeleteError(err.message || 'Error al eliminar la nota de la base de datos.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div 
       onDragOver={handleDragOver}
@@ -687,15 +830,29 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
           <button
             onClick={handleSave}
-            disabled={saveStatus === 'saving'}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-sm transition ${
+            disabled={saveStatus === 'saving' || isDeleting}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-95 ${
               saveStatus === 'saving' 
                 ? 'bg-blue-800 cursor-wait opacity-80' 
                 : 'bg-blue-600 hover:bg-blue-500'
             }`}
+            title="Guardar nota"
           >
             <Save className="w-3.5 h-3.5" />
-            {saveStatus === 'saving' ? 'Guardando...' : 'Guardar'}
+            <span>{saveStatus === 'saving' ? 'Guardando...' : 'Guardar'}</span>
+          </button>
+
+          {/* Delete Button (Discreet danger styling, adjacent to Save) */}
+          <button
+            type="button"
+            onClick={handleDeleteClick}
+            disabled={isDeleting || saveStatus === 'saving'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Eliminar esta nota"
+            aria-label="Eliminar nota"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Eliminar</span>
           </button>
         </div>
       </div>
@@ -753,278 +910,485 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         </div>
       )}
 
-      {/* Zoho Notebook Style Rich Toolbar */}
+      {/* Zoho Notebook Style Rich Toolbar - Centered relative to document area */}
       {editor && (
-        <div className="px-3 sm:px-6 py-2 border-b border-[#222232] bg-[#161622] flex items-center justify-between gap-2 text-xs overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-1 flex-nowrap min-w-max">
-            {/* Undo / Redo */}
-            <button
-              onClick={() => editor.chain().focus().undo().run()}
-              disabled={!editor.can().undo()}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] disabled:opacity-30"
-              title="Deshacer (Ctrl+Z)"
-            >
-              <Undo className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().redo().run()}
-              disabled={!editor.can().redo()}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] disabled:opacity-30"
-              title="Rehacer (Ctrl+Y)"
-            >
-              <Redo className="w-3.5 h-3.5" />
-            </button>
+        <div className="w-full border-b border-[#222232] bg-[#161622] sticky top-0 z-20">
+          <div className="max-w-[840px] mx-auto px-2 sm:px-4 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+            {/* Formatting Tools - Centered, uniform spacing, wrapping without horizontal scroll */}
+            <div className="w-full flex-1 flex items-center justify-center flex-wrap gap-1 sm:gap-1.5 py-0.5">
+              {/* Undo / Redo */}
+              <button
+                onClick={() => editor.chain().focus().undo().run()}
+                disabled={!editor.can().undo()}
+                className="p-1 sm:p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] disabled:opacity-30 transition"
+                title="Deshacer (Ctrl+Z)"
+              >
+                <Undo className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().redo().run()}
+                disabled={!editor.can().redo()}
+                className="p-1 sm:p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] disabled:opacity-30 transition"
+                title="Rehacer (Ctrl+Y)"
+              >
+                <Redo className="w-3.5 h-3.5" />
+              </button>
 
-            <span className="w-px h-4 bg-[#2b2b3e] mx-1" />
+              <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-            {/* Headings */}
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Encabezado H1"
-            >
-              <Heading1 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Encabezado H2"
-            >
-              <Heading2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('heading', { level: 3 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Encabezado H3"
-            >
-              <Heading3 className="w-3.5 h-3.5" />
-            </button>
+              {/* Headings */}
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Encabezado H1"
+              >
+                <Heading1 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Encabezado H2"
+              >
+                <Heading2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('heading', { level: 3 }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Encabezado H3"
+              >
+                <Heading3 className="w-3.5 h-3.5" />
+              </button>
 
-            <span className="w-px h-4 bg-[#2b2b3e] mx-1" />
+              <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-            {/* Inline Formatting */}
-            <button
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('bold') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Negrita (Ctrl+B)"
-            >
-              <BoldIcon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('italic') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Cursiva (Ctrl+I)"
-            >
-              <ItalicIcon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleUnderline().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('underline') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Subrayado (Ctrl+U)"
-            >
-              <UnderlineIcon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('strike') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Tachado"
-            >
-              <Strikethrough className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('highlight') ? 'bg-yellow-400 text-black' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Resaltado"
-            >
-              <Highlighter className="w-3.5 h-3.5" />
-            </button>
+              {/* Inline Formatting */}
+              <button
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('bold') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Negrita (Ctrl+B)"
+              >
+                <BoldIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('italic') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Cursiva (Ctrl+I)"
+              >
+                <ItalicIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleUnderline().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('underline') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Subrayado (Ctrl+U)"
+              >
+                <UnderlineIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleStrike().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('strike') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Tachado"
+              >
+                <Strikethrough className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('highlight') ? 'bg-yellow-400 text-black' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Resaltado"
+              >
+                <Highlighter className="w-3.5 h-3.5" />
+              </button>
 
-            <span className="w-px h-4 bg-[#2b2b3e] mx-1" />
+              <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-            {/* Alignments */}
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('left').run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive({ textAlign: 'left' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Alinear a la izquierda"
-            >
-              <AlignLeft className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('center').run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive({ textAlign: 'center' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Centrar"
-            >
-              <AlignCenter className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('right').run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive({ textAlign: 'right' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Alinear a la derecha"
-            >
-              <AlignRight className="w-3.5 h-3.5" />
-            </button>
+              {/* Alignments */}
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive({ textAlign: 'left' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Alinear a la izquierda"
+              >
+                <AlignLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive({ textAlign: 'center' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Centrar"
+              >
+                <AlignCenter className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive({ textAlign: 'right' }) ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Alinear a la derecha"
+              >
+                <AlignRight className="w-3.5 h-3.5" />
+              </button>
 
-            <span className="w-px h-4 bg-[#2b2b3e] mx-1" />
+              <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-            {/* Lists & Task Checklist */}
-            <button
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Lista con viñetas"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleOrderedList().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Lista numerada"
-            >
-              <ListOrdered className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleTaskList().run()}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('taskList') ? 'bg-emerald-600 text-white' : 'text-emerald-400 hover:bg-[#252538]'
-              }`}
-              title="Lista de Tareas Interactivas"
-            >
-              <CheckSquare className="w-3.5 h-3.5" />
-            </button>
+              {/* Lists & Task Checklist */}
+              <button
+                onClick={() => editor.chain().focus().toggleBulletList().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Lista con viñetas"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Lista numerada"
+              >
+                <ListOrdered className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleTaskList().run()}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('taskList') ? 'bg-emerald-600 text-white' : 'text-emerald-400 hover:bg-[#252538]'
+                }`}
+                title="Lista de Tareas Interactivas"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+              </button>
 
-            <span className="w-px h-4 bg-[#2b2b3e] mx-1" />
+              <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-            {/* Media & Structures */}
-            <button
-              onClick={handleInsertTable}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538]"
-              title="Insertar Tabla Editable (3x3)"
-            >
-              <Boxes className="w-3.5 h-3.5" />
-            </button>
+              {/* Media & Structures */}
+              <div className="relative inline-flex items-center" ref={tableMenuRef}>
+                <button
+                  onClick={() => {
+                    if (editor.isActive('table')) {
+                      setIsTableMenuOpen(!isTableMenuOpen);
+                    } else {
+                      handleInsertTable();
+                    }
+                  }}
+                  className={`p-1 sm:p-1.5 rounded transition flex items-center gap-0.5 ${
+                    editor.isActive('table')
+                      ? 'bg-blue-600 text-white ring-1 ring-blue-400'
+                      : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                  }`}
+                  title={editor.isActive('table') ? 'Gestionar tabla activa' : 'Insertar Tabla Editable (3x3)'}
+                >
+                  <Boxes className="w-3.5 h-3.5" />
+                  {editor.isActive('table') && <ChevronDown className="w-3 h-3 text-white/80" />}
+                </button>
 
-            <button
-              onClick={handleAddLink}
-              className={`p-1.5 rounded transition ${
-                editor.isActive('link') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-              }`}
-              title="Insertar Enlace"
-            >
-              <Link2 className="w-3.5 h-3.5" />
-            </button>
+                {/* Table Dropdown Menu */}
+                {isTableMenuOpen && editor.isActive('table') && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-1.5 w-56 bg-[#1a1a28] border border-[#2d2d42] rounded-lg shadow-xl z-50 py-1.5 text-xs text-gray-200 divide-y divide-[#28283a]">
+                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      Fila
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().addRowBefore().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Añadir fila arriba</span>
+                        <span className="text-[10px] text-gray-400">↑</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().addRowAfter().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Añadir fila abajo</span>
+                        <span className="text-[10px] text-gray-400">↓</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().deleteRow().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-red-600/80 text-red-300 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Eliminar fila</span>
+                        <span className="text-[10px]">✕</span>
+                      </button>
+                    </div>
 
-            {/* Upload Image Button */}
-            <input
-              type="file"
-              ref={fileUploadInputRef}
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleInsertImage(e.target.files[0]);
-                }
-              }}
-            />
-            <button
-              onClick={() => fileUploadInputRef.current?.click()}
-              disabled={isUploadingImage}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition text-xs ${
-                isUploadingImage
-                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 cursor-wait'
-                  : 'text-gray-300 hover:text-white hover:bg-[#252538] border border-transparent'
-              }`}
-              title={isUploadingImage ? 'Subiendo e insertando imagen...' : 'Insertar imagen en la nota'}
-            >
-              {isUploadingImage ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-                  <span className="text-[11px] font-medium text-blue-300">Subiendo imagen...</span>
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="hidden sm:inline text-[11px]">Imagen</span>
-                </>
-              )}
-            </button>
+                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      Columna
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().addColumnBefore().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Añadir columna izquierda</span>
+                        <span className="text-[10px] text-gray-400">←</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().addColumnAfter().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Añadir columna derecha</span>
+                        <span className="text-[10px] text-gray-400">→</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().deleteColumn().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-red-600/80 text-red-300 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Eliminar columna</span>
+                        <span className="text-[10px]">✕</span>
+                      </button>
+                    </div>
 
-            {/* Record Voice Note Button */}
-            <button
-              onClick={() => setIsVoiceModalOpen(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/30 transition"
-              title="Grabar Nota de Voz & Transcribir"
-            >
-              <Mic className="w-3 h-3 text-red-400" />
-              <span>Grabar Voz</span>
-            </button>
+                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      Tabla
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().toggleHeaderRow().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
+                      >
+                        <span>Alternar fila encabezado</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          editor.chain().focus().deleteTable().run();
+                          setIsTableMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-red-600 text-red-300 hover:text-white font-medium flex items-center justify-between transition"
+                      >
+                        <span>Eliminar tabla completa</span>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-            {/* Safe HTML Block */}
-            <button
-              onClick={handleInsertSafeHtml}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] font-mono text-[10px]"
-              title="Insertar bloque HTML sanitizado de forma segura"
-            >
-              &lt;/&gt;
-            </button>
+              <button
+                onClick={handleAddLink}
+                className={`p-1 sm:p-1.5 rounded transition ${
+                  editor.isActive('link') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-[#252538]'
+                }`}
+                title="Insertar Enlace"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Upload Image Button */}
+              <input
+                type="file"
+                ref={fileUploadInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleInsertImage(e.target.files[0]);
+                  }
+                }}
+              />
+              <button
+                onClick={() => fileUploadInputRef.current?.click()}
+                disabled={isUploadingImage}
+                className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded transition text-xs ${
+                  isUploadingImage
+                    ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 cursor-wait'
+                    : 'text-gray-300 hover:text-white hover:bg-[#252538] border border-transparent'
+                }`}
+                title={isUploadingImage ? 'Subiendo e insertando imagen...' : 'Insertar imagen en la nota'}
+              >
+                {isUploadingImage ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                    <span className="hidden sm:inline text-[11px] font-medium text-blue-300">Subiendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="hidden md:inline text-[11px]">Imagen</span>
+                  </>
+                )}
+              </button>
+
+              {/* Record Voice Note Button */}
+              <button
+                onClick={() => setIsVoiceModalOpen(true)}
+                className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/30 transition text-[11px]"
+                title="Grabar Nota de Voz & Transcribir"
+              >
+                <Mic className="w-3 h-3 text-red-400" />
+                <span className="hidden sm:inline">Voz</span>
+              </button>
+
+              {/* Safe HTML Block */}
+              <button
+                onClick={handleInsertSafeHtml}
+                className="p-1 sm:p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252538] font-mono text-[11px]"
+                title="Insertar bloque HTML sanitizado de forma segura"
+              >
+                &lt;/&gt;
+              </button>
+            </div>
+
+            {/* Right Toolbar Panels Toggle */}
+            <div className="flex items-center justify-center flex-wrap gap-1 sm:gap-1.5 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#222232]/80 sm:border-l sm:border-[#2b2b3e] sm:pl-2 shrink-0">
+              <button
+                onClick={() => setSidebarTab(sidebarTab === 'tasks' ? 'none' : 'tasks')}
+                className={`flex items-center gap-1 px-2 py-1 rounded transition text-[11px] ${
+                  sidebarTab === 'tasks' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
+                }`}
+              >
+                <CheckSquare className="w-3 h-3 text-emerald-400" />
+                <span>Tareas ({noteTasks.length})</span>
+              </button>
+
+              <button
+                onClick={() => setSidebarTab(sidebarTab === 'reminders' ? 'none' : 'reminders')}
+                className={`flex items-center gap-1 px-2 py-1 rounded transition text-[11px] ${
+                  sidebarTab === 'reminders' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
+                }`}
+              >
+                <Bell className="w-3 h-3 text-amber-400" />
+                <span>Recordatorios ({reminders.length})</span>
+              </button>
+
+              <button
+                onClick={() => setSidebarTab(sidebarTab === 'attachments' ? 'none' : 'attachments')}
+                className={`flex items-center gap-1 px-2 py-1 rounded transition text-[11px] ${
+                  sidebarTab === 'attachments' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
+                }`}
+              >
+                <Paperclip className="w-3 h-3 text-cyan-400" />
+                <span>Adjuntos ({attachments.length})</span>
+              </button>
+            </div>
           </div>
 
-          {/* Right Toolbar Panels Toggle */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setSidebarTab(sidebarTab === 'tasks' ? 'none' : 'tasks')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-[11px] ${
-                sidebarTab === 'tasks' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
-              }`}
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-              Tareas ({noteTasks.length})
-            </button>
+          {/* Dedicated Contextual Action Bar when Cursor is inside a Table - Centered, wrapping cleanly */}
+          {editor.isActive('table') && (
+            <div className="border-t border-[#222232] bg-[#1a1a29]/95 backdrop-blur-sm px-2 sm:px-4 py-1.5">
+              <div className="max-w-[840px] mx-auto flex flex-wrap items-center justify-center sm:justify-between gap-2 text-xs">
+                <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-400 uppercase tracking-wider pr-1">
+                    <Boxes className="w-3.5 h-3.5 text-blue-400" />
+                    Tabla:
+                  </span>
 
-            <button
-              onClick={() => setSidebarTab(sidebarTab === 'reminders' ? 'none' : 'reminders')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-[11px] ${
-                sidebarTab === 'reminders' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
-              }`}
-            >
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              Recordatorios ({reminders.length})
-            </button>
+                  {/* Row operations */}
+                  <div className="flex items-center gap-0.5 sm:gap-1 bg-[#222235] px-1 sm:px-1.5 py-0.5 rounded-md border border-[#2f2f45]">
+                    <span className="text-[10px] text-gray-400 uppercase font-medium mr-1 flex items-center gap-0.5">
+                      <Rows className="w-3 h-3 text-gray-400" /> Fila:
+                    </span>
+                    <button
+                      onClick={() => editor.chain().focus().addRowBefore().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
+                      title="Añadir fila encima de la actual"
+                    >
+                      + Encima
+                    </button>
+                    <button
+                      onClick={() => editor.chain().focus().addRowAfter().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
+                      title="Añadir fila debajo de la actual"
+                    >
+                      + Debajo
+                    </button>
+                    <button
+                      onClick={() => editor.chain().focus().deleteRow().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded text-[11px] transition"
+                      title="Eliminar fila actual"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
 
-            <button
-              onClick={() => setSidebarTab(sidebarTab === 'attachments' ? 'none' : 'attachments')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition text-[11px] ${
-                sidebarTab === 'attachments' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-[#20202e]'
-              }`}
-            >
-              <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
-              Adjuntos ({attachments.length})
-            </button>
-          </div>
+                  {/* Column operations */}
+                  <div className="flex items-center gap-0.5 sm:gap-1 bg-[#222235] px-1 sm:px-1.5 py-0.5 rounded-md border border-[#2f2f45]">
+                    <span className="text-[10px] text-gray-400 uppercase font-medium mr-1 flex items-center gap-0.5">
+                      <Columns className="w-3 h-3 text-gray-400" /> Columna:
+                    </span>
+                    <button
+                      onClick={() => editor.chain().focus().addColumnBefore().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
+                      title="Añadir columna a la izquierda"
+                    >
+                      + Izq
+                    </button>
+                    <button
+                      onClick={() => editor.chain().focus().addColumnAfter().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
+                      title="Añadir columna a la derecha"
+                    >
+                      + Der
+                    </button>
+                    <button
+                      onClick={() => editor.chain().focus().deleteColumn().run()}
+                      className="px-1.5 sm:px-2 py-0.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded text-[11px] transition"
+                      title="Eliminar columna actual"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+
+                  {/* Table Header Row Toggle */}
+                  <button
+                    onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+                    className="px-2 py-1 text-gray-300 hover:text-white bg-[#222235] hover:bg-[#32324a] border border-[#2f2f45] rounded-md text-[11px] transition"
+                    title="Alternar estilo de fila de encabezado"
+                  >
+                    Encabezado
+                  </button>
+                </div>
+
+                {/* Delete table */}
+                <button
+                  onClick={() => editor.chain().focus().deleteTable().run()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-red-400 hover:text-red-200 hover:bg-red-950/60 border border-red-900/40 rounded-md text-[11px] transition shrink-0 font-medium"
+                  title="Eliminar tabla completa"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar tabla</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1078,7 +1442,20 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
             {/* TipTap Rich Text Area */}
             <div 
-              onClick={() => {
+              onClick={(e) => {
+                const target = e.target as HTMLElement;
+                const entityLink = target.closest('[data-entity-id]');
+                if (entityLink) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const entityId = entityLink.getAttribute('data-entity-id');
+                  const entityType = entityLink.getAttribute('data-entity-type') || 'object';
+                  if (entityId) {
+                    onNavigateToEntity(entityId, entityType);
+                  }
+                  return;
+                }
+
                 if (editor && !editor.isFocused) {
                   editor.commands.focus('end');
                 }
@@ -1404,6 +1781,102 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Note Confirmation Dialog */}
+      {isDeleteModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-note-modal-title"
+          aria-describedby="delete-note-modal-description"
+        >
+          <div 
+            className="w-full max-w-md bg-[#181824] border border-[#2e2e42] rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-red-950/60 border border-red-800/50 flex items-center justify-center text-red-400 flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <h3 id="delete-note-modal-title" className="text-base font-bold text-white tracking-tight">
+                  ¿Eliminar nota?
+                </h3>
+                <p id="delete-note-modal-description" className="text-sm text-gray-400">
+                  Esta acción eliminará de forma permanente la nota{' '}
+                  <span className="font-semibold text-gray-200 break-words">
+                    «{title?.trim() || note.title?.trim() || 'Nota sin título'}»
+                  </span>.
+                </p>
+              </div>
+            </div>
+
+            {/* Error Message if backend deletion failed */}
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/60 flex items-start gap-2.5 text-xs text-red-300">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-semibold block">No se pudo eliminar la nota:</span>
+                  <span>{deleteError}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDeleting) {
+                    setIsDeleteModalOpen(false);
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-gray-300 hover:text-white bg-[#222232] hover:bg-[#2a2a3e] border border-[#323246] transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-500 active:scale-95 transition flex items-center gap-2 shadow-lg shadow-red-950/50 disabled:opacity-50 disabled:cursor-wait"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Eliminar nota</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Link Selector Modal (Triggered by [[, @ or Link button) */}
+      <UniversalLinkSelectorModal
+        isOpen={isUniversalLinkModalOpen}
+        onClose={() => setIsUniversalLinkModalOpen(false)}
+        initialQuery={linkInitialQuery}
+        onSelect={handleUniversalLinkSelect}
+        notes={[]}
+        tasks={tasks}
+        projects={projects}
+        objects={objects}
+        areas={areas}
+        customTypes={customTypes}
+        currentEntityId={note.id}
+        currentEntityType="note"
+        title="Vincular a esta nota"
+      />
     </div>
   );
 };

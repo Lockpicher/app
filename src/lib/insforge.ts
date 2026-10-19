@@ -20,7 +20,10 @@ import {
   PersonInteraction,
   PersonCustomField,
   PersonRelationship,
-  AppArea
+  AppArea,
+  AppHabit,
+  AppHabitLog,
+  HabitLogStatus
 } from './types';
 import { auth } from './auth';
 
@@ -1387,45 +1390,160 @@ export const db = {
     }
   },
 
-  // Enlaces y Grafo
+  // Enlaces universales y Grafo (Tabla `links`)
   async getLinks(): Promise<AppLink[]> {
     const { data, error } = await insforge.database
-      .from('app_links')
-      .select();
+      .from('links')
+      .select('*')
+      .order('created_at', { ascending: false });
     if (error) console.error('Error fetching links:', error);
-    return (data as unknown as AppLink[]) || [];
+    if (!data) return [];
+    return (data as any[]).map(row => ({
+      id: row.id,
+      from_id: row.from_id,
+      from_type: row.from_type,
+      to_id: row.to_id,
+      to_type: row.to_type,
+      relation_label: row.relation_label || 'related',
+      created_at: row.created_at,
+      source_id: row.from_id,
+      source_type: row.from_type,
+      target_id: row.to_id,
+      target_type: row.to_type,
+      link_type: row.relation_label
+    }));
   },
 
-  async createLink(link: Omit<AppLink, 'id' | 'created_at'>): Promise<AppLink | null> {
+  async getLinksForEntity(entityId: string, entityType?: string): Promise<{ outgoing: AppLink[]; incoming: AppLink[] }> {
     try {
-      // Check existing link to avoid duplicates
-      const { data: existing } = await insforge.database
-        .from('app_links')
-        .select('*')
-        .eq('source_id', link.source_id)
-        .eq('target_id', link.target_id)
-        .limit(1);
+      let outQuery = insforge.database.from('links').select('*').eq('from_id', entityId);
+      let inQuery = insforge.database.from('links').select('*').eq('to_id', entityId);
 
-      if (existing && existing.length > 0) {
-        return existing[0] as unknown as AppLink;
+      if (entityType) {
+        outQuery = outQuery.eq('from_type', entityType);
+        inQuery = inQuery.eq('to_type', entityType);
       }
 
-      const { data, error } = await insforge.database
-        .from('app_links')
-        .insert([link])
-        .select();
+      const [{ data: outData, error: outErr }, { data: inData, error: inErr }] = await Promise.all([outQuery, inQuery]);
 
-      if (error) throw error;
-      return (data as unknown as AppLink[])?.[0] || null;
+      if (outErr) console.error('Error fetching outgoing links:', outErr);
+      if (inErr) console.error('Error fetching incoming links:', inErr);
+
+      const mapRow = (r: any): AppLink => ({
+        id: r.id,
+        from_id: r.from_id,
+        from_type: r.from_type,
+        to_id: r.to_id,
+        to_type: r.to_type,
+        relation_label: r.relation_label || 'related',
+        created_at: r.created_at,
+        source_id: r.from_id,
+        source_type: r.from_type,
+        target_id: r.to_id,
+        target_type: r.to_type,
+        link_type: r.relation_label
+      });
+
+      return {
+        outgoing: (outData || []).map(mapRow),
+        incoming: (inData || []).map(mapRow)
+      };
     } catch (e) {
-      console.warn('Error creando enlace de grafo:', e);
+      console.warn('Error fetching entity links:', e);
+      return { outgoing: [], incoming: [] };
+    }
+  },
+
+  async createUniversalLink(
+    fromId: string,
+    fromType: string,
+    toId: string,
+    toType: string,
+    relationLabel = 'related'
+  ): Promise<AppLink | null> {
+    if (fromId === toId && fromType === toType) {
+      console.warn('Auto-vínculo no permitido');
       return null;
     }
+
+    try {
+      const payload = {
+        from_id: fromId,
+        from_type: fromType,
+        to_id: toId,
+        to_type: toType,
+        relation_label: relationLabel
+      };
+
+      const { data, error } = await insforge.database
+        .from('links')
+        .insert([payload])
+        .select();
+
+      if (error) {
+        // If unique constraint violation, retrieve existing link
+        if (error.code === '23505' || String(error.message).includes('unique') || String(error.message).includes('uq_links_direction')) {
+          const { data: existing } = await insforge.database
+            .from('links')
+            .select('*')
+            .eq('from_id', fromId)
+            .eq('from_type', fromType)
+            .eq('to_id', toId)
+            .eq('to_type', toType)
+            .eq('relation_label', relationLabel)
+            .limit(1);
+          if (existing && existing.length > 0) {
+            const r = existing[0];
+            return {
+              id: r.id,
+              from_id: r.from_id,
+              from_type: r.from_type,
+              to_id: r.to_id,
+              to_type: r.to_type,
+              relation_label: r.relation_label || 'related',
+              created_at: r.created_at
+            };
+          }
+        }
+        throw error;
+      }
+
+      const r = (data as any[])?.[0];
+      if (!r) return null;
+      return {
+        id: r.id,
+        from_id: r.from_id,
+        from_type: r.from_type,
+        to_id: r.to_id,
+        to_type: r.to_type,
+        relation_label: r.relation_label || 'related',
+        created_at: r.created_at,
+        source_id: r.from_id,
+        source_type: r.from_type,
+        target_id: r.to_id,
+        target_type: r.to_type,
+        link_type: r.relation_label
+      };
+    } catch (e: any) {
+      console.error('Error creando vínculo universal:', e);
+      throw e;
+    }
+  },
+
+  async createLink(link: any): Promise<AppLink | null> {
+    const fromId = link.from_id || link.source_id;
+    const fromType = link.from_type || link.source_type;
+    const toId = link.to_id || link.target_id;
+    const toType = link.to_type || link.target_type;
+    const relationLabel = link.relation_label || link.link_type || 'related';
+
+    if (!fromId || !fromType || !toId || !toType) return null;
+    return this.createUniversalLink(fromId, fromType, toId, toType, relationLabel);
   },
 
   async deleteLink(id: string): Promise<boolean> {
     const { error } = await insforge.database
-      .from('app_links')
+      .from('links')
       .delete()
       .eq('id', id);
     return !error;
@@ -1433,27 +1551,24 @@ export const db = {
 
   async syncNoteLinks(noteId: string, wikilinks: string[], allEntities: { id: string; title: string; type: string }[]) {
     await insforge.database
-      .from('app_links')
+      .from('links')
       .delete()
-      .eq('source_id', noteId);
+      .eq('from_id', noteId)
+      .eq('from_type', 'note')
+      .eq('relation_label', 'mention');
 
     if (wikilinks.length === 0) return;
 
-    const linksToInsert = wikilinks.map(title => {
+    for (const title of wikilinks) {
       const match = allEntities.find(e => e.title.toLowerCase() === title.toLowerCase());
-      return {
-        source_id: noteId,
-        source_type: 'note',
-        target_id: match ? match.id : null,
-        target_type: match ? match.type : null,
-        target_title: title,
-        link_type: 'wikilink'
-      };
-    });
-
-    await insforge.database
-      .from('app_links')
-      .insert(linksToInsert);
+      if (match && match.id !== noteId) {
+        try {
+          await this.createUniversalLink(noteId, 'note', match.id, match.type, 'mention');
+        } catch (e) {
+          console.warn('Error vinculando wikilink a nota:', e);
+        }
+      }
+    }
   },
 
   // Carpetas lógicas de Archivos (Cloudflare R2 / InsForge)
@@ -1674,6 +1789,194 @@ export const db = {
       throw error;
     }
     return true;
+  },
+
+  // Hábitos & Seguimiento
+  async getHabits(includeArchived = false): Promise<AppHabit[]> {
+    let query = insforge.database
+      .from('app_habits')
+      .select('*')
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (!includeArchived) {
+      query = query.eq('is_archived', false);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error fetching habits:', error);
+      return [];
+    }
+    return (data as AppHabit[]) || [];
+  },
+
+  async createHabit(habit: Partial<AppHabit>): Promise<AppHabit | null> {
+    const payload = {
+      title: habit.title || 'Nuevo hábito',
+      description: habit.description || '',
+      icon: habit.icon || 'Sparkles',
+      color: habit.color || '#3b82f6',
+      frequency: habit.frequency || 'daily',
+      frequency_days: habit.frequency_days || [1, 2, 3, 4, 5, 6, 7],
+      target_per_day: habit.target_per_day || 1,
+      start_date: habit.start_date || new Date().toISOString().split('T')[0],
+      end_date: habit.end_date || null,
+      reminder_time: habit.reminder_time || null,
+      is_archived: !!habit.is_archived,
+      order_index: habit.order_index || 0,
+      properties: habit.properties || {}
+    };
+
+    const { data, error } = await insforge.database
+      .from('app_habits')
+      .insert([payload])
+      .select();
+
+    if (error) {
+      console.error('Error creating habit:', error);
+      throw error;
+    }
+    return (data as unknown as AppHabit[])?.[0] || null;
+  },
+
+  async updateHabit(id: string, updates: Partial<AppHabit>): Promise<AppHabit | null> {
+    const payload: Record<string, any> = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    delete payload.id;
+
+    const { data, error } = await insforge.database
+      .from('app_habits')
+      .update(payload)
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error('Error updating habit:', error);
+      throw error;
+    }
+    return (data as unknown as AppHabit[])?.[0] || null;
+  },
+
+  async deleteHabit(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_habits')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting habit:', error);
+      throw error;
+    }
+    return true;
+  },
+
+  // Logs de cumplimiento de hábitos
+  async getHabitLogs(startDate?: string, endDate?: string): Promise<AppHabitLog[]> {
+    let query = insforge.database
+      .from('app_habit_logs')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (startDate) {
+      query = query.gte('date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error fetching habit logs:', error);
+      return [];
+    }
+    return (data as AppHabitLog[]) || [];
+  },
+
+  async toggleHabitLog(
+    habitId: string, 
+    date: string, 
+    nextStatus?: HabitLogStatus
+  ): Promise<{ status: HabitLogStatus | 'none'; log?: AppHabitLog }> {
+    // Check if log exists for this date and habit
+    const { data: existingLogs } = await insforge.database
+      .from('app_habit_logs')
+      .select('*')
+      .eq('habit_id', habitId)
+      .eq('date', date);
+
+    const existing = existingLogs?.[0] as AppHabitLog | undefined;
+
+    if (!existing) {
+      // Create new log with completed or desired status
+      const statusToSet: HabitLogStatus = nextStatus || 'completed';
+      const { data, error } = await insforge.database
+        .from('app_habit_logs')
+        .insert([{
+          habit_id: habitId,
+          date,
+          status: statusToSet,
+          completed_at: statusToSet === 'completed' ? new Date().toISOString() : null
+        }])
+        .select();
+
+      if (error) {
+        console.error('Error setting habit log:', error);
+        throw error;
+      }
+      return { status: statusToSet, log: (data as any)?.[0] };
+    }
+
+    // If explicit nextStatus is given and matches current, or if cycling: completed -> skipped -> none (delete)
+    if (nextStatus) {
+      if (nextStatus === existing.status) {
+        // Toggle off (delete)
+        await insforge.database
+          .from('app_habit_logs')
+          .delete()
+          .eq('id', existing.id);
+        return { status: 'none' };
+      } else {
+        // Update to new status
+        const { data, error } = await insforge.database
+          .from('app_habit_logs')
+          .update({
+            status: nextStatus,
+            completed_at: nextStatus === 'completed' ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+          .select();
+
+        if (error) throw error;
+        return { status: nextStatus, log: (data as any)?.[0] };
+      }
+    }
+
+    // Default cycle when clicking: completed -> delete
+    if (existing.status === 'completed') {
+      await insforge.database
+        .from('app_habit_logs')
+        .delete()
+        .eq('id', existing.id);
+      return { status: 'none' };
+    } else {
+      // from skipped to completed
+      const { data, error } = await insforge.database
+        .from('app_habit_logs')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+        .select();
+
+      if (error) throw error;
+      return { status: 'completed', log: (data as any)?.[0] };
+    }
   }
 };
 

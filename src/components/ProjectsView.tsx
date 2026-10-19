@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FolderKanban, 
   Plus, 
@@ -25,6 +25,7 @@ interface ProjectsViewProps {
   onDeleteProject: (id: string) => Promise<void>;
   onSelectProject: (projectId: string) => void;
   onCreateTask?: (taskData: Partial<AppTask>) => Promise<AppTask | null | void>;
+  initialSelectedProjectId?: string | null;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -36,10 +37,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onUpdateProject,
   onDeleteProject,
   onSelectProject,
-  onCreateTask
+  onCreateTask,
+  initialSelectedProjectId
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<AppProject | null>(null);
+
+  useEffect(() => {
+    if (initialSelectedProjectId) {
+      const match = projects.find(p => p.id === initialSelectedProjectId);
+      if (match) {
+        setSelectedProject(match);
+        setIsModalOpen(true);
+      }
+    }
+  }, [initialSelectedProjectId, projects]);
 
   const handleOpenNew = () => {
     setSelectedProject(null);

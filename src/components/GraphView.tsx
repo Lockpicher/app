@@ -140,13 +140,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
     // Explicit links
     links.forEach(l => {
-      let targetId = l.target_id;
+      const sourceId = l.from_id || l.source_id;
+      let targetId = l.to_id || l.target_id;
       if (!targetId && l.target_title) {
         const found = rawNodes.find(n => n.title.toLowerCase() === l.target_title?.toLowerCase());
         if (found) targetId = found.id;
       }
-      if (nodeIds.has(l.source_id) && targetId && nodeIds.has(targetId)) {
-        rawEdges.push({ source: l.source_id, target: targetId, label: l.link_type });
+      if (sourceId && nodeIds.has(sourceId) && targetId && nodeIds.has(targetId)) {
+        rawEdges.push({ source: sourceId, target: targetId, label: l.relation_label || l.link_type });
       }
     });
 

@@ -28,13 +28,16 @@ import {
   Mic,
   Send
 } from 'lucide-react';
-import { AppTask, AppNote, AppProject, TaskPriority } from '../lib/types';
+import { AppTask, AppNote, AppProject, AppHabit, AppHabitLog, TaskPriority, HabitLogStatus } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
 
 interface HomeViewProps {
   tasks: AppTask[];
   notes: AppNote[];
   projects: AppProject[];
+  habits?: AppHabit[];
+  habitLogs?: AppHabitLog[];
+  onToggleHabitLog?: (habitId: string, date: string, status?: HabitLogStatus) => Promise<void>;
   onToggleTaskComplete: (task: AppTask) => Promise<void>;
   onOpenTask: (task: AppTask) => void;
   onDeleteTask?: (taskId: string) => Promise<void>;
@@ -43,7 +46,7 @@ interface HomeViewProps {
   onToggleFavoriteNote: (note: AppNote) => Promise<void>;
   onNewTask: () => void;
   onNewNote: () => void;
-  onNavigateToView: (view: 'tasks' | 'all_notes' | 'favorites' | 'projects' | 'calendar' | 'para_inbox') => void;
+  onNavigateToView: (view: 'tasks' | 'all_notes' | 'favorites' | 'projects' | 'calendar' | 'para_inbox' | 'habits') => void;
   onOpenSearch: () => void;
   onOpenMobileMenu?: () => void;
   inboxCount?: number;
@@ -82,6 +85,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
   tasks,
   notes,
   projects,
+  habits = [],
+  habitLogs = [],
+  onToggleHabitLog,
   onToggleTaskComplete,
   onOpenTask,
   onDeleteTask,
@@ -254,6 +260,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const favoriteNotes = useMemo(() => {
     return notes.filter(n => n.is_favorite && !n.is_archived);
   }, [notes]);
+
+  // Today Habits Calculation
+  const todayHabitsData = useMemo(() => {
+    const jsDay = now.getDay();
+    const isoDay = jsDay === 0 ? 7 : jsDay;
+
+    // Filter habits scheduled for today
+    const scheduled = habits.filter(h => {
+      if (h.is_archived) return false;
+      if (h.start_date && todayStr < h.start_date) return false;
+      if (h.end_date && todayStr > h.end_date) return false;
+
+      if (h.frequency === 'daily') return true;
+      if (h.frequency === 'weekdays') return isoDay >= 1 && isoDay <= 5;
+      if (h.frequency === 'weekends') return isoDay === 6 || isoDay === 7;
+      if (h.frequency === 'custom') return (h.frequency_days || []).includes(isoDay);
+      return true;
+    });
+
+    const logsTodayMap = new Map<string, HabitLogStatus>();
+    habitLogs.filter(l => l.date === todayStr).forEach(l => {
+      logsTodayMap.set(l.habit_id, l.status);
+    });
+
+    const completedCount = scheduled.filter(h => logsTodayMap.get(h.id) === 'completed').length;
+    const progressPercent = scheduled.length > 0 ? Math.round((completedCount / scheduled.length) * 100) : 0;
+
+    return {
+      scheduledHabits: scheduled,
+      logsTodayMap,
+      completedCount,
+      totalCount: scheduled.length,
+      progressPercent
+    };
+  }, [habits, habitLogs, now, todayStr]);
 
   // Handler for completing a task with debounce visual feedback
   const handleComplete = async (t: AppTask) => {
@@ -592,6 +633,109 @@ export const HomeView: React.FC<HomeViewProps> = ({
           {/* COLUMNA 1: AGENDA UNIFICADA (Hoy, Mañana, Semana)    */}
           {/* ==================================================== */}
           <div className="lg:col-span-5 space-y-6">
+
+            {/* BLOQUE COMPACTO: HÁBITOS DE HOY */}
+            <section className="bg-[#161620] border border-[#232332] rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#232332]">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-sm font-bold text-white tracking-wide">
+                    Hábitos de hoy
+                  </h2>
+                  {todayHabitsData.totalCount > 0 && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-400 font-mono border border-amber-800/40">
+                      {todayHabitsData.completedCount}/{todayHabitsData.totalCount}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToView('habits')}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition font-medium"
+                >
+                  <span>Ver todos</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {todayHabitsData.totalCount > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 mb-1">
+                    <span>Progreso del día</span>
+                    <span className="font-semibold text-blue-400">{todayHabitsData.progressPercent}%</span>
+                  </div>
+                  <div className="w-full bg-[#20202e] h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${todayHabitsData.progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Habits List for Today */}
+              {todayHabitsData.totalCount === 0 ? (
+                <p className="text-xs text-gray-400 py-2">
+                  No hay hábitos programados para hoy.{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToView('habits')}
+                    className="text-blue-400 hover:underline font-medium"
+                  >
+                    Configurar hábitos
+                  </button>
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {todayHabitsData.scheduledHabits.map(h => {
+                    const status = todayHabitsData.logsTodayMap.get(h.id);
+                    const isDone = status === 'completed';
+
+                    return (
+                      <div
+                        key={h.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-[#1b1b26] border border-[#262638] hover:border-blue-500/30 transition group"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <button
+                            type="button"
+                            onClick={() => onToggleHabitLog && onToggleHabitLog(h.id, todayStr)}
+                            className={`w-5 h-5 rounded-full flex items-center justify-center transition shrink-0 ${
+                              isDone
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'border border-gray-500 hover:border-emerald-400 bg-[#20202e]'
+                            }`}
+                          >
+                            {isDone && <CheckCircle2 className="w-4 h-4 text-white" />}
+                          </button>
+                          <div className="min-w-0">
+                            <span className={`text-xs font-medium block truncate ${
+                              isDone ? 'line-through text-gray-400' : 'text-gray-200 group-hover:text-white'
+                            }`}>
+                              {h.title}
+                            </span>
+                            {h.reminder_time && (
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {h.reminder_time.slice(0, 5)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: h.color || '#3b82f6' }} 
+                            title="Color identificador"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             {/* Tareas Atrasadas (si existen) */}
             {overdueTasks.length > 0 && (

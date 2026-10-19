@@ -59,6 +59,7 @@ interface TasksViewProps {
   onUpdateTask: (id: string, updates: Partial<AppTask>) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
   onNavigateToNote: (noteId: string) => void;
+  onNavigateToProject?: (projectId: string) => void;
 }
 
 export const TasksView: React.FC<TasksViewProps> = ({
@@ -69,7 +70,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
-  onNavigateToNote
+  onNavigateToNote,
+  onNavigateToProject
 }) => {
   // Hierarchy Data States
   const [workspace, setWorkspace] = useState<KubbonetWorkspace>({
@@ -461,6 +463,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
           {/* Quick Filters */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Project Filter */}
+            <select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[160px] truncate"
+            >
+              <option value="all">Todos los proyectos</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+
             {/* Priority Filter */}
             <select
               value={filterPriority}
@@ -595,18 +611,27 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                     const proj = projects.find(p => p.id === t.project_id);
                                     if (!proj) return null;
                                     return (
-                                      <span 
-                                        className="text-[10px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 border truncate max-w-[120px]"
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onNavigateToProject) {
+                                            onNavigateToProject(proj.id);
+                                          } else {
+                                            setFilterProject(proj.id);
+                                          }
+                                        }}
+                                        className="text-[10px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 border truncate max-w-[120px] hover:brightness-125 transition cursor-pointer"
                                         style={{ 
                                           backgroundColor: `${proj.color || '#6366f1'}20`, 
                                           borderColor: `${proj.color || '#6366f1'}40`,
                                           color: proj.color || '#a5b4fc' 
                                         }}
-                                        title={`Proyecto: ${proj.title}`}
+                                        title={`Ver proyecto canónico: ${proj.title}`}
                                       >
                                         <FolderKanban className="w-2.5 h-2.5 flex-shrink-0" />
                                         <span className="truncate">{proj.title}</span>
-                                      </span>
+                                      </button>
                                     );
                                   })()}
                                 </div>
@@ -844,18 +869,27 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                     const proj = projects.find(p => p.id === t.project_id);
                                     if (!proj) return null;
                                     return (
-                                      <span 
-                                        className="text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1 border truncate max-w-[130px]"
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onNavigateToProject) {
+                                            onNavigateToProject(proj.id);
+                                          } else {
+                                            setFilterProject(proj.id);
+                                          }
+                                        }}
+                                        className="text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1 border truncate max-w-[130px] hover:brightness-125 transition cursor-pointer"
                                         style={{ 
                                           backgroundColor: `${proj.color || '#6366f1'}20`, 
                                           borderColor: `${proj.color || '#6366f1'}40`,
                                           color: proj.color || '#a5b4fc' 
                                         }}
-                                        title={`Proyecto: ${proj.title}`}
+                                        title={`Ver proyecto canónico: ${proj.title}`}
                                       >
                                         <FolderKanban className="w-3 h-3 flex-shrink-0" />
                                         <span className="truncate">{proj.title}</span>
-                                      </span>
+                                      </button>
                                     );
                                   })()}
 

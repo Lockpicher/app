@@ -171,7 +171,7 @@ export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
                 <div className="font-bold text-white text-xs truncate max-w-[120px]">
                   {workspace.nombre}
                 </div>
-                <div className="text-[10px] text-blue-400 font-mono">Workspace Activo</div>
+                <div className="text-[10px] text-blue-400 font-mono">Workspace Operativo</div>
               </div>
             </div>
 
@@ -224,9 +224,14 @@ export const ClickUpSidebar: React.FC<ClickUpSidebarProps> = ({
 
       {/* Hierarchy Tree (Spaces -> Folders -> Lists) */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
-          <span>Espacios de Trabajo</span>
-          <span className="text-[10px] font-mono">{spaces.length}</span>
+        <div className="px-2 py-1 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+              Espacios Operativos
+            </span>
+            <span className="text-[9px] text-gray-500">Espacio → Carpeta → Lista</span>
+          </div>
+          <span className="text-[10px] font-mono text-gray-400">{spaces.length}</span>
         </div>
 
         {spaces.map(space => {

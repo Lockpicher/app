@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User } from 'lucide-react';
 import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment } from '../lib/types';
+import { db } from '../lib/insforge';
 
 interface QuickSwitcherProps {
   isOpen: boolean;
@@ -118,7 +119,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
         {/* Results List */}
         <div className="max-h-80 overflow-y-auto p-2 divide-y divide-[#232332]">
           {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-gray-400">
+            <div className="py-6 text-center text-xs text-gray-400">
               No se encontraron coincidencias para "{query}".
             </div>
           ) : (
@@ -131,7 +132,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
                 }}
                 className={`w-full px-3 py-2.5 rounded-lg flex items-center justify-between transition text-left ${
                   idx === selectedIndex 
-                    ? 'bg-purple-900/30 text-white border border-purple-500/40' 
+                    ? 'bg-blue-900/30 text-white border border-blue-500/40' 
                     : 'text-gray-300 hover:bg-[#20202c]'
                 }`}
               >
@@ -148,6 +149,64 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
                 <ArrowRight className="w-3.5 h-3.5 text-gray-400" />
               </button>
             ))
+          )}
+
+          {/* Opción rápida: Crear '[texto]' como... */}
+          {query.trim().length > 1 && (
+            <div className="pt-3 pb-1 px-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500 block mb-2 px-1">
+                Crear "{query.trim()}" al instante como:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { id: 'person', label: 'Persona', color: '#3b82f6' },
+                  { id: 'company', label: 'Empresa', color: '#0ea5e9' },
+                  { id: 'project', label: 'Proyecto', color: '#3b82f6' },
+                  { id: 'page', label: 'Página', color: '#6366f1' },
+                  { id: 'meeting', label: 'Reunión', color: '#f59e0b' },
+                  { id: 'resource', label: 'Recurso', color: '#10b981' },
+                  { id: 'book', label: 'Libro', color: '#8b5cf6' },
+                  { id: 'concept', label: 'Concepto', color: '#eab308' }
+                ].map(type => (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (type.id === 'project') {
+                          const p = await db.createProject({
+                            title: query.trim(),
+                            status: 'active',
+                            priority: 'medium',
+                            progress: 0
+                          });
+                          if (p) {
+                            onSelectEntity(p.id, 'project');
+                            onClose();
+                          }
+                        } else {
+                          const obj = await db.createObject({
+                            title: query.trim(),
+                            object_type: type.id,
+                            properties: {}
+                          });
+                          if (obj) {
+                            onSelectEntity(obj.id, 'object');
+                            onClose();
+                          }
+                        }
+                      } catch (err: any) {
+                        alert('Error al crear: ' + err.message);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-[#14141c] hover:bg-[#1f1f2e] border border-[#232332] text-xs text-gray-300 hover:text-white transition text-left"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: type.color }} />
+                    <span className="truncate">{type.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

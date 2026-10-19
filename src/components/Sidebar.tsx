@@ -27,7 +27,9 @@ import {
   X,
   Home,
   Sun,
-  Moon
+  Moon,
+  Flame,
+  Paperclip
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -42,6 +44,7 @@ interface SidebarProps {
   onNewNote: () => void;
   onNewTaskNote?: () => void;
   onNewNotebook?: () => void;
+  onUploadFile?: () => void;
   counts: {
     notebooks: number;
     notes: number;
@@ -50,6 +53,7 @@ interface SidebarProps {
     tasks: number;
     projects: number;
     objects: number;
+    habits?: number;
     inbox?: number;
     areas?: number;
     archives?: number;
@@ -74,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewNote,
   onNewTaskNote,
   onNewNotebook,
+  onUploadFile,
   counts,
   onOpenQuickSwitcher,
   isCollapsed = false,
@@ -695,6 +700,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {(!collapsedGroups.planning || isCollapsed) && (
               <div className="space-y-0.5">
+                {/* Hábitos & Rutinas */}
+                {renderNavItem('habits', 'Hábitos', <Flame className="w-4 h-4 text-amber-400" />, {
+                  count: counts.habits
+                })}
+
                 {/* Tareas (Kanban) */}
                 {renderNavItem('tasks', 'Tareas', <CheckSquare className="w-4 h-4 text-amber-400" />, {
                   count: counts.tasks
@@ -737,6 +747,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(!collapsedGroups.media || isCollapsed) && (
               <div className="space-y-0.5">
                 {renderNavItem('files', 'Archivos y Medios', <HardDrive className="w-4 h-4 text-cyan-400" />)}
+                {onUploadFile && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUploadFile();
+                      if (onCloseMobile) onCloseMobile();
+                    }}
+                    title={isCollapsed ? 'Adjuntar archivo (R2)' : undefined}
+                    className={`w-full flex items-center justify-between rounded-lg transition-all duration-150 text-cyan-400/90 hover:text-cyan-200 hover:bg-[#1c1c24] border border-transparent ${
+                      isCollapsed ? 'p-2 justify-center' : 'px-2.5 py-1.5 text-xs font-medium'
+                    }`}
+                  >
+                    <span className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2.5 truncate'}`}>
+                      <Paperclip className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      {!isCollapsed && <span className="truncate">Adjuntar archivo</span>}
+                    </span>
+                    {!isCollapsed && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/60 border border-cyan-800/40 text-cyan-300">
+                        R2
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>

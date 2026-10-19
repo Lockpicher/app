@@ -14,14 +14,15 @@ import {
   X,
   Sparkles,
   Menu,
-  MoreHorizontal
+  MoreHorizontal,
+  Paperclip
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file') => void;
   onOpenSearch: () => void;
   onOpenMore?: () => void;
   isMoreOpen?: boolean;
@@ -60,9 +61,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const isCalendarActive = currentView === 'calendar';
   const isTasksActive = currentView === 'tasks';
 
-  // Creation options for Capacities-style "+" button
+  // Creation options for Capacities-style "+" button (8 items in 2x4 grid)
   const createOptions: {
-    id: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object';
+    id: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file';
     label: string;
     subtitle: string;
     icon: any;
@@ -84,6 +85,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       icon: CheckSquare,
       color: 'text-amber-400',
       bg: 'bg-amber-950/40 border-amber-800/40'
+    },
+    {
+      id: 'file',
+      label: 'Adjuntar archivo',
+      subtitle: 'Subir archivos a tu biblioteca',
+      icon: Paperclip,
+      color: 'text-cyan-400',
+      bg: 'bg-cyan-950/40 border-cyan-800/40'
     },
     {
       id: 'notebook',
