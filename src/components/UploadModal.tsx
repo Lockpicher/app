@@ -3,7 +3,7 @@ import {
   X, 
   Upload, 
   Paperclip, 
-  File, 
+  File as FileIcon, 
   CheckCircle2, 
   AlertCircle, 
   Loader2, 
@@ -12,7 +12,9 @@ import {
   RefreshCw,
   Folder,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  FlipHorizontal,
+  CircleDot
 } from 'lucide-react';
 import { AppAttachment, AppFolder } from '../lib/types';
 import { r2Storage } from '../lib/r2Client';
@@ -60,6 +62,85 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Live in-app Camera Viewfinder states
+  const [isLiveCameraActive, setIsLiveCameraActive] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('environment');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopLiveCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsLiveCameraActive(false);
+    setCameraError(null);
+  };
+
+  const startLiveCamera = async (facingMode: 'user' | 'environment' = cameraFacingMode) => {
+    setCameraError(null);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback a input capture nativo si getUserMedia no está disponible
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false
+      });
+      streamRef.current = stream;
+      setIsLiveCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('No se pudo acceder al stream de la cámara directamente:', err);
+      // Fallback automático al input nativo con capture="environment"
+      cameraInputRef.current?.click();
+    }
+  };
+
+  const toggleCameraFacingMode = () => {
+    const nextMode = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    setCameraFacingMode(nextMode);
+    startLiveCamera(nextMode);
+  };
+
+  const handleCapturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Si es cámara frontal, aplicar mirror horizontal natural
+    if (cameraFacingMode === 'user') {
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const fileName = `foto_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      stopLiveCamera();
+      handleFilesSelected([file] as unknown as FileList);
+    }, 'image/jpeg', 0.95);
+  };
 
   if (!isOpen) return null;
 
@@ -210,7 +291,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              stopLiveCamera();
+              onClose();
+            }}
             disabled={isProcessing}
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252538] transition disabled:opacity-40"
             title="Cerrar modal (Esc)"
@@ -271,8 +355,52 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             className="hidden"
           />
 
-          {/* Opciones directas: Cámara o Galería si es filtro de foto/vídeo */}
-          {acceptFilter.includes('image') ? (
+          {/* Visor de Cámara en Vivo Interactivo */}
+          {isLiveCameraActive ? (
+            <div className="relative rounded-2xl overflow-hidden bg-black border border-rose-500/30 flex flex-col items-center">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full max-h-[360px] object-cover bg-black ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+              />
+
+              {/* Botones de control de cámara */}
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleCameraFacingMode}
+                  className="p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:bg-black/80 border border-white/20 transition"
+                  title="Cambiar de cámara (frontal / trasera)"
+                >
+                  <FlipHorizontal className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={stopLiveCamera}
+                  className="p-2 rounded-full bg-black/60 backdrop-blur-md text-gray-300 hover:text-white border border-white/20 transition"
+                  title="Cerrar visor de cámara"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Barra inferior: Disparador */}
+              <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleCapturePhoto}
+                  className="w-16 h-16 rounded-full border-4 border-white bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all flex items-center justify-center shadow-2xl"
+                  title="Tomar foto ahora"
+                >
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                    <CircleDot className="w-6 h-6 text-white" />
+                  </div>
+                </button>
+              </div>
+            </div>
+          ) : acceptFilter.includes('image') ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2.5">
                 {/* 1. Opción Cámara Directa */}
@@ -280,7 +408,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   type="button"
                   disabled={isProcessing}
                   onClick={() => {
-                    if (!isProcessing) cameraInputRef.current?.click();
+                    if (!isProcessing) {
+                      startLiveCamera();
+                    }
                   }}
                   className="p-4 rounded-2xl bg-gradient-to-b from-[#1c1c28] to-[#14141e] border border-rose-500/30 hover:border-rose-500/60 active:scale-[0.98] transition flex flex-col items-center justify-center gap-2 group text-center disabled:opacity-50"
                 >
@@ -289,10 +419,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   </div>
                   <div>
                     <span className="font-bold text-xs text-white block">
-                      Cámara
+                      Tomar Foto
                     </span>
                     <span className="text-[10px] text-gray-400 block mt-0.5">
-                      Tomar foto o grabar vídeo
+                      Abrir cámara directa
                     </span>
                   </div>
                 </button>
@@ -328,7 +458,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 className="border border-dashed border-[#2f2f44] hover:border-blue-500/50 rounded-xl p-3 text-center cursor-pointer bg-[#12121a] hover:bg-[#161622] transition"
               >
                 <span className="text-[11px] text-gray-400">
-                  O arrastra archivos multimedia aquí desde tu ordenador
+                  O arrastra fotos y vídeos aquí desde tu ordenador
                 </span>
               </div>
             </div>
@@ -389,7 +519,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   >
                     <div className="flex items-center gap-2.5 overflow-hidden flex-1 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-[#1f1f2e] text-blue-400 flex items-center justify-center flex-shrink-0 border border-[#2e2e42]">
-                        <File className="w-4 h-4" />
+                        <FileIcon className="w-4 h-4" />
                       </div>
                       <div className="overflow-hidden min-w-0 flex-1">
                         <span className="font-medium text-white truncate block" title={item.name}>
