@@ -73,12 +73,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onOpenPerson
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewType, setViewType] = useState<CalendarViewType>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 640) {
-      return 'agenda';
-    }
-    return 'month';
-  });
+  const [viewType, setViewType] = useState<CalendarViewType>('month');
   
   // Mobile Tray Drawer State
   const [isMobileTrayOpen, setIsMobileTrayOpen] = useState(false);
@@ -459,7 +454,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       )}
 
       {/* Calendar Top Control Header */}
-      <header className="px-4 py-3 bg-[#171722] border-b border-[#252535] flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+      <header className="px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] bg-[#171722] border-b border-[#252535] flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
         {/* Navigation & Month Title */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-[#1c1c28] p-1 rounded-xl border border-[#2c2c3e]">

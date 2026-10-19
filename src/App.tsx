@@ -1106,8 +1106,8 @@ export function App() {
 
   return (
     <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
-      {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained editor or home) */}
-      {currentView !== 'home' && !isEditingNote && (
+      {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained editor, home or calendar) */}
+      {currentView !== 'home' && currentView !== 'calendar' && !isEditingNote && (
         <header className="lg:hidden h-14 bg-[#141419] border-b border-[#23232b] flex items-center justify-between px-4 z-30 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1133,7 +1133,6 @@ export function App() {
                 {currentView === 'all_notes' && 'Todas las notas'}
                 {currentView === 'favorites' && 'Favoritos'}
                 {currentView === 'reminders' && 'Recordatorios'}
-                {currentView === 'calendar' && 'Calendario'}
                 {currentView === 'tasks' && 'Tareas'}
                 {currentView === 'projects' && 'Proyectos'}
                 {currentView === 'objects' && 'Objetos'}
