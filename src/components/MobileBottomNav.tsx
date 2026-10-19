@@ -2,28 +2,30 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Home, 
   Calendar, 
-  CheckSquare, 
+  CheckSquare,
   Plus, 
   Search, 
   FileText, 
+  SquareCheckBig,
   FolderKanban, 
-  User, 
+  UserRound, 
   Boxes, 
   Layers, 
-  Book, 
+  BookOpen, 
   X,
   Sparkles,
   Menu,
   MoreHorizontal,
   Paperclip,
-  Mic
+  Mic,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'voice') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice') => void;
   onOpenSearch: () => void;
   onOpenMore?: () => void;
   isMoreOpen?: boolean;
@@ -62,11 +64,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const isCalendarActive = currentView === 'calendar';
   const isTasksActive = currentView === 'tasks';
 
-  // Creation options for Capacities-style "+" button (9 items in responsive grid)
+  // Creation options for Capacities-style "+" button (10 items in responsive grid)
   const createOptions: {
-    id: 'note' | 'task' | 'voice' | 'file' | 'notebook' | 'page' | 'project' | 'person' | 'object';
+    id: 'note' | 'task' | 'voice' | 'file' | 'media' | 'notebook' | 'page' | 'project' | 'person' | 'object';
     label: string;
-    subtitle: string;
     icon: any;
     color: string;
     bg: string;
@@ -74,74 +75,72 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     {
       id: 'note',
       label: 'Nueva Nota',
-      subtitle: 'Editor de texto enriquecido',
       icon: FileText,
       color: 'text-purple-400',
-      bg: 'bg-purple-950/40 border-purple-800/40'
+      bg: 'bg-purple-950/40 border-purple-800/40 hover:border-purple-600/50'
     },
     {
       id: 'task',
       label: 'Nueva Tarea',
-      subtitle: 'Crear tarea en la lista y Kanban',
-      icon: CheckSquare,
+      icon: SquareCheckBig,
       color: 'text-amber-400',
-      bg: 'bg-amber-950/40 border-amber-800/40'
+      bg: 'bg-amber-950/40 border-amber-800/40 hover:border-amber-600/50'
     },
     {
       id: 'voice',
       label: 'Nueva nota de voz',
-      subtitle: 'Graba y guarda tus ideas hablando.',
       icon: Mic,
       color: 'text-blue-400',
-      bg: 'bg-blue-950/40 border-blue-800/40'
+      bg: 'bg-blue-950/40 border-blue-800/40 hover:border-blue-600/50'
+    },
+    {
+      id: 'media',
+      label: 'Foto o Vídeo',
+      icon: ImageIcon,
+      color: 'text-rose-400',
+      bg: 'bg-rose-950/40 border-rose-800/40 hover:border-rose-600/50'
     },
     {
       id: 'file',
       label: 'Adjuntar archivo',
-      subtitle: 'Subir archivos a tu biblioteca',
       icon: Paperclip,
       color: 'text-cyan-400',
-      bg: 'bg-cyan-950/40 border-cyan-800/40'
+      bg: 'bg-cyan-950/40 border-cyan-800/40 hover:border-cyan-600/50'
     },
     {
       id: 'notebook',
       label: 'Nuevo Cuaderno',
-      subtitle: 'Organizador de notas por tema',
-      icon: Book,
+      icon: BookOpen,
       color: 'text-emerald-400',
-      bg: 'bg-emerald-950/40 border-emerald-800/40'
+      bg: 'bg-emerald-950/40 border-emerald-800/40 hover:border-emerald-600/50'
     },
     {
       id: 'page',
       label: 'Nueva Página',
-      subtitle: 'Documento estructurado & portada',
       icon: Layers,
       color: 'text-indigo-400',
-      bg: 'bg-indigo-950/40 border-indigo-800/40'
+      bg: 'bg-indigo-950/40 border-indigo-800/40 hover:border-indigo-600/50'
     },
     {
       id: 'project',
       label: 'Nuevo Proyecto',
-      subtitle: 'Objetivo con fechas y tareas',
       icon: FolderKanban,
       color: 'text-violet-400',
-      bg: 'bg-violet-950/40 border-violet-800/40'
+      bg: 'bg-violet-950/40 border-violet-800/40 hover:border-violet-600/50'
     },
     {
       id: 'person',
       label: 'Nuevo Contacto',
-      subtitle: 'Ficha personal & cumpleaños',
-      icon: User,
+      icon: UserRound,
       color: 'text-teal-400',
-      bg: 'bg-teal-950/40 border-teal-800/40'
+      bg: 'bg-teal-950/40 border-teal-800/40 hover:border-teal-600/50'
     },
     {
       id: 'object',
       label: 'Nuevo Objeto',
-      subtitle: 'Entidad personalizada o recurso',
       icon: Boxes,
       color: 'text-pink-400',
-      bg: 'bg-pink-950/40 border-pink-800/40'
+      bg: 'bg-pink-950/40 border-pink-800/40 hover:border-pink-600/50'
     }
   ];
 
@@ -157,8 +156,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         >
           <div 
             ref={menuRef}
-            className="bg-[#181822] border-t border-[#2e2e42] rounded-t-3xl p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto"
-            style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}
+            className="bg-[#181822] border-t border-[#2e2e42] rounded-t-3xl p-4 sm:p-5 shadow-2xl space-y-3 max-h-[85vh] overflow-y-auto"
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
               <div className="flex items-center gap-2">
@@ -180,7 +179,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2">
               {createOptions.map((opt) => {
                 const Icon = opt.icon;
                 return (
@@ -191,19 +190,15 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                       setIsMenuOpen(false);
                       onOpenQuickCreate(opt.id);
                     }}
-                    className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between group active:scale-[0.98] ${opt.bg}`}
+                    className={`py-3.5 px-3 rounded-2xl border transition flex flex-col items-center justify-center text-center group active:scale-[0.97] min-h-[88px] ${opt.bg}`}
                     aria-label={`Crear ${opt.label}`}
                   >
-                    <div className="flex items-center justify-between w-full mb-2">
-                      <div className={`w-8 h-8 rounded-xl bg-[#14141c] border border-white/10 flex items-center justify-center ${opt.color}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <Plus className="w-3.5 h-3.5 text-gray-500 group-hover:text-white transition" />
+                    <div className={`w-11 h-11 rounded-2xl bg-[#13131c] border border-white/10 flex items-center justify-center mb-2 shadow-sm group-hover:scale-105 transition-transform ${opt.color}`}>
+                      <Icon className="w-6 h-6 stroke-[2]" />
                     </div>
-                    <div>
-                      <span className="font-bold text-xs text-white block">{opt.label}</span>
-                      <span className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">{opt.subtitle}</span>
-                    </div>
+                    <span className="font-semibold text-xs text-white leading-tight truncate max-w-full px-1">
+                      {opt.label}
+                    </span>
                   </button>
                 );
               })}

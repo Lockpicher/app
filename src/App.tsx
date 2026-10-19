@@ -103,6 +103,8 @@ export function App() {
   const [globalEditingTask, setGlobalEditingTask] = useState<AppTask | null>(null);
   const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadAcceptFilter, setUploadAcceptFilter] = useState<string>('*/*');
+  const [uploadTitleOverride, setUploadTitleOverride] = useState<string | undefined>(undefined);
   const [isGlobalVoiceModalOpen, setIsGlobalVoiceModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -908,7 +910,7 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'voice') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice') => {
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
     } else if (type === 'voice') {
@@ -964,6 +966,12 @@ export function App() {
       setIsEditingNote(false);
       setCurrentView('objects');
     } else if (type === 'file') {
+      setUploadAcceptFilter('*/*');
+      setUploadTitleOverride('Adjuntar Archivo');
+      setIsUploadModalOpen(true);
+    } else if (type === 'media') {
+      setUploadAcceptFilter('image/*,video/*');
+      setUploadTitleOverride('Subir Foto o Vídeo');
       setIsUploadModalOpen(true);
     }
   };
@@ -1751,6 +1759,8 @@ export function App() {
           setIsEditingNote(false);
           setCurrentView('files');
         }}
+        acceptFilter={uploadAcceptFilter}
+        titleOverride={uploadTitleOverride}
       />
 
       {/* Global Voice Note Recorder Modal (Cloudflare R2 + Scribe STT) */}

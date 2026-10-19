@@ -23,6 +23,8 @@ export interface UploadModalProps {
   folders?: AppFolder[];
   defaultFolderId?: string | null;
   onNavigateToFiles?: () => void;
+  acceptFilter?: string;
+  titleOverride?: string;
 }
 
 type UploadStatus = 'idle' | 'selecting' | 'preparing' | 'uploading_r2' | 'saving_metadata' | 'success' | 'error';
@@ -47,7 +49,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   onFileUploaded,
   folders = [],
   defaultFolderId = null,
-  onNavigateToFiles
+  onNavigateToFiles,
+  acceptFilter = '*/*',
+  titleOverride
 }) => {
   const [queue, setQueue] = useState<FileUploadQueueItem[]>([]);
   const [targetFolderId, setTargetFolderId] = useState<string | null>(defaultFolderId);
@@ -190,12 +194,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Adjuntar Archivo
+                {titleOverride || 'Adjuntar Archivo'}
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40">
                   Cloudflare R2
                 </span>
               </h3>
-              <p className="text-[11px] text-gray-400">Sube archivos a tu biblioteca global y Segundo Cerebro</p>
+              <p className="text-[11px] text-gray-400">
+                {acceptFilter?.includes('image') ? 'Sube fotos o vídeos a tu biblioteca de medios' : 'Sube archivos a tu biblioteca global y Segundo Cerebro'}
+              </p>
             </div>
           </div>
 
@@ -246,7 +252,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
             className="hidden"
-            accept="*/*"
+            accept={acceptFilter}
           />
 
           <div
