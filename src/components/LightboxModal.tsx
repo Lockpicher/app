@@ -70,74 +70,87 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 md:p-6"
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between overflow-hidden select-none"
       onClick={onClose}
     >
-      {/* Top Header */}
+      {/* Top Header - Fixed and safe-area aware */}
       <div 
-        className="flex items-center justify-between text-white pb-3 border-b border-gray-800"
+        className="w-full bg-[#121217]/95 border-b border-[#232332] px-3 sm:px-6 py-2 sm:py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] flex items-center justify-between gap-2 z-20 flex-shrink-0"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold truncate max-w-xs md:max-w-md">
+        {/* Left: Truncated Title & Counter */}
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+          <span 
+            className="text-xs sm:text-sm font-semibold text-white truncate min-w-0 block"
+            title={currentFile.display_name || currentFile.file_name}
+          >
             {currentFile.display_name || currentFile.file_name}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">
-            {currentIndex + 1} / {files.length}
+          <span className="text-[11px] px-2 py-0.5 rounded bg-[#1e1e2c] text-gray-400 font-mono flex-shrink-0 border border-[#2b2b3e]">
+            {currentIndex + 1}/{files.length}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right: Controls (Download & Close prioritized, Zoom responsive) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {/* Zoom controls (visible on tablets/desktops or screens > 480px) */}
           {isImage && (
-            <>
+            <div className="hidden sm:flex items-center gap-1 bg-[#181824] p-0.5 rounded-lg border border-[#282838] mr-1">
               <button 
                 onClick={() => setZoom(prev => Math.max(0.5, prev - 0.25))}
-                className="p-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#252538] text-gray-300 hover:text-white transition"
                 title="Alejar"
+                aria-label="Alejar"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
               <button 
                 onClick={() => setZoom(1)}
-                className="px-2 py-1 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-xs text-gray-300 font-mono"
+                className="px-2 h-8 flex items-center justify-center rounded-md text-xs text-gray-300 hover:text-white font-mono"
                 title="Restablecer zoom"
               >
                 {Math.round(zoom * 100)}%
               </button>
               <button 
                 onClick={() => setZoom(prev => Math.min(3, prev + 0.25))}
-                className="p-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-[#252538] text-gray-300 hover:text-white transition"
                 title="Acercar"
+                aria-label="Acercar"
               >
                 <ZoomIn className="w-4 h-4" />
               </button>
-            </>
+            </div>
           )}
 
+          {/* Download Original File Button - Guaranteed visible with min 44x44px touch area */}
           <a 
             href={r2Storage.getDisplayUrl(currentFile)} 
             download={currentFile.file_name}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium transition"
-            title="Descargar archivo original preservado"
+            className="h-11 min-w-[44px] px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-cyan-950/40 transition flex-shrink-0 touch-manipulation"
+            title="Descargar archivo original preservado de R2"
+            aria-label="Descargar archivo original"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Descargar original</span>
+            <Download className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden xs:inline">Descargar</span>
           </a>
 
+          {/* Close Visor Button - Guaranteed visible with min 44x44px touch area */}
           <button 
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition ml-2"
+            className="w-11 h-11 flex items-center justify-center rounded-xl bg-[#1e1e2c] hover:bg-[#28283c] active:bg-[#32324a] text-gray-300 hover:text-white border border-[#2e2e42] transition flex-shrink-0 touch-manipulation"
+            title="Cerrar visor"
+            aria-label="Cerrar visor"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 flex-shrink-0" />
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div 
-        className="relative flex-1 flex items-center justify-center overflow-hidden my-4"
+        className="relative flex-1 flex items-center justify-center overflow-hidden w-full h-full min-h-0"
         onClick={e => e.stopPropagation()}
       >
         {/* Prev button */}
@@ -205,12 +218,12 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
         )}
       </div>
 
-      {/* Footer Info & Relations */}
+      {/* Footer Info & Relations - Safe-area aware on mobile */}
       <div 
-        className="bg-[#14141c]/90 border border-gray-800 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-xs text-gray-300"
+        className="w-full bg-[#14141c]/95 border-t border-[#232332] px-3 sm:px-6 py-2 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] flex flex-wrap items-center justify-between gap-2.5 text-xs text-gray-300 z-20 flex-shrink-0"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-1.5 text-gray-400">
             <HardDrive className="w-3.5 h-3.5 text-cyan-400" />
             <span className="font-mono text-gray-200">{formatSize(currentFile.file_size)}</span>

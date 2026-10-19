@@ -31,7 +31,14 @@ import {
   ExternalLink,
   PanelLeftClose,
   PanelLeftOpen,
-  Link2
+  Link2,
+  Inbox,
+  Sun,
+  Grid3X3,
+  CalendarDays,
+  Sparkles,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { 
   AppTask, 
@@ -88,7 +95,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [folders, setFolders] = useState<KubbonetFolder[]>([]);
   const [lists, setLists] = useState<KubbonetList[]>([]);
   const [selectedScope, setSelectedScope] = useState<HierarchyScope>({ type: 'all' });
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'list' | 'eisenhower'>('board');
   const [isClickUpSidebarOpen, setIsClickUpSidebarOpen] = useState(false);
 
   // Expanded subtasks in List View
@@ -102,6 +109,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterEisenhower, setFilterEisenhower] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterDateScope, setFilterDateScope] = useState<'all' | 'inbox' | 'today' | 'tomorrow' | 'week' | 'month' | 'pending'>('all');
+  const [filterOnlyOverdue, setFilterOnlyOverdue] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Drag and Drop state (Kanban)
@@ -224,6 +233,58 @@ export const TasksView: React.FC<TasksViewProps> = ({
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
     if (filterEisenhower !== 'all' && t.eisenhower !== filterEisenhower) return false;
     if (filterCategory !== 'all' && String(t.category_id || '') !== filterCategory) return false;
+    
+    // Date Scope Filter (Inbox, Hoy, Mañana, Esta semana, Este mes, Pendiente)
+    if (filterDateScope !== 'all') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const dayAfterTomorrow = new Date(tomorrow);
+      dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+      // Start of week (Monday) and end of week (Sunday)
+      const currentDay = today.getDay(); // 0 is Sun
+      const distanceToMonday = (currentDay + 6) % 7;
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - distanceToMonday);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+      // Start of month & end of month
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      if (filterDateScope === 'inbox') {
+        // Inbox: sin fecha asignada o en lista inbox
+        if (t.due_date) return false;
+      } else if (filterDateScope === 'today') {
+        if (!t.due_date) return false;
+        const taskDate = new Date(t.due_date);
+        if (taskDate < today || taskDate >= tomorrow) return false;
+      } else if (filterDateScope === 'tomorrow') {
+        if (!t.due_date) return false;
+        const taskDate = new Date(t.due_date);
+        if (taskDate < tomorrow || taskDate >= dayAfterTomorrow) return false;
+      } else if (filterDateScope === 'week') {
+        if (!t.due_date) return false;
+        const taskDate = new Date(t.due_date);
+        if (taskDate < startOfWeek || taskDate >= endOfWeek) return false;
+      } else if (filterDateScope === 'month') {
+        if (!t.due_date) return false;
+        const taskDate = new Date(t.due_date);
+        if (taskDate < startOfMonth || taskDate > endOfMonth) return false;
+      } else if (filterDateScope === 'pending') {
+        if (t.status === 'completed') return false;
+      }
+    }
+
+    // Only Overdue filter
+    if (filterOnlyOverdue) {
+      if (!t.due_date || t.status === 'completed') return false;
+      if (new Date(t.due_date).getTime() >= Date.now()) return false;
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = t.title.toLowerCase().includes(q);
@@ -364,13 +425,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
       {/* Main Tasks Workspace */}
       <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-        {/* Top Header: Breadcrumbs, Scope Title & View Mode Toggle */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-[#14141c] border-b border-[#222232] flex items-center justify-between flex-wrap gap-3">
-          <div className="space-y-1">
+        {/* Top Header: Breadcrumbs, Scope Title & View Switcher */}
+        <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 bg-[#14141c] border-b border-[#222232] flex items-center justify-between flex-wrap gap-2.5 pt-[max(0.625rem,env(safe-area-inset-top,0px))] flex-shrink-0">
+          <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsClickUpSidebarOpen(!isClickUpSidebarOpen)}
-                className="md:hidden p-1.5 -ml-1 text-gray-400 hover:text-white rounded-lg bg-[#1a1a24] border border-[#2b2b3a]"
+                className="md:hidden p-1.5 -ml-1 text-gray-400 hover:text-white rounded-lg bg-[#1a1a24] border border-[#2b2b3a] flex-shrink-0"
                 title="Abrir jerarquía de espacios"
                 aria-label="Abrir jerarquía"
               >
@@ -391,44 +452,55 @@ export const TasksView: React.FC<TasksViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-wide flex items-center gap-2 truncate">
                 {scopeInfo.title}
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#202030] text-gray-400 border border-[#2b2b40]">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#202030] text-gray-400 border border-[#2b2b40]">
                   {filteredTasks.length} {filteredTasks.length === 1 ? 'tarea' : 'tareas'}
                 </span>
               </h2>
             </div>
-            {scopeInfo.description && (
-              <p className="text-xs text-gray-400 max-w-xl truncate">{scopeInfo.description}</p>
-            )}
           </div>
 
-          {/* Right Header Controls: View Switcher & New Task Button */}
-          <div className="flex items-center gap-2.5">
-            {/* View Mode Toggle: Board vs List */}
+          {/* Right Header Controls: 1. View Switcher (Kanban, Lista, Eisenhower) & 2. New Task Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* View Mode Toggle: Kanban vs Lista vs Eisenhower */}
             <div className="flex items-center bg-[#181824] p-0.5 rounded-lg border border-[#2b2b3e]">
               <button
                 onClick={() => setViewMode('board')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
                   viewMode === 'board'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
+                title="Vista Tablero Kanban"
               >
                 <Kanban className="w-3.5 h-3.5" />
-                <span>Tablero</span>
+                <span>Kanban</span>
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
                   viewMode === 'list'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
+                title="Vista Lista compacta"
               >
                 <LayoutList className="w-3.5 h-3.5" />
                 <span>Lista</span>
+              </button>
+              <button
+                onClick={() => setViewMode('eisenhower')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
+                  viewMode === 'eisenhower'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Matriz de Eisenhower"
+              >
+                <Grid3X3 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Eisenhower</span>
               </button>
             </div>
 
@@ -439,40 +511,165 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 setModalInitialStatus('todo');
                 setIsModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-900/30 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-900/30 transition flex-shrink-0"
             >
               <Plus className="w-4 h-4" />
-              <span>Nueva Tarea</span>
+              <span className="hidden xs:inline">Nueva Tarea</span>
             </button>
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="px-6 py-2.5 bg-[#121218] border-b border-[#20202c] flex items-center justify-between flex-wrap gap-2.5 text-xs">
+        {/* 2. Quick Date Access Bar (Inbox, Hoy, Mañana, Esta semana, Este mes, Pendiente, Todas) */}
+        <div className="px-3 sm:px-6 py-2 bg-[#161622] border-b border-[#20202e] flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0 text-xs">
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dayAfterTomorrow = new Date(tomorrow);
+            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+            const currentDay = today.getDay();
+            const distanceToMonday = (currentDay + 6) % 7;
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - distanceToMonday);
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+
+            const countInbox = tasks.filter(t => !t.parent_task_id && !t.due_date).length;
+            const countToday = tasks.filter(t => !t.parent_task_id && t.due_date && new Date(t.due_date) >= today && new Date(t.due_date) < tomorrow).length;
+            const countTomorrow = tasks.filter(t => !t.parent_task_id && t.due_date && new Date(t.due_date) >= tomorrow && new Date(t.due_date) < dayAfterTomorrow).length;
+            const countWeek = tasks.filter(t => !t.parent_task_id && t.due_date && new Date(t.due_date) >= startOfWeek && new Date(t.due_date) < endOfWeek).length;
+            const countMonth = tasks.filter(t => !t.parent_task_id && t.due_date && new Date(t.due_date) >= startOfMonth && new Date(t.due_date) <= endOfMonth).length;
+            const countPending = tasks.filter(t => !t.parent_task_id && t.status !== 'completed').length;
+            const countAll = tasks.filter(t => !t.parent_task_id).length;
+
+            const dateOptions: { id: typeof filterDateScope; label: string; icon: React.ReactNode; count: number }[] = [
+              { id: 'inbox', label: 'Inbox', icon: <Inbox className="w-3.5 h-3.5 text-indigo-400" />, count: countInbox },
+              { id: 'today', label: 'Hoy', icon: <Sun className="w-3.5 h-3.5 text-amber-400" />, count: countToday },
+              { id: 'tomorrow', label: 'Mañana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400" />, count: countTomorrow },
+              { id: 'week', label: 'Esta semana', icon: <Calendar className="w-3.5 h-3.5 text-emerald-400" />, count: countWeek },
+              { id: 'month', label: 'Este mes', icon: <Clock className="w-3.5 h-3.5 text-purple-400" />, count: countMonth },
+              { id: 'pending', label: 'Pendiente', icon: <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />, count: countPending },
+              { id: 'all', label: 'Todas', icon: <CheckSquare className="w-3.5 h-3.5 text-gray-400" />, count: countAll }
+            ];
+
+            return dateOptions.map((opt) => {
+              const isActive = filterDateScope === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setFilterDateScope(opt.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition flex-shrink-0 text-xs ${
+                    isActive
+                      ? 'bg-blue-600/90 text-white shadow-sm ring-1 ring-blue-400/30'
+                      : 'bg-[#1b1b26] text-gray-300 hover:text-white hover:bg-[#232332] border border-[#272738]'
+                  }`}
+                >
+                  {opt.icon}
+                  <span>{opt.label}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-[#13131c] text-gray-400'
+                  }`}>
+                    {opt.count}
+                  </span>
+                </button>
+              );
+            });
+          })()}
+        </div>
+
+        {/* 3. Date & Timezone Indicator + Compact Controls */}
+        <div className="px-3 sm:px-6 py-2 bg-[#121218] border-b border-[#20202c] flex items-center justify-between flex-wrap gap-2 text-xs flex-shrink-0">
+          {/* Current Date & Timezone */}
+          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            <CalendarClock className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+            <span className="capitalize">
+              {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </span>
+            <span className="text-gray-600">•</span>
+            <span className="text-gray-400 font-mono text-[10px]">
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}
+            </span>
+          </div>
+
+          {/* 5. Summary Flow Metrics */}
+          <div className="flex items-center gap-3 text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-gray-400">Por hacer:</span>
+              <span className="font-mono font-semibold text-white">
+                {filteredTasks.filter(t => t.status === 'todo').length}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-400" />
+              <span className="text-gray-400">En progreso:</span>
+              <span className="font-mono font-semibold text-white">
+                {filteredTasks.filter(t => t.status === 'in_progress').length}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-gray-400">Completadas:</span>
+              <span className="font-mono font-semibold text-emerald-400">
+                {filteredTasks.filter(t => t.status === 'completed').length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Compact Search and Filters Bar */}
+        <div className="px-3 sm:px-6 py-2 bg-[#14141c] border-b border-[#20202c] flex items-center justify-between flex-wrap gap-2 text-xs flex-shrink-0">
           {/* Search Box */}
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-[160px] max-w-sm">
             <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar tareas por título o contenido..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#181822] border border-[#282838] focus:border-blue-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none transition"
+              placeholder="Buscar tareas..."
+              className="w-full pl-8 pr-7 py-1.5 bg-[#181822] border border-[#282838] focus:border-blue-500 rounded-lg text-xs text-white placeholder-gray-500 outline-none transition"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-2 text-gray-500 hover:text-gray-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Quick Filters */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Compact Dropdown Filters */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {/* Project Filter */}
             <select
               value={filterProject}
               onChange={(e) => setFilterProject(e.target.value)}
-              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[160px] truncate"
+              className="px-2 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[130px] sm:max-w-[150px] truncate"
             >
-              <option value="all">Todos los proyectos</option>
+              <option value="all">Proyectos: Todos</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.title}
+                </option>
+              ))}
+            </select>
+
+            {/* Category Filter */}
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-2 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[120px] sm:max-w-[140px] truncate"
+            >
+              <option value="all">Categorías: Todas</option>
+              {categories.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -481,9 +678,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
             <select
               value={filterPriority}
               onChange={(e) => setFilterPriority(e.target.value)}
-              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer"
+              className="px-2 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer"
             >
-              <option value="all">Todas las prioridades</option>
+              <option value="all">Prioridad: Todas</option>
               <option value="urgent">Urgente 🔥</option>
               <option value="high">Alta</option>
               <option value="medium">Media</option>
@@ -494,38 +691,38 @@ export const TasksView: React.FC<TasksViewProps> = ({
             <select
               value={filterEisenhower}
               onChange={(e) => setFilterEisenhower(e.target.value)}
-              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer"
+              className="px-2 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[140px] truncate"
             >
-              <option value="all">Todo Eisenhower</option>
-              <option value="do">1. HACER (Urgente/Importante)</option>
+              <option value="all">Eisenhower: Todo</option>
+              <option value="do">1. HACER (Urg/Imp)</option>
               <option value="schedule">2. PROGRAMAR</option>
               <option value="delegate">3. DELEGAR</option>
               <option value="delete">4. ELIMINAR</option>
             </select>
 
-            {/* Category Filter */}
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-2.5 py-1.5 bg-[#181822] border border-[#282838] rounded-lg text-xs text-gray-300 outline-none cursor-pointer max-w-[150px] truncate"
+            {/* Overdue toggle button */}
+            <button
+              onClick={() => setFilterOnlyOverdue(!filterOnlyOverdue)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${
+                filterOnlyOverdue
+                  ? 'bg-red-950/80 text-red-300 border-red-700/60'
+                  : 'bg-[#181822] text-gray-400 hover:text-white border-[#282838]'
+              }`}
+              title="Filtrar solo tareas vencidas"
             >
-              <option value="all">Todas las categorías</option>
-              {categories.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
+              <AlertTriangle className={`w-3.5 h-3.5 ${filterOnlyOverdue ? 'text-red-400' : 'text-gray-400'}`} />
+              <span className="hidden sm:inline">Vencidas</span>
+            </button>
           </div>
         </div>
 
-        {/* Content View: Board or List */}
-        <div className="flex-1 overflow-auto p-6">
+        {/* Content View: Board or List or Eisenhower */}
+        <div className="flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-6 min-h-0">
           {viewMode === 'board' ? (
             /* ==================================================== */
-            /* VISTA TABLERO (KANBAN COLUMNS)                       */
+            /* 6. VISTA TABLERO KANBAN HORIZONTAL EN MÓVIL Y DESKTOP */
             /* ==================================================== */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-full min-h-[500px]">
+            <div className="flex flex-row overflow-x-auto overflow-y-hidden gap-4 h-full min-h-[480px] pb-3 no-scrollbar items-start">
               {columns.map((col) => {
                 const colTasks = filteredTasks.filter(t => t.status === col.id);
                 const isOver = dragOverColumn === col.id;
@@ -536,7 +733,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     onDragOver={(e) => handleDragOver(e, col.id)}
                     onDragLeave={() => handleDragLeave(col.id)}
                     onDrop={(e) => handleDrop(e, col.id)}
-                    className={`flex flex-col bg-[#14141d] rounded-xl border transition-all duration-200 overflow-hidden ${
+                    className={`flex flex-col bg-[#14141d] rounded-xl border transition-all duration-200 overflow-hidden flex-shrink-0 w-[85vw] sm:w-[320px] max-w-[340px] h-full ${
                       isOver 
                         ? 'border-blue-400 bg-blue-950/20 shadow-lg shadow-blue-950/40' 
                         : `${col.border} hover:border-[#35354a]`
@@ -728,7 +925,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 );
               })}
             </div>
-          ) : (
+          ) : viewMode === 'list' ? (
             /* ==================================================== */
             /* VISTA LISTA (CLICKUP STATUS-GROUPED COMPACT TABLE)  */
             /* ==================================================== */
@@ -989,6 +1186,114 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         >
                           Guardar
                         </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ==================================================== */
+            /* VISTA MATRIZ DE EISENHOWER                           */
+            /* ==================================================== */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-[480px]">
+              {[
+                { 
+                  id: 'do' as const, 
+                  title: '1. HACER (Urgente & Importante)', 
+                  desc: 'Tareas con alta prioridad e impacto inmediato',
+                  border: 'border-red-500/40', 
+                  bg: 'bg-red-500/5', 
+                  color: 'text-red-400', 
+                  badge: 'bg-red-950/80 text-red-300 border-red-800/60' 
+                },
+                { 
+                  id: 'schedule' as const, 
+                  title: '2. PROGRAMAR (No urgente, pero Importante)', 
+                  desc: 'Planificación, proyectos estratégicos y hábitos',
+                  border: 'border-blue-500/40', 
+                  bg: 'bg-blue-500/5', 
+                  color: 'text-blue-400', 
+                  badge: 'bg-blue-950/80 text-blue-300 border-blue-800/60' 
+                },
+                { 
+                  id: 'delegate' as const, 
+                  title: '3. DELEGAR (Urgente, pero No importante)', 
+                  desc: 'Interrupciones, llamadas y tareas operativas',
+                  border: 'border-amber-500/40', 
+                  bg: 'bg-amber-500/5', 
+                  color: 'text-amber-400', 
+                  badge: 'bg-amber-950/80 text-amber-300 border-amber-800/60' 
+                },
+                { 
+                  id: 'delete' as const, 
+                  title: '4. ELIMINAR / DESCARTAR (Ni urgente ni importante)', 
+                  desc: 'Distracciones, tareas secundarias prescindibles',
+                  border: 'border-gray-600/40', 
+                  bg: 'bg-gray-500/5', 
+                  color: 'text-gray-400', 
+                  badge: 'bg-gray-800 text-gray-300 border-gray-700' 
+                }
+              ].map((quadrant) => {
+                const quadTasks = filteredTasks.filter(t => t.eisenhower === quadrant.id);
+
+                return (
+                  <div
+                    key={quadrant.id}
+                    className={`flex flex-col bg-[#14141d] rounded-xl border ${quadrant.border} overflow-hidden shadow-sm`}
+                  >
+                    <div className="px-4 py-3 bg-[#181824] border-b border-[#252536] flex items-center justify-between">
+                      <div>
+                        <h3 className={`text-xs font-bold uppercase tracking-wider ${quadrant.color}`}>
+                          {quadrant.title}
+                        </h3>
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{quadrant.desc}</p>
+                      </div>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${quadrant.badge}`}>
+                        {quadTasks.length}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[380px]">
+                      {quadTasks.length === 0 ? (
+                        <div className="h-28 flex items-center justify-center border border-dashed border-[#232334] rounded-lg text-center p-3">
+                          <p className="text-[11px] text-gray-500">No hay tareas en este cuadrante</p>
+                        </div>
+                      ) : (
+                        quadTasks.map((t) => (
+                          <div
+                            key={t.id}
+                            onClick={() => {
+                              setModalTask(t);
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2.5 bg-[#181824] hover:bg-[#202030] rounded-lg border border-[#272738] hover:border-blue-500/40 transition cursor-pointer flex items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleTaskStatus(t);
+                                }}
+                                className="text-gray-500 hover:text-emerald-400 flex-shrink-0"
+                              >
+                                {t.status === 'completed' ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <Circle className="w-4 h-4 text-gray-400" />
+                                )}
+                              </button>
+                              <span className={`text-xs truncate ${t.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-200'}`}>
+                                {t.title}
+                              </span>
+                            </div>
+                            {t.due_date && (
+                              <span className="text-[10px] font-mono text-gray-400 flex-shrink-0">
+                                {new Date(t.due_date).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                              </span>
+                            )}
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>
