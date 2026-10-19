@@ -10,7 +10,9 @@ import {
   HardDrive,
   Eye,
   RefreshCw,
-  Folder
+  Folder,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 import { AppAttachment, AppFolder } from '../lib/types';
 import { r2Storage } from '../lib/r2Client';
@@ -57,6 +59,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [targetFolderId, setTargetFolderId] = useState<string | null>(defaultFolderId);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -255,35 +258,111 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             accept={acceptFilter}
           />
 
-          <div
-            onClick={() => {
-              if (!isProcessing) fileInputRef.current?.click();
+          {/* Dedicated Camera Input with capture attribute for Android / iOS */}
+          <input
+            type="file"
+            ref={cameraInputRef}
+            accept="image/*,video/*"
+            capture="environment"
+            onChange={(e) => {
+              handleFilesSelected(e.target.files);
+              if (cameraInputRef.current) cameraInputRef.current.value = '';
             }}
-            className={`border-2 border-dashed rounded-xl p-6 text-center transition flex flex-col items-center justify-center gap-2 cursor-pointer ${
-              isProcessing 
-                ? 'border-[#2d2d42] bg-[#14141c]/40 cursor-not-allowed opacity-60' 
-                : 'border-[#383852] hover:border-blue-500/80 bg-[#14141c] hover:bg-[#181826]'
-            }`}
-          >
-            <div className="w-12 h-12 rounded-2xl bg-blue-600/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
-              <Upload className="w-6 h-6 stroke-[2.2]" />
+            className="hidden"
+          />
+
+          {/* Opciones directas: Cámara o Galería si es filtro de foto/vídeo */}
+          {acceptFilter.includes('image') ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* 1. Opción Cámara Directa */}
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => {
+                    if (!isProcessing) cameraInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-b from-[#1c1c28] to-[#14141e] border border-rose-500/30 hover:border-rose-500/60 active:scale-[0.98] transition flex flex-col items-center justify-center gap-2 group text-center disabled:opacity-50"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center group-hover:scale-105 transition-transform shadow-inner">
+                    <Camera className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-white block">
+                      Cámara
+                    </span>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                      Tomar foto o grabar vídeo
+                    </span>
+                  </div>
+                </button>
+
+                {/* 2. Opción Galería / Dispositivo */}
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => {
+                    if (!isProcessing) fileInputRef.current?.click();
+                  }}
+                  className="p-4 rounded-2xl bg-gradient-to-b from-[#1c1c28] to-[#14141e] border border-purple-500/30 hover:border-purple-500/60 active:scale-[0.98] transition flex flex-col items-center justify-center gap-2 group text-center disabled:opacity-50"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-105 transition-transform shadow-inner">
+                    <ImageIcon className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-white block">
+                      Galería
+                    </span>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                      Elegir fotos y vídeos
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Zona alternativa de arrastrar y soltar */}
+              <div
+                onClick={() => {
+                  if (!isProcessing) fileInputRef.current?.click();
+                }}
+                className="border border-dashed border-[#2f2f44] hover:border-blue-500/50 rounded-xl p-3 text-center cursor-pointer bg-[#12121a] hover:bg-[#161622] transition"
+              >
+                <span className="text-[11px] text-gray-400">
+                  O arrastra archivos multimedia aquí desde tu ordenador
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="font-semibold text-sm text-gray-200 block">
-                Seleccionar archivos del dispositivo
-              </span>
-              <span className="text-[11px] text-gray-400 block mt-0.5">
-                PDFs, imágenes, audios, vídeos, documentos (sin compresión destructiva)
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={isProcessing}
-              className="mt-1 px-3 py-1.5 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-medium hover:bg-blue-600/30 transition pointer-events-none"
+          ) : (
+            <div
+              onClick={() => {
+                if (!isProcessing) fileInputRef.current?.click();
+              }}
+              className={`border-2 border-dashed rounded-xl p-6 text-center transition flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                isProcessing 
+                  ? 'border-[#2d2d42] bg-[#14141c]/40 cursor-not-allowed opacity-60' 
+                  : 'border-[#383852] hover:border-blue-500/80 bg-[#14141c] hover:bg-[#181826]'
+              }`}
             >
-              Explorar archivos
-            </button>
-          </div>
+              <div className="w-12 h-12 rounded-2xl bg-blue-600/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+                <Upload className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div>
+                <span className="font-semibold text-sm text-gray-200 block">
+                  Seleccionar archivos del dispositivo
+                </span>
+                <span className="text-[11px] text-gray-400 block mt-0.5">
+                  PDFs, imágenes, audios, vídeos, documentos (sin compresión destructiva)
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={isProcessing}
+                className="mt-1 px-3 py-1.5 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-medium hover:bg-blue-600/30 transition pointer-events-none"
+              >
+                Explorar archivos
+              </button>
+            </div>
+          )}
 
           {/* Files Queue List */}
           {queue.length > 0 && (
