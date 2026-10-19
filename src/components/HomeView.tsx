@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   CheckSquare, 
   Calendar, 
@@ -106,6 +106,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [captureType, setCaptureType] = useState<'note' | 'task'>('task');
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+
+  // Mobile top search bar scroll visibility (hide on scroll down, show on scroll up)
+  const [showMobileSearch, setShowMobileSearch] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastScrollYRef = useRef(0);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const currentY = e.currentTarget.scrollTop;
+    const diff = currentY - lastScrollYRef.current;
+
+    // Only react if scroll difference is significant (> 6px) to avoid jitter
+    if (Math.abs(diff) > 6) {
+      if (currentY <= 10) {
+        setShowMobileSearch(true);
+      } else if (diff > 0 && currentY > 50) {
+        // Scrolling down
+        setShowMobileSearch(false);
+      } else if (diff < 0) {
+        // Scrolling up
+        setShowMobileSearch(true);
+      }
+      lastScrollYRef.current = currentY;
+    }
+  };
 
   // Projects lookup map for fast title & color resolution
   const projectsMap = useMemo(() => {
@@ -350,23 +374,43 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-[#111116] overflow-y-auto text-gray-100 select-none pb-16 lg:pb-8">
+    <div 
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex-1 flex flex-col h-screen bg-[#111116] overflow-y-auto text-gray-100 select-none pb-28 lg:pb-8"
+      style={{
+        paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 24px)'
+      }}
+    >
       {/* ==================================================== */}
-      {/* 1. HEADER (Single unified header per rule 1)           */}
+      {/* 1A. MOBILE FIXED TOP SEARCH BAR (Width: full, 44px,   */}
+      {/* auto-hides on scroll down, appears on scroll up)      */}
       {/* ==================================================== */}
-      <header className="px-4 sm:px-6 lg:px-8 py-3.5 border-b border-[#23232f] bg-[#14141c] sticky top-0 z-20 backdrop-blur-md bg-opacity-95">
+      <div 
+        className={`lg:hidden sticky top-0 z-30 px-3 pt-2 pb-1.5 bg-[#111116]/95 backdrop-blur-md transition-transform duration-200 ${
+          showMobileSearch ? 'translate-y-0' : '-translate-y-full'
+        }`}
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)'
+        }}
+      >
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="w-full h-11 px-3.5 bg-[#1a1a24] hover:bg-[#20202c] active:bg-[#252535] border border-[#2b2b3a] rounded-xl flex items-center gap-2.5 text-gray-400 text-sm shadow-sm transition"
+          aria-label="Buscar en todo"
+        >
+          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="flex-1 text-left truncate text-gray-400 font-normal">Buscar en todo</span>
+        </button>
+      </div>
+
+      {/* ==================================================== */}
+      {/* 1B. DESKTOP-ONLY HEADER (Identical to before)        */}
+      {/* ==================================================== */}
+      <header className="hidden lg:block px-6 lg:px-8 py-3.5 border-b border-[#23232f] bg-[#14141c] sticky top-0 z-20 backdrop-blur-md bg-opacity-95">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {onOpenMobileMenu && (
-              <button
-                type="button"
-                onClick={onOpenMobileMenu}
-                className="lg:hidden p-2 -ml-1 text-gray-300 hover:text-white rounded-lg hover:bg-[#20202a] active:bg-[#282836] transition flex-shrink-0"
-                aria-label="Abrir menú de navegación"
-              >
-                <Menu className="w-5 h-5 text-gray-200" />
-              </button>
-            )}
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-xs font-medium text-blue-400">
                 <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
@@ -408,11 +452,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
               )}
             </button>
 
-            {/* Desktop-only single creation button (in mobile FAB handles creation) */}
+            {/* Desktop-only single creation button */}
             <button
               type="button"
               onClick={onNewNote}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm shadow-blue-900/30 transition active:scale-95 ml-1"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm shadow-blue-900/30 transition active:scale-95 ml-1"
               title="Crear elemento (Atajo: N)"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -426,7 +470,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* ==================================================== */}
       {/* 2. MAIN WORKSPACE: BALANCED 2-COLUMN LAYOUT          */}
       {/* ==================================================== */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
+
+        {/* ==================================================== */}
+        {/* MOBILE IN-CONTENT LARGE HEADER (Greeting & Date only)*/}
+        {/* Does not repeat "Inicio" and scrolls with page        */}
+        {/* ==================================================== */}
+        <div className="lg:hidden pt-1 pb-1">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-blue-400">
+            <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{greeting}</span>
+          </div>
+          <h2 className="text-xl font-bold text-white tracking-tight mt-1 capitalize">
+            {formattedTodayHeader}
+          </h2>
+        </div>
 
         {/* ==================================================== */}
         {/* BARRA DE CAPTURA RÁPIDA (Directly below header)     */}

@@ -1338,6 +1338,8 @@ export function App() {
           }}
           onOpenQuickCreate={handleMobileQuickCreate}
           onOpenSearch={() => setIsQuickSwitcherOpen(true)}
+          onOpenMore={() => setIsMobileMenuOpen(prev => !prev)}
+          isMoreOpen={isMobileMenuOpen}
           isEditorOpen={isEditingNote}
         />
       </main>

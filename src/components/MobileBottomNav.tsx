@@ -12,7 +12,9 @@ import {
   Layers, 
   Book, 
   X,
-  Sparkles
+  Sparkles,
+  Menu,
+  MoreHorizontal
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
@@ -21,6 +23,8 @@ interface MobileBottomNavProps {
   onSelectView: (view: ViewMode) => void;
   onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object') => void;
   onOpenSearch: () => void;
+  onOpenMore?: () => void;
+  isMoreOpen?: boolean;
   isEditorOpen?: boolean;
 }
 
@@ -29,6 +33,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onSelectView,
   onOpenQuickCreate,
   onOpenSearch,
+  onOpenMore,
+  isMoreOpen = false,
   isEditorOpen = false
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -188,12 +194,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </div>
       )}
 
-      {/* Fixed Bottom Navigation Bar */}
+      {/* Fixed Bottom Navigation Bar (64px + safe-area, 48px touch targets, 56px elevated FAB) */}
       <nav 
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#141419]/95 backdrop-blur-md border-t border-[#23232c] flex items-center justify-around px-2 shadow-2xl select-none"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#141419]/95 backdrop-blur-md border-t border-[#23232c] flex items-center justify-between px-3 shadow-2xl select-none"
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          height: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))'
+          height: 'calc(64px + env(safe-area-inset-bottom, 0px))'
         }}
         aria-label="Navegación inferior"
       >
@@ -201,42 +207,42 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <button
           type="button"
           onClick={() => onSelectView('home')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition active:scale-95 ${
-            isHomeActive ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'
+          className={`flex flex-col items-center justify-center min-w-[48px] min-h-[48px] flex-1 py-1 transition active:scale-95 ${
+            isHomeActive ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Inicio"
           aria-current={isHomeActive ? 'page' : undefined}
         >
-          <Home className={`w-5 h-5 mb-0.5 ${isHomeActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] leading-none">Inicio</span>
+          <Home className={`w-6 h-6 mb-1 ${isHomeActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[12px] leading-none">Inicio</span>
         </button>
 
         {/* 2. Calendario */}
         <button
           type="button"
           onClick={() => onSelectView('calendar')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition active:scale-95 ${
+          className={`flex flex-col items-center justify-center min-w-[48px] min-h-[48px] flex-1 py-1 transition active:scale-95 ${
             isCalendarActive ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Calendario"
           aria-current={isCalendarActive ? 'page' : undefined}
         >
-          <Calendar className={`w-5 h-5 mb-0.5 ${isCalendarActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] leading-none">Calendario</span>
+          <Calendar className={`w-6 h-6 mb-1 ${isCalendarActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[12px] leading-none">Calendario</span>
         </button>
 
-        {/* 3. Botón Central Nuevo (+) Estilo Capacities */}
+        {/* 3. FAB Central Elevado (56px, elevado ~20px sobre la barra) */}
         <div className="flex-1 flex items-center justify-center">
           <button
             type="button"
             onClick={() => setIsMenuOpen(prev => !prev)}
-            className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-900/40 active:scale-95 transition transform -translate-y-1.5 border border-white/20"
+            className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-xl shadow-blue-900/50 active:scale-95 transition-transform transform -translate-y-5 border-2 border-[#141419]"
             title="Crear nueva tarea, nota, cuaderno, página u objeto"
             aria-label="Crear nuevo elemento"
             aria-expanded={isMenuOpen}
             aria-haspopup="dialog"
           >
-            <Plus className={`w-6 h-6 transition-transform duration-200 ${isMenuOpen ? 'rotate-45' : 'rotate-0'}`} />
+            <Plus className={`w-7 h-7 stroke-[2.5] transition-transform duration-200 ${isMenuOpen ? 'rotate-45' : 'rotate-0'}`} />
           </button>
         </div>
 
@@ -244,25 +250,30 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <button
           type="button"
           onClick={() => onSelectView('tasks')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition active:scale-95 ${
-            isTasksActive ? 'text-amber-400 font-bold' : 'text-gray-400 hover:text-gray-200'
+          className={`flex flex-col items-center justify-center min-w-[48px] min-h-[48px] flex-1 py-1 transition active:scale-95 ${
+            isTasksActive ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Tareas"
           aria-current={isTasksActive ? 'page' : undefined}
         >
-          <CheckSquare className={`w-5 h-5 mb-0.5 ${isTasksActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] leading-none">Tareas</span>
+          <CheckSquare className={`w-6 h-6 mb-1 ${isTasksActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[12px] leading-none">Tareas</span>
         </button>
 
-        {/* 5. Buscar */}
+        {/* 5. Más (reemplaza a Buscar y al menú hamburguesa) */}
         <button
           type="button"
-          onClick={onOpenSearch}
-          className="flex flex-col items-center justify-center flex-1 py-1 text-gray-400 hover:text-gray-200 transition active:scale-95"
-          aria-label="Búsqueda global"
+          onClick={() => {
+            if (onOpenMore) onOpenMore();
+          }}
+          className={`flex flex-col items-center justify-center min-w-[48px] min-h-[48px] flex-1 py-1 transition active:scale-95 ${
+            isMoreOpen ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
+          }`}
+          aria-label="Abrir menú Más"
+          aria-expanded={isMoreOpen}
         >
-          <Search className="w-5 h-5 mb-0.5 stroke-2" />
-          <span className="text-[10px] leading-none">Buscar</span>
+          <Menu className={`w-6 h-6 mb-1 ${isMoreOpen ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[12px] leading-none">Más</span>
         </button>
       </nav>
     </>

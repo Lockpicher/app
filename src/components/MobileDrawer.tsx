@@ -456,9 +456,6 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                     <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     <span className="truncate">Calendario</span>
                   </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400 border border-[#2b2b3a]">
-                    Agenda
-                  </span>
                 </button>
 
                 {/* Recordatorios */}
@@ -466,14 +463,16 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                   type="button"
                   onClick={() => handleNav('reminders')}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'reminders' ? 'bg-pink-600/20 text-pink-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
+                    currentView === 'reminders' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
                   }`}
                 >
                   <span className="flex items-center gap-2.5 truncate">
-                    <Bell className="w-4 h-4 text-pink-400 flex-shrink-0" />
+                    <Bell className="w-4 h-4 text-amber-400 flex-shrink-0" />
                     <span className="truncate">Recordatorios</span>
                   </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.reminders}</span>
+                  {counts.reminders > 0 && (
+                    <span className="text-[10px] font-mono text-gray-400">{counts.reminders}</span>
+                  )}
                 </button>
 
                 {/* Revisión Periódica */}
@@ -481,15 +480,12 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                   type="button"
                   onClick={() => handleNav('para_review')}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_review' ? 'bg-cyan-600/20 text-cyan-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
+                    currentView === 'para_review' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
                   }`}
                 >
                   <span className="flex items-center gap-2.5 truncate">
                     <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0" />
                     <span className="truncate">Revisión Periódica</span>
-                  </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-300">
-                    Auditar
                   </span>
                 </button>
               </div>
@@ -500,7 +496,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
           <div>
             <div 
               onClick={() => toggleSection('media')}
-              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-cyan-400/90"
+              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-gray-400"
             >
               <span className="flex items-center gap-1.5">
                 <HardDrive className="w-3.5 h-3.5" />
@@ -515,15 +511,12 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                   type="button"
                   onClick={() => handleNav('files')}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'files' ? 'bg-cyan-600/20 text-cyan-300 font-semibold border border-cyan-500/40' : 'text-gray-300 hover:bg-[#1b1b26]'
+                    currentView === 'files' ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/40' : 'text-gray-300 hover:bg-[#1b1b26]'
                   }`}
                 >
                   <span className="flex items-center gap-2.5 truncate">
                     <HardDrive className="w-4 h-4 text-cyan-400 flex-shrink-0" />
                     <span className="truncate">Archivos y Medios</span>
-                  </span>
-                  <span className="text-[10px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 px-1.5 py-0.2 rounded font-mono">
-                    R2
                   </span>
                 </button>
               </div>
@@ -635,10 +628,9 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
         {/* Footer info */}
         <div className="p-3 border-t border-[#23232f] bg-[#111116] flex items-center justify-between text-[11px] text-gray-400 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>InsForge BaaS + R2</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Sincronizado</span>
           </div>
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
         </div>
       </aside>
     </div>

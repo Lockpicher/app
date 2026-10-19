@@ -216,11 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     icon: React.ReactNode,
     options?: {
       count?: number;
-      badgeText?: string;
       activeCondition?: boolean;
-      activeBorderColor?: string;
-      activeBgColor?: string;
-      activeTextColor?: string;
     }
   ) => {
     const isActive = options?.activeCondition !== undefined 
@@ -239,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'px-2.5 py-1.5 text-xs font-medium'
         } ${
           isActive
-            ? `${options?.activeBgColor || 'bg-blue-600/15'} ${options?.activeTextColor || 'text-blue-300'} ${options?.activeBorderColor || 'border border-blue-500/30'}`
+            ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
             : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white border border-transparent'
         }`}
       >
@@ -248,22 +244,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && <span className="truncate">{label}</span>}
         </span>
 
-        {/* Counter or Badge for Expanded mode */}
-        {!isCollapsed && (
-          <>
-            {options?.badgeText && (
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#1e1e28] text-gray-400 border border-[#2b2b3a] flex-shrink-0">
-                {options.badgeText}
-              </span>
-            )}
-            {options?.count !== undefined && options.count > 0 && !options.badgeText && (
-              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded flex-shrink-0 ${
-                isActive ? 'bg-blue-950/60 text-blue-300' : 'bg-[#1e1e28] text-gray-400'
-              }`}>
-                {options.count}
-              </span>
-            )}
-          </>
+        {/* Counter for Expanded mode */}
+        {!isCollapsed && options?.count !== undefined && options.count > 0 && (
+          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded flex-shrink-0 ${
+            isActive ? 'bg-blue-950/80 text-blue-300 border border-blue-800/40' : 'bg-[#1e1e28] text-gray-400'
+          }`}>
+            {options.count}
+          </span>
         )}
 
         {/* Tooltip for Collapsed mode */}
@@ -271,7 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="hidden group-hover:flex absolute left-full ml-2 px-2.5 py-1 bg-[#1e1e28] text-gray-200 text-xs rounded-md shadow-xl border border-[#2d2d3e] whitespace-nowrap z-50 pointer-events-none items-center gap-1.5">
             <span>{label}</span>
             {options?.count !== undefined && options.count > 0 && (
-              <span className="text-[10px] font-mono text-purple-400">({options.count})</span>
+              <span className="text-[10px] font-mono text-blue-400">({options.count})</span>
             )}
           </div>
         )}
@@ -464,11 +451,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* VISTA PRINCIPAL: INICIO / HOME                        */}
           {/* ==================================================== */}
           <div className="space-y-0.5">
-            {renderNavItem('home', 'Inicio', <Home className="w-4 h-4 text-purple-400" />, {
-              activeCondition: currentView === 'home',
-              activeBgColor: 'bg-purple-600/15',
-              activeTextColor: 'text-purple-300',
-              activeBorderColor: 'border-purple-500/30'
+            {renderNavItem('home', 'Inicio', <Home className="w-4 h-4 text-blue-400" />, {
+              activeCondition: currentView === 'home'
             })}
           </div>
 
@@ -480,7 +464,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => toggleGroup('capture')}
-                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-amber-400/90 hover:text-amber-300 transition select-none group"
+                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-gray-400 hover:text-gray-200 transition select-none group"
               >
                 <span className="flex items-center gap-1.5">
                   <Inbox className="w-3 h-3 text-amber-400" />
@@ -496,43 +480,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="space-y-0.5">
                 {/* 1. Capturar / Inbox */}
                 {renderNavItem('para_inbox', 'Capturar (Inbox)', <Inbox className="w-4 h-4 text-amber-400" />, {
-                  count: counts.inbox,
-                  activeBgColor: 'bg-amber-600/15',
-                  activeTextColor: 'text-amber-300',
-                  activeBorderColor: 'border-amber-500/30'
+                  count: counts.inbox
                 })}
 
-                {/* 2. Proyectos (Entrada UNIFICADA - elimina la duplicación) */}
+                {/* 2. Proyectos (Entrada UNIFICADA) */}
                 {renderNavItem('projects', 'Proyectos', <FolderKanban className="w-4 h-4 text-blue-400" />, {
                   count: counts.projects,
-                  activeCondition: currentView === 'projects' || currentView === 'para_projects',
-                  activeBgColor: 'bg-blue-600/15',
-                  activeTextColor: 'text-blue-300',
-                  activeBorderColor: 'border-blue-500/30'
+                  activeCondition: currentView === 'projects' || currentView === 'para_projects'
                 })}
 
                 {/* 3. Áreas de Responsabilidad */}
                 {renderNavItem('para_areas', 'Áreas', <Layers className="w-4 h-4 text-purple-400" />, {
-                  count: counts.areas,
-                  activeBgColor: 'bg-purple-600/15',
-                  activeTextColor: 'text-purple-300',
-                  activeBorderColor: 'border-purple-500/30'
+                  count: counts.areas
                 })}
 
                 {/* 4. Recursos de Conocimiento */}
                 {renderNavItem('para_resources', 'Recursos', <BookOpen className="w-4 h-4 text-emerald-400" />, {
-                  count: counts.objects,
-                  activeBgColor: 'bg-emerald-600/15',
-                  activeTextColor: 'text-emerald-300',
-                  activeBorderColor: 'border-emerald-500/30'
+                  count: counts.objects
                 })}
 
                 {/* 5. Archivo Histórico */}
                 {renderNavItem('para_archives', 'Archivo', <Archive className="w-4 h-4 text-gray-400" />, {
-                  count: counts.archives,
-                  activeBgColor: 'bg-gray-600/20',
-                  activeTextColor: 'text-gray-200',
-                  activeBorderColor: 'border-gray-500/30'
+                  count: counts.archives
                 })}
               </div>
             )}
@@ -546,7 +515,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => toggleGroup('knowledge')}
-                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-purple-400/90 hover:text-purple-300 transition select-none group"
+                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-gray-400 hover:text-gray-200 transition select-none group"
               >
                 <span className="flex items-center gap-1.5">
                   <Book className="w-3 h-3 text-purple-400" />
@@ -562,30 +531,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="space-y-0.5">
                 {/* Cuadernos */}
                 {renderNavItem('notebooks', 'Cuadernos', <Book className="w-4 h-4 text-blue-400" />, {
-                  count: counts.notebooks,
-                  activeBgColor: 'bg-blue-600/15',
-                  activeTextColor: 'text-blue-300',
-                  activeBorderColor: 'border-blue-500/30'
+                  count: counts.notebooks
                 })}
 
                 {/* Todas las Notas */}
                 {renderNavItem('all_notes', 'Todas las notas', <FileText className="w-4 h-4 text-purple-400" />, {
                   count: counts.notes,
-                  activeCondition: currentView === 'all_notes' || currentView === 'notes',
-                  activeBgColor: 'bg-purple-600/15',
-                  activeTextColor: 'text-purple-300',
-                  activeBorderColor: 'border-purple-500/30'
+                  activeCondition: currentView === 'all_notes' || currentView === 'notes'
                 })}
 
                 {/* Favoritos */}
                 {renderNavItem('favorites', 'Favoritos', <Star className="w-4 h-4 text-amber-400" />, {
-                  count: counts.favorites,
-                  activeBgColor: 'bg-amber-600/15',
-                  activeTextColor: 'text-amber-300',
-                  activeBorderColor: 'border-amber-500/30'
+                  count: counts.favorites
                 })}
 
-                {/* Objetos & Entidades (con subpanel desplegable opcional) */}
+                {/* Objetos & Entidades */}
                 <div className="pt-0.5">
                   <div
                     onClick={() => handleSelectNav('objects')}
@@ -595,7 +555,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'px-2.5 py-1.5 text-xs font-medium'
                     } ${
                       currentView === 'objects' && (!activeObjectType || activeObjectType === 'all')
-                        ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
+                        ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
                         : 'text-gray-300 hover:bg-[#1c1c24] hover:text-white border border-transparent'
                     }`}
                     title={isCollapsed ? `Objetos & Entidades (${counts.objects})` : undefined}
@@ -629,7 +589,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {isCollapsed && (
                       <div className="hidden group-hover:flex absolute left-full ml-2 px-2.5 py-1 bg-[#1e1e28] text-gray-200 text-xs rounded-md shadow-xl border border-[#2d2d3e] whitespace-nowrap z-50 pointer-events-none items-center gap-1.5">
                         <span>Objetos & Entidades</span>
-                        <span className="text-[10px] font-mono text-emerald-400">({counts.objects})</span>
+                        <span className="text-[10px] font-mono text-blue-400">({counts.objects})</span>
                       </div>
                     )}
                   </div>
@@ -649,7 +609,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           }}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition ${
                             currentView === 'objects' && (!activeObjectType || activeObjectType === 'all')
-                              ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/40'
+                              ? 'bg-blue-950/60 text-blue-300 border border-blue-800/40'
                               : 'text-gray-400 hover:bg-[#1a1a24] hover:text-gray-200'
                           }`}
                         >
@@ -676,7 +636,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               }}
                               className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition ${
                                 isSelected
-                                  ? 'bg-[#20202e] text-white border border-[#3b3b4f]'
+                                  ? 'bg-blue-950/60 text-blue-300 border border-blue-800/40'
                                   : 'text-gray-400 hover:bg-[#1a1a24] hover:text-gray-200'
                               }`}
                             >
@@ -701,18 +661,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         className="h-2 my-0.5 cursor-row-resize flex items-center justify-center group/resizer"
                         title="Arrastrar para redimensionar panel"
                       >
-                        <div className="w-8 h-1 rounded-full bg-[#29293a] group-hover/resizer:bg-emerald-500 transition-colors" />
+                        <div className="w-8 h-1 rounded-full bg-[#29293a] group-hover/resizer:bg-blue-500 transition-colors" />
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Grafo de Conocimiento */}
-                {renderNavItem('graph', 'Grafo de Red', <Share2 className="w-4 h-4 text-indigo-400" />, {
-                  activeBgColor: 'bg-purple-600/15',
-                  activeTextColor: 'text-purple-300',
-                  activeBorderColor: 'border-purple-500/30'
-                })}
+                {renderNavItem('graph', 'Grafo de Red', <Share2 className="w-4 h-4 text-indigo-400" />)}
               </div>
             )}
           </div>
@@ -725,7 +681,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => toggleGroup('planning')}
-                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-blue-400/90 hover:text-blue-300 transition select-none group"
+                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-gray-400 hover:text-gray-200 transition select-none group"
               >
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3 h-3 text-blue-400" />
@@ -740,36 +696,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(!collapsedGroups.planning || isCollapsed) && (
               <div className="space-y-0.5">
                 {/* Tareas (Kanban) */}
-                {renderNavItem('tasks', 'Tareas (Kanban)', <CheckSquare className="w-4 h-4 text-amber-400" />, {
-                  count: counts.tasks,
-                  activeBgColor: 'bg-purple-600/15',
-                  activeTextColor: 'text-purple-300',
-                  activeBorderColor: 'border-purple-500/30'
+                {renderNavItem('tasks', 'Tareas', <CheckSquare className="w-4 h-4 text-amber-400" />, {
+                  count: counts.tasks
                 })}
 
                 {/* Calendario Central Integrado */}
-                {renderNavItem('calendar', 'Calendario', <Calendar className="w-4 h-4 text-blue-400" />, {
-                  badgeText: 'Agenda',
-                  activeBgColor: 'bg-blue-600/15',
-                  activeTextColor: 'text-blue-300',
-                  activeBorderColor: 'border-blue-500/30'
-                })}
+                {renderNavItem('calendar', 'Calendario', <Calendar className="w-4 h-4 text-blue-400" />)}
 
                 {/* Recordatorios */}
                 {renderNavItem('reminders', 'Recordatorios', <Bell className="w-4 h-4 text-amber-400" />, {
-                  count: counts.reminders,
-                  activeBgColor: 'bg-amber-600/15',
-                  activeTextColor: 'text-amber-300',
-                  activeBorderColor: 'border-amber-500/30'
+                  count: counts.reminders
                 })}
 
                 {/* Revisión Periódica */}
-                {renderNavItem('para_review', 'Revisión Periódica', <Sparkles className="w-4 h-4 text-cyan-400" />, {
-                  badgeText: 'Auditar',
-                  activeBgColor: 'bg-cyan-600/15',
-                  activeTextColor: 'text-cyan-300',
-                  activeBorderColor: 'border-cyan-500/30'
-                })}
+                {renderNavItem('para_review', 'Revisión Periódica', <Sparkles className="w-4 h-4 text-cyan-400" />)}
               </div>
             )}
           </div>
@@ -782,7 +722,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => toggleGroup('media')}
-                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-cyan-400/90 hover:text-cyan-300 transition select-none group"
+                className="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-bold tracking-wider uppercase text-gray-400 hover:text-gray-200 transition select-none group"
               >
                 <span className="flex items-center gap-1.5">
                   <HardDrive className="w-3 h-3 text-cyan-400" />
@@ -796,12 +736,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {(!collapsedGroups.media || isCollapsed) && (
               <div className="space-y-0.5">
-                {renderNavItem('files', 'Archivos y Medios', <HardDrive className="w-4 h-4 text-cyan-400" />, {
-                  badgeText: 'R2',
-                  activeBgColor: 'bg-cyan-600/20',
-                  activeTextColor: 'text-cyan-300',
-                  activeBorderColor: 'border-cyan-500/40'
-                })}
+                {renderNavItem('files', 'Archivos y Medios', <HardDrive className="w-4 h-4 text-cyan-400" />)}
               </div>
             )}
           </div>
@@ -852,7 +787,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         </div>
 
-        {/* Footer: User & BaaS Connection Status */}
+        {/* Footer: User profile */}
         <div className="p-2.5 border-t border-[#23232b] bg-[#101014] text-[11px] text-gray-400 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className={`flex items-center gap-2 overflow-hidden ${isCollapsed ? 'justify-center w-full' : ''}`}>
@@ -868,19 +803,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <p className="text-xs text-gray-200 truncate font-medium">
                     {currentUser?.email || 'Usuario Conectado'}
                   </p>
-                  <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>InsForge + R2</span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>Sincronizado</span>
                   </div>
                 </div>
               )}
             </div>
-
-            {!isCollapsed && (
-              <span title="BaaS y Almacenamiento Autorizados">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              </span>
-            )}
           </div>
         </div>
       </aside>
