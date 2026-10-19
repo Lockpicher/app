@@ -1,30 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Building2,
-  Pin,
   Inbox,
   FolderKanban,
   Layers,
   BookOpen,
   Archive,
-  Book,
   FileText,
+  Book,
   Star,
-  Bell,
-  CheckSquare,
-  Calendar,
   Boxes,
   Share2,
-  HardDrive,
-  ChevronDown,
-  ChevronRight,
-  Plus,
+  Bell,
   Sparkles,
-  X,
-  ShieldCheck,
-  Home,
+  HardDrive,
+  Pin,
   Sun,
-  Moon
+  Moon,
+  Settings,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
@@ -65,58 +59,25 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   notes,
   selectedNoteId,
   onSelectNote,
-  onTogglePinNote,
   objects,
   objectTypes,
   activeObjectType,
   onSelectObjectType,
-  onCreateCustomType,
   counts
 }) => {
   const { theme, toggleTheme } = useTheme();
 
-  // Collapsible section states (persisted)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem('sc_mobile_drawer_groups');
-      return saved ? JSON.parse(saved) : {
-        capture: false,
-        knowledge: false,
-        planning: false,
-        media: false,
-        objectTypes: true,
-        pinned: false
-      };
-    } catch {
-      return {
-        capture: false,
-        knowledge: false,
-        planning: false,
-        media: false,
-        objectTypes: true,
-        pinned: false
-      };
-    }
-  });
-
-  const toggleSection = (sec: string) => {
-    setCollapsedSections(prev => {
-      const next = { ...prev, [sec]: !prev[sec] };
-      try {
-        localStorage.setItem('sc_mobile_drawer_groups', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const pinnedNotes = notes.filter(n => n.is_pinned);
+  // Touch drag state to swipe down to dismiss
+  const [dragOffset, setDragOffset] = useState(0);
+  const touchStartYRef = useRef(0);
+  const isDraggingRef = useRef(false);
 
   const handleNav = (view: ViewMode) => {
     onSelectView(view);
     onClose();
   };
 
-  // Keyboard navigation & Escape
+  // Keyboard navigation & Escape key handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -128,6 +89,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
       window.addEventListener('keydown', handleKeyDown);
     } else {
       document.body.style.overflow = '';
+      setDragOffset(0);
     }
     return () => {
       document.body.style.overflow = '';
@@ -135,10 +97,71 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
     };
   }, [isOpen, onClose]);
 
+  // Touch handlers for swipe down to close
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY;
+    isDraggingRef.current = true;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingRef.current) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - touchStartYRef.current;
+    if (deltaY > 0) {
+      setDragOffset(deltaY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    if (dragOffset > 90) {
+      onClose();
+    }
+    setDragOffset(0);
+  };
+
   if (!isOpen) return null;
 
+  // Row render helper: strictly 48px height minimum with touch targets
+  const renderRow = (
+    view: ViewMode,
+    label: string,
+    icon: React.ReactNode,
+    count?: number,
+    activeCondition?: boolean
+  ) => {
+    const isActive = activeCondition !== undefined ? activeCondition : currentView === view;
+
+    return (
+      <button
+        key={view}
+        type="button"
+        onClick={() => handleNav(view)}
+        className={`w-full h-12 min-h-[48px] px-3 rounded-xl flex items-center justify-between text-sm transition active:scale-[0.99] ${
+          isActive 
+            ? 'bg-blue-600/15 text-blue-300 font-semibold border border-blue-500/30' 
+            : 'text-gray-300 hover:bg-[#1c1c24] active:bg-[#22222e]'
+        }`}
+      >
+        <span className="flex items-center gap-3 truncate">
+          <span className="flex-shrink-0">{icon}</span>
+          <span className="truncate">{label}</span>
+        </span>
+
+        {count !== undefined && count > 0 && (
+          <span className={`text-xs font-mono px-2 py-0.5 rounded-full flex-shrink-0 ${
+            isActive ? 'bg-blue-950 text-blue-300 border border-blue-800/40' : 'bg-[#1e1e28] text-gray-400'
+          }`}>
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-50 lg:hidden flex" role="dialog" aria-modal="true" aria-label="Navegación Móvil">
+    <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Menú Más">
       {/* Backdrop */}
       <div 
         onClick={onClose} 
@@ -146,493 +169,108 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
         aria-hidden="true"
       />
 
-      {/* Drawer Container */}
-      <aside 
-        className="relative w-4/5 max-w-xs bg-[#141419] border-r border-[#242434] h-full flex flex-col z-10 shadow-2xl overflow-hidden select-none animate-in slide-in-from-left duration-200"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      {/* Bottom Sheet Container */}
+      <div 
+        style={{
+          transform: `translateY(${dragOffset}px)`,
+          transition: isDraggingRef.current ? 'none' : 'transform 200ms ease-out',
+          maxHeight: '88dvh',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)'
+        }}
+        className="relative w-full bg-[#141419] border-t border-[#242434] rounded-t-3xl flex flex-col z-10 shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom duration-200"
       >
-        {/* Drawer Header */}
-        <div className="p-3.5 border-b border-[#23232f] flex items-center justify-between bg-[#121217] flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-900/30 flex-shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white tracking-wide">Segundo Cerebro</h2>
-              <p className="text-[10px] text-gray-400">PKM & Productividad</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] border border-[#2b2b38] transition"
-              title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
-              aria-label="Alternar tema claro u oscuro"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-indigo-400" />
-              )}
-            </button>
-
+        {/* Grab Handle Header */}
+        <div 
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="pt-3 pb-2 px-4 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing border-b border-[#20202a] flex-shrink-0"
+        >
+          {/* Visual grab bar */}
+          <div className="w-12 h-1.5 rounded-full bg-gray-600 mb-2.5" />
+          
+          <div className="w-full flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white tracking-wide">Más opciones</h3>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] border border-[#2b2b38] transition"
-              aria-label="Cerrar panel de navegación"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] transition"
+              aria-label="Cerrar hoja de opciones"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Scrollable Navigation Body */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3.5 no-scrollbar">
+        {/* Scrollable Rows Body */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 no-scrollbar">
 
-          {/* VISTA PRINCIPAL: INICIO */}
-          <button
-            type="button"
-            onClick={() => handleNav('home')}
-            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition ${
-              currentView === 'home' ? 'bg-purple-600/20 text-purple-300 font-semibold border border-purple-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-            }`}
-          >
-            <span className="flex items-center gap-2.5 truncate">
-              <Home className="w-4 h-4 text-purple-400 flex-shrink-0" />
-              <span className="truncate">Inicio</span>
+          {/* Grupo 1: Captura & Organización (SISTEMA PARA) */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 px-3 block mb-1">
+              Captura & PARA
             </span>
-          </button>
-
-          {/* 1. SECCIÓN: CAPTURA & ORGANIZACIÓN (SISTEMA PARA) */}
-          <div>
-            <div 
-              onClick={() => toggleSection('capture')}
-              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-amber-400/90"
-            >
-              <span className="flex items-center gap-1.5">
-                <Inbox className="w-3.5 h-3.5" />
-                <span>Captura & PARA</span>
-              </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.capture ? '-rotate-90' : 'rotate-0'}`} />
-            </div>
-
-            {!collapsedSections.capture && (
-              <div className="mt-1 space-y-0.5">
-                {/* Capturar / Inbox */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('para_inbox')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_inbox' ? 'bg-amber-600/20 text-amber-300 font-semibold border border-amber-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Inbox className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span className="truncate">Capturar (Inbox)</span>
-                  </span>
-                  {counts.inbox !== undefined && counts.inbox > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-amber-300 flex-shrink-0">
-                      {counts.inbox}
-                    </span>
-                  )}
-                </button>
-
-                {/* Proyectos (Entrada UNIFICADA) */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('projects')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'projects' || currentView === 'para_projects' ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <FolderKanban className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <span className="truncate">Proyectos</span>
-                  </span>
-                  {counts.projects > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-gray-400 flex-shrink-0">
-                      {counts.projects}
-                    </span>
-                  )}
-                </button>
-
-                {/* Áreas */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('para_areas')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_areas' ? 'bg-purple-600/20 text-purple-300 font-semibold border border-purple-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Layers className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                    <span className="truncate">Áreas</span>
-                  </span>
-                  {counts.areas !== undefined && counts.areas > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-gray-400 flex-shrink-0">
-                      {counts.areas}
-                    </span>
-                  )}
-                </button>
-
-                {/* Recursos */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('para_resources')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_resources' ? 'bg-emerald-600/20 text-emerald-300 font-semibold border border-emerald-500/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <BookOpen className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span className="truncate">Recursos</span>
-                  </span>
-                  {counts.objects > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-gray-400 flex-shrink-0">
-                      {counts.objects}
-                    </span>
-                  )}
-                </button>
-
-                {/* Archivo */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('para_archives')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_archives' ? 'bg-gray-700/30 text-gray-200 font-semibold border border-gray-600/30' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Archive className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <span className="truncate">Archivo</span>
-                  </span>
-                  {counts.archives !== undefined && counts.archives > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#1e1e2c] text-gray-400 flex-shrink-0">
-                      {counts.archives}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
+            {renderRow('para_inbox', 'Capturar (Inbox)', <Inbox className="w-5 h-5 text-amber-400" />, counts.inbox)}
+            {renderRow('projects', 'Proyectos', <FolderKanban className="w-5 h-5 text-blue-400" />, counts.projects, currentView === 'projects' || currentView === 'para_projects')}
+            {renderRow('para_areas', 'Áreas', <Layers className="w-5 h-5 text-purple-400" />, counts.areas)}
+            {renderRow('para_resources', 'Recursos', <BookOpen className="w-5 h-5 text-emerald-400" />, counts.objects)}
+            {renderRow('para_archives', 'Archivo', <Archive className="w-5 h-5 text-gray-400" />, counts.archives)}
           </div>
 
-          {/* 2. SECCIÓN: CONOCIMIENTO (Cuadernos, Notas, Entidades, Grafo) */}
-          <div>
-            <div 
-              onClick={() => toggleSection('knowledge')}
-              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-purple-400/90"
-            >
-              <span className="flex items-center gap-1.5">
-                <Book className="w-3.5 h-3.5" />
-                <span>Conocimiento</span>
-              </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.knowledge ? '-rotate-90' : 'rotate-0'}`} />
-            </div>
+          <div className="border-t border-[#20202c]" />
 
-            {!collapsedSections.knowledge && (
-              <div className="mt-1 space-y-0.5">
-                {/* Cuadernos */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('notebooks')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'notebooks' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Book className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <span className="truncate">Cuadernos</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.notebooks}</span>
-                </button>
-
-                {/* Todas las Notas */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('all_notes')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'all_notes' || currentView === 'notes' ? 'bg-purple-600/20 text-purple-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <FileText className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                    <span className="truncate">Todas las notas</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.notes}</span>
-                </button>
-
-                {/* Favoritos */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('favorites')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'favorites' ? 'bg-amber-600/20 text-amber-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Star className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span className="truncate">Favoritos</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.favorites}</span>
-                </button>
-
-                {/* Objetos y Entidades */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectObjectType('all');
-                    handleNav('objects');
-                  }}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'objects' ? 'bg-emerald-600/20 text-emerald-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Boxes className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span className="truncate">Objetos & Entidades</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.objects}</span>
-                </button>
-
-                {/* Vista de Grafo */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('graph')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'graph' ? 'bg-indigo-600/20 text-indigo-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Share2 className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                    <span className="truncate">Grafo de Red</span>
-                  </span>
-                </button>
-              </div>
-            )}
+          {/* Grupo 2: Conocimiento */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 px-3 block mb-1">
+              Conocimiento
+            </span>
+            {renderRow('all_notes', 'Todas las notas', <FileText className="w-5 h-5 text-purple-400" />, counts.notes, currentView === 'all_notes' || currentView === 'notes')}
+            {renderRow('notebooks', 'Cuadernos', <Book className="w-5 h-5 text-blue-400" />, counts.notebooks)}
+            {renderRow('favorites', 'Favoritos', <Star className="w-5 h-5 text-amber-400" />, counts.favorites)}
+            {renderRow('objects', 'Objetos y Entidades', <Boxes className="w-5 h-5 text-emerald-400" />, counts.objects)}
+            {renderRow('graph', 'Grafo de Red', <Share2 className="w-5 h-5 text-indigo-400" />)}
           </div>
 
-          {/* 3. SECCIÓN: PLANIFICACIÓN & ACCIÓN (Tareas, Calendario, Recordatorios) */}
-          <div>
-            <div 
-              onClick={() => toggleSection('planning')}
-              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-blue-400/90"
-            >
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Planificación</span>
-              </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.planning ? '-rotate-90' : 'rotate-0'}`} />
-            </div>
+          <div className="border-t border-[#20202c]" />
 
-            {!collapsedSections.planning && (
-              <div className="mt-1 space-y-0.5">
-                {/* Tareas */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('tasks')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'tasks' ? 'bg-purple-600/20 text-purple-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <CheckSquare className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span className="truncate">Tareas (Kanban)</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">{counts.tasks}</span>
-                </button>
-
-                {/* Calendario */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('calendar')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'calendar' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <span className="truncate">Calendario</span>
-                  </span>
-                </button>
-
-                {/* Recordatorios */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('reminders')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'reminders' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Bell className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span className="truncate">Recordatorios</span>
-                  </span>
-                  {counts.reminders > 0 && (
-                    <span className="text-[10px] font-mono text-gray-400">{counts.reminders}</span>
-                  )}
-                </button>
-
-                {/* Revisión Periódica */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('para_review')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'para_review' ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                    <span className="truncate">Revisión Periódica</span>
-                  </span>
-                </button>
-              </div>
-            )}
+          {/* Grupo 3: Planificación & Almacenamiento */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 px-3 block mb-1">
+              Gestión & Medios
+            </span>
+            {renderRow('reminders', 'Recordatorios', <Bell className="w-5 h-5 text-amber-400" />, counts.reminders)}
+            {renderRow('para_review', 'Revisión periódica', <Sparkles className="w-5 h-5 text-cyan-400" />)}
+            {renderRow('files', 'Archivos y medios', <HardDrive className="w-5 h-5 text-cyan-400" />)}
           </div>
 
-          {/* 4. SECCIÓN: ARCHIVOS & MEDIOS */}
-          <div>
-            <div 
-              onClick={() => toggleSection('media')}
-              className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-gray-400"
+          <div className="border-t border-[#20202c]" />
+
+          {/* Grupo 4: Ajustes y Tema */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 px-3 block mb-1">
+              Preferencias
+            </span>
+            
+            {/* Toggle Tema Claro / Oscuro */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-full h-12 min-h-[48px] px-3 rounded-xl flex items-center justify-between text-sm text-gray-300 hover:bg-[#1c1c24] active:bg-[#22222e] transition"
             >
-              <span className="flex items-center gap-1.5">
-                <HardDrive className="w-3.5 h-3.5" />
-                <span>Archivos & Medios</span>
+              <span className="flex items-center gap-3">
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                ) : (
+                  <Moon className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+                )}
+                <span>Tema: {theme === 'dark' ? 'Oscuro' : 'Claro'}</span>
               </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.media ? '-rotate-90' : 'rotate-0'}`} />
-            </div>
-
-            {!collapsedSections.media && (
-              <div className="mt-1 space-y-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleNav('files')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
-                    currentView === 'files' ? 'bg-blue-600/20 text-blue-300 font-semibold border border-blue-500/40' : 'text-gray-300 hover:bg-[#1b1b26]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <HardDrive className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                    <span className="truncate">Archivos y Medios</span>
-                  </span>
-                </button>
-              </div>
-            )}
+              <span className="text-xs text-blue-400 font-medium">Cambiar</span>
+            </button>
           </div>
-
-          {/* 5. SECCIÓN OPCIONAL: TIPOS DE OBJETO PERSONALIZADOS */}
-          {objectTypes.length > 0 && (
-            <div className="pt-1 border-t border-[#232332]">
-              <div 
-                onClick={() => toggleSection('objectTypes')}
-                className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-emerald-400"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Boxes className="w-3.5 h-3.5" />
-                  <span>Tipos de Objeto ({objectTypes.length})</span>
-                </span>
-                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.objectTypes ? '-rotate-90' : 'rotate-0'}`} />
-              </div>
-
-              {!collapsedSections.objectTypes && (
-                <div className="mt-1 space-y-0.5 pl-1">
-                  {objectTypes.map(t => {
-                    const typeCount = objects.filter(o => o.object_type === t.id).length;
-                    const isSelected = currentView === 'objects' && activeObjectType === t.id;
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectObjectType(t.id);
-                          handleNav('objects');
-                        }}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition ${
-                          isSelected 
-                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 font-medium' 
-                            : 'text-gray-300 hover:bg-[#1a1a24]'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <span 
-                            className="w-2 h-2 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: t.color || '#10b981' }} 
-                          />
-                          <span className="truncate">{t.name}</span>
-                        </span>
-                        <span className="text-[10px] font-mono text-gray-500">{typeCount}</span>
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onCreateCustomType();
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 mt-1.5 rounded-lg text-xs text-purple-300 bg-purple-950/30 hover:bg-purple-900/40 border border-purple-800/40 transition font-medium"
-                  >
-                    <Plus className="w-3 h-3 text-purple-400" />
-                    <span>Crear Tipo Personalizado</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 6. NOTAS FIJADAS (si existen) */}
-          {pinnedNotes.length > 0 && (
-            <div className="pt-1 border-t border-[#232332]">
-              <div 
-                onClick={() => toggleSection('pinned')}
-                className="flex items-center justify-between py-1 px-1 cursor-pointer select-none text-[10px] font-bold tracking-wider uppercase text-amber-300"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Pin className="w-3.5 h-3.5" />
-                  <span>Fijadas ({pinnedNotes.length})</span>
-                </span>
-                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${collapsedSections.pinned ? '-rotate-90' : 'rotate-0'}`} />
-              </div>
-
-              {!collapsedSections.pinned && (
-                <div className="mt-1 space-y-0.5">
-                  {pinnedNotes.map(n => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectNote(n.id);
-                        onClose();
-                      }}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition truncate ${
-                        selectedNoteId === n.id ? 'bg-purple-900/40 text-purple-200 font-semibold' : 'text-gray-300 hover:bg-[#1a1a24]'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <FileText className="w-3 h-3 text-purple-400 flex-shrink-0" />
-                        <span className="truncate">{n.title || 'Sin título'}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
         </div>
-
-        {/* Footer info */}
-        <div className="p-3 border-t border-[#23232f] bg-[#111116] flex items-center justify-between text-[11px] text-gray-400 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>Sincronizado</span>
-          </div>
-        </div>
-      </aside>
+      </div>
     </div>
   );
 };

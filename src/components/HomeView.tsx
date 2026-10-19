@@ -377,9 +377,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
     <div 
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 flex flex-col h-screen bg-[#111116] overflow-y-auto text-gray-100 select-none pb-28 lg:pb-8"
+      className="flex-1 flex flex-col h-full bg-[#111116] overflow-y-auto text-gray-100 select-none pb-8"
       style={{
-        paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 24px)'
+        paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))'
       }}
     >
       {/* ==================================================== */}
@@ -487,79 +487,78 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* ==================================================== */}
-        {/* BARRA DE CAPTURA RÁPIDA (Directly below header)     */}
+        {/* BARRA DE CAPTURA RÁPIDA (Full width input + Chips)  */}
         {/* ==================================================== */}
-        <section className="bg-[#161620] border border-[#232332] rounded-xl p-2.5 sm:p-3 shadow-sm">
-          <form onSubmit={handleQuickCaptureSubmit} className="flex items-center gap-2">
-            {/* Note / Task Toggle */}
-            <div className="flex items-center bg-[#1c1c28] border border-[#2b2b3d] rounded-lg p-0.5 flex-shrink-0">
+        <section className="bg-[#161620] border border-[#232332] rounded-2xl p-3 sm:p-3.5 shadow-sm space-y-2.5">
+          <form onSubmit={handleQuickCaptureSubmit} className="space-y-2.5">
+            {/* Campo a ancho completo con micrófono y enviar dentro */}
+            <div className="relative flex items-center bg-[#1c1c28] border border-[#2e2e40] focus-within:border-blue-500/60 rounded-xl px-3 py-2 transition">
+              <input
+                type="text"
+                value={captureText}
+                onChange={(e) => setCaptureText(e.target.value)}
+                placeholder={captureType === 'task' ? 'Capturar tarea rápida...' : 'Capturar idea o nota rápida...'}
+                disabled={isCapturing}
+                className="w-full bg-transparent text-sm text-gray-100 placeholder-gray-500 focus:outline-none pr-16"
+              />
+
+              {/* Botones internos de acción: Dictado por voz y Enviar */}
+              <div className="absolute right-2 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleToggleVoiceCapture}
+                  className={`p-1.5 rounded-lg transition ${
+                    isRecording 
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse' 
+                      : 'text-gray-400 hover:text-white hover:bg-[#28283a]'
+                  }`}
+                  title={isRecording ? 'Detener dictado' : 'Dictar por voz'}
+                  aria-label="Dictado por voz"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isCapturing || !captureText.trim()}
+                  className="p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white transition active:scale-95"
+                  title="Capturar"
+                  aria-label="Guardar captura"
+                >
+                  {isCapturing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Selector Tarea / Nota como chips pequeños debajo */}
+            <div className="flex items-center gap-2 pt-0.5">
               <button
                 type="button"
                 onClick={() => setCaptureType('task')}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
                   captureType === 'task'
                     ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200'
+                    : 'bg-[#1c1c28] text-gray-400 hover:text-gray-200 border border-[#2b2b3a]'
                 }`}
-                title="Capturar como tarea"
               >
                 Tarea
               </button>
               <button
                 type="button"
                 onClick={() => setCaptureType('note')}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
                   captureType === 'note'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-[#1c1c28] text-gray-400 hover:text-gray-200 border border-[#2b2b3a]'
                 }`}
-                title="Capturar como nota"
               >
                 Nota
               </button>
             </div>
-
-            {/* Input field */}
-            <input
-              type="text"
-              value={captureText}
-              onChange={(e) => setCaptureText(e.target.value)}
-              placeholder={captureType === 'task' ? 'Capturar tarea rápida...' : 'Capturar idea o nota rápida...'}
-              disabled={isCapturing}
-              className="flex-1 bg-transparent px-2.5 py-1.5 text-xs sm:text-sm text-gray-100 placeholder-gray-500 focus:outline-none min-w-0"
-            />
-
-            {/* Voice Dictation Button */}
-            <button
-              type="button"
-              onClick={handleToggleVoiceCapture}
-              className={`p-2 rounded-lg transition flex-shrink-0 ${
-                isRecording 
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse' 
-                  : 'text-gray-400 hover:text-white hover:bg-[#20202e]'
-              }`}
-              title={isRecording ? 'Detener dictado' : 'Dictar por voz'}
-              aria-label="Dictado por voz"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isCapturing || !captureText.trim()}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 text-white text-xs font-medium flex items-center gap-1.5 transition flex-shrink-0"
-              title="Guardar en Inbox"
-            >
-              {isCapturing ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <>
-                  <Send className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Capturar</span>
-                </>
-              )}
-            </button>
           </form>
         </section>
 
@@ -569,17 +568,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {inboxCount > 0 && (
           <div 
             onClick={() => onNavigateToView('para_inbox')}
-            className="group flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-950/30 hover:bg-blue-950/50 border border-blue-900/40 hover:border-blue-700/60 cursor-pointer transition"
+            className="group flex items-center justify-between px-4 py-3 rounded-2xl bg-blue-950/30 hover:bg-blue-950/50 border border-blue-900/40 hover:border-blue-700/60 cursor-pointer transition min-h-[48px]"
           >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Inbox className="w-4 h-4 text-blue-400 flex-shrink-0" />
-              <p className="text-xs text-gray-300 group-hover:text-white transition truncate">
+            <div className="flex items-center gap-3 min-w-0">
+              <Inbox className="w-5 h-5 text-blue-400 flex-shrink-0" />
+              <p className="text-sm text-gray-300 group-hover:text-white transition truncate">
                 Tienes <span className="font-bold text-blue-400">{inboxCount}</span> {inboxCount === 1 ? 'elemento' : 'elementos'} en tu Inbox por procesar
               </p>
             </div>
-            <div className="flex items-center gap-1 text-xs font-medium text-blue-400 group-hover:text-blue-300 flex-shrink-0">
+            <div className="flex items-center gap-1 text-sm font-semibold text-blue-400 group-hover:text-blue-300 flex-shrink-0">
               <span>Procesar</span>
-              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition" />
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
             </div>
           </div>
         )}
@@ -596,7 +595,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             {/* Tareas Atrasadas (si existen) */}
             {overdueTasks.length > 0 && (
-              <section className="bg-red-950/20 border border-red-900/40 rounded-xl p-4 shadow-sm">
+              <section className="bg-red-950/20 border border-red-900/40 rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -604,20 +603,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       Tareas atrasadas ({overdueTasks.length})
                     </h2>
                   </div>
-                  <span className="text-[10px] text-red-400/80 font-mono">Requieren atención</span>
+                  <span className="text-xs text-red-400/80">Requieren atención</span>
                 </div>
 
                 <div className="divide-y divide-red-950/60">
                   {overdueTasks.map(t => {
                     const project = t.project_id ? projectsMap.get(t.project_id) : null;
-                    const priorityCfg = PRIORITY_BADGES[t.priority] || PRIORITY_BADGES.medium;
                     const dateStr = getTaskDateKey(t);
 
                     return (
                       <div
                         key={t.id}
                         onClick={() => onOpenTask(t)}
-                        className="group flex items-center justify-between py-2 cursor-pointer transition hover:bg-red-950/20 px-2 rounded"
+                        className="group flex items-center justify-between py-2.5 cursor-pointer transition hover:bg-red-950/20 px-2 rounded-xl"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <button
@@ -627,16 +625,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               e.stopPropagation();
                               handleComplete(t);
                             }}
-                            className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0"
+                            className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0 p-1"
                             title="Marcar como completada"
                           >
                             <Circle className="w-4 h-4" />
                           </button>
                           <div className="min-w-0">
-                            <span className="text-xs font-medium text-gray-200 group-hover:text-white transition block truncate">
+                            <span className="text-sm font-medium text-gray-200 group-hover:text-white transition block truncate">
                               {t.title}
                             </span>
-                            <div className="flex items-center gap-2 text-[10px] text-red-400 mt-0.5">
+                            <div className="flex items-center gap-2 text-xs text-red-400 mt-0.5">
                               <span>Venció: {dateStr}</span>
                               {project && (
                                 <span className="text-gray-400 truncate hidden sm:inline">
@@ -648,21 +646,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                          <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
-                            {priorityCfg.label}
-                          </span>
                           {onDeleteTask && (
                             <button
                               type="button"
                               disabled={deletingTaskId === t.id}
                               onClick={(e) => handleDeleteTask(e, t)}
-                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
                               title="Eliminar tarea"
                             >
                               {deletingTaskId === t.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                                <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                               ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               )}
                             </button>
                           )}
@@ -675,7 +670,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
 
             {/* TARJETA UNIFICADA: AGENDA (Hoy, Mañana, Esta semana) */}
-            <section className="bg-[#161620] border border-[#232332] rounded-xl p-4 sm:p-5 shadow-sm">
+            <section className="bg-[#161620] border border-[#232332] rounded-2xl p-4 sm:p-5 shadow-sm">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#232332]">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-blue-400" />
@@ -693,17 +688,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </button>
               </div>
 
-              {/* Sub-sección 1: Hoy */}
+              {/* Sub-sección 1: Hoy (Sentence case, sin puntos de color, ocultar contador si es 0) */}
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                    <h3 className="text-xs font-semibold text-gray-300">
                       Hoy
                     </h3>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950 text-blue-400 font-mono">
-                      {todayTasks.length}
-                    </span>
+                    {todayTasks.length > 0 && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 font-mono">
+                        {todayTasks.length}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -716,12 +712,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </div>
 
                 {todayTasks.length === 0 ? (
-                  <p className="text-xs text-gray-500 py-2 italic pl-4 border-l border-[#272738]">
+                  <p className="text-sm text-gray-500 py-2.5 pl-3 border-l-2 border-[#272738]">
                     Sin tareas para hoy.{' '}
                     <button
                       type="button"
                       onClick={onNewTask}
-                      className="text-blue-400 hover:underline not-italic font-medium"
+                      className="text-blue-400 hover:underline font-medium"
                     >
                       Crea la primera
                     </button>
@@ -730,13 +726,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="divide-y divide-[#232332]">
                     {todayTasks.map(t => {
                       const project = t.project_id ? projectsMap.get(t.project_id) : null;
-                      const priorityCfg = PRIORITY_BADGES[t.priority] || PRIORITY_BADGES.medium;
 
                       return (
                         <div
                           key={t.id}
                           onClick={() => onOpenTask(t)}
-                          className="group flex items-center justify-between py-2 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded"
+                          className="group flex items-center justify-between py-2.5 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded-xl"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <button
@@ -746,37 +741,34 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                 e.stopPropagation();
                                 handleComplete(t);
                               }}
-                              className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0"
+                              className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0 p-1"
                               title="Completar tarea"
                             >
-                              <Circle className="w-3.5 h-3.5" />
+                              <Circle className="w-4 h-4" />
                             </button>
-                            <span className="text-xs font-medium text-gray-200 group-hover:text-white transition truncate">
+                            <span className="text-sm font-medium text-gray-200 group-hover:text-white transition truncate">
                               {t.title}
                             </span>
                             {project && (
-                              <span className="text-[10px] text-gray-500 truncate hidden sm:inline">
+                              <span className="text-xs text-gray-500 truncate hidden sm:inline">
                                 • {project.title}
                               </span>
                             )}
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
-                              {priorityCfg.label}
-                            </span>
                             {onDeleteTask && (
                               <button
                                 type="button"
                                 disabled={deletingTaskId === t.id}
                                 onClick={(e) => handleDeleteTask(e, t)}
-                                className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                                className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
                                 title="Eliminar tarea"
                               >
                                 {deletingTaskId === t.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                                  <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                                 ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 )}
                               </button>
                             )}
@@ -788,35 +780,35 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 )}
               </div>
 
-              {/* Sub-sección 2: Mañana */}
+              {/* Sub-sección 2: Mañana (Sentence case, sin puntos, ocultar contador si es 0) */}
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                    <h3 className="text-xs font-semibold text-gray-300">
                       Mañana
                     </h3>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-400 font-mono">
-                      {tomorrowTasks.length}
-                    </span>
+                    {tomorrowTasks.length > 0 && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 font-mono">
+                        {tomorrowTasks.length}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {tomorrowTasks.length === 0 ? (
-                  <p className="text-xs text-gray-500 py-1 italic pl-4 border-l border-[#272738]">
+                  <p className="text-sm text-gray-500 py-2.5 pl-3 border-l-2 border-[#272738]">
                     Sin tareas para mañana.
                   </p>
                 ) : (
                   <div className="divide-y divide-[#232332]">
                     {tomorrowTasks.map(t => {
                       const project = t.project_id ? projectsMap.get(t.project_id) : null;
-                      const priorityCfg = PRIORITY_BADGES[t.priority] || PRIORITY_BADGES.medium;
 
                       return (
                         <div
                           key={t.id}
                           onClick={() => onOpenTask(t)}
-                          className="group flex items-center justify-between py-2 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded"
+                          className="group flex items-center justify-between py-2.5 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded-xl"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <button
@@ -825,36 +817,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                 e.stopPropagation();
                                 handleComplete(t);
                               }}
-                              className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0"
+                              className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0 p-1"
                             >
-                              <Circle className="w-3.5 h-3.5" />
+                              <Circle className="w-4 h-4" />
                             </button>
-                            <span className="text-xs font-medium text-gray-300 group-hover:text-white transition truncate">
+                            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition truncate">
                               {t.title}
                             </span>
                             {project && (
-                              <span className="text-[10px] text-gray-500 truncate hidden sm:inline">
+                              <span className="text-xs text-gray-500 truncate hidden sm:inline">
                                 • {project.title}
                               </span>
                             )}
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
-                              {priorityCfg.label}
-                            </span>
                             {onDeleteTask && (
                               <button
                                 type="button"
                                 disabled={deletingTaskId === t.id}
                                 onClick={(e) => handleDeleteTask(e, t)}
-                                className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                                className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
                                 title="Eliminar tarea"
                               >
                                 {deletingTaskId === t.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                                  <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                                 ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 )}
                               </button>
                             )}
@@ -866,40 +855,36 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 )}
               </div>
 
-              {/* Sub-sección 3: Esta semana (días restantes) */}
+              {/* Sub-sección 3: Esta semana (Sentence case, sin puntos) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                      Esta semana
-                    </h3>
-                  </div>
+                  <h3 className="text-xs font-semibold text-gray-300">
+                    Esta semana
+                  </h3>
                 </div>
 
                 {weekGroupedTasks.length === 0 ? (
-                  <p className="text-xs text-gray-500 py-1 italic pl-4 border-l border-[#272738]">
+                  <p className="text-sm text-gray-500 py-2.5 pl-3 border-l-2 border-[#272738]">
                     Sin tareas programadas para el resto de la semana.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {weekGroupedTasks.map(group => (
                       <div key={group.dateStr} className="space-y-1">
-                        <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5 pl-1">
+                        <div className="text-xs font-medium text-blue-400 capitalize flex items-center gap-1.5 pl-1">
                           <span>{group.dayName}</span>
-                          <span className="text-gray-500 font-mono">({group.dayNumber})</span>
+                          <span className="text-gray-500">({group.dayNumber})</span>
                         </div>
 
                         <div className="divide-y divide-[#232332] pl-2 border-l border-[#272738]">
                           {group.tasks.map(t => {
                             const project = t.project_id ? projectsMap.get(t.project_id) : null;
-                            const priorityCfg = PRIORITY_BADGES[t.priority] || PRIORITY_BADGES.medium;
 
                             return (
                               <div
                                 key={t.id}
                                 onClick={() => onOpenTask(t)}
-                                className="group flex items-center justify-between py-1.5 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded"
+                                className="group flex items-center justify-between py-2 cursor-pointer transition hover:bg-[#1a1a26] px-2 rounded-xl"
                               >
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <button
@@ -908,36 +893,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                       e.stopPropagation();
                                       handleComplete(t);
                                     }}
-                                    className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0"
+                                    className="text-gray-500 hover:text-emerald-400 transition flex-shrink-0 p-1"
                                   >
-                                    <Circle className="w-3.5 h-3.5" />
+                                    <Circle className="w-4 h-4" />
                                   </button>
-                                  <span className="text-xs text-gray-300 group-hover:text-white transition truncate">
+                                  <span className="text-sm text-gray-300 group-hover:text-white transition truncate">
                                     {t.title}
                                   </span>
                                   {project && (
-                                    <span className="text-[10px] text-gray-500 truncate hidden sm:inline">
+                                    <span className="text-xs text-gray-500 truncate hidden sm:inline">
                                       • {project.title}
                                     </span>
                                   )}
                                 </div>
 
                                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${priorityCfg.bg} ${priorityCfg.color}`}>
-                                    {priorityCfg.label}
-                                  </span>
                                   {onDeleteTask && (
                                     <button
                                       type="button"
                                       disabled={deletingTaskId === t.id}
                                       onClick={(e) => handleDeleteTask(e, t)}
-                                      className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                                      className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
                                       title="Eliminar tarea"
                                     >
                                       {deletingTaskId === t.id ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                                        <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                                       ) : (
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="w-4 h-4" />
                                       )}
                                     </button>
                                   )}
@@ -957,12 +939,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           {/* ==================================================== */}
-          {/* COLUMNA 2: NOTAS RECIENTES (Flat List) Y FAVORITOS   */}
+          {/* COLUMNA 2: NOTAS RECIENTES (Flat List >= 56px)       */}
           {/* ==================================================== */}
           <div className="lg:col-span-7 space-y-6">
 
-            {/* SECCIÓN: NOTAS RECIENTES (Lista plana con separadores) */}
-            <section className="bg-[#161620] border border-[#232332] rounded-xl p-4 sm:p-5 shadow-sm">
+            {/* SECCIÓN: NOTAS RECIENTES (Filas de al menos 56px, sin tarjetas anidadas) */}
+            <section className="bg-[#161620] border border-[#232332] rounded-2xl p-4 sm:p-5 shadow-sm">
               <div className="flex items-center justify-between pb-3 mb-1 border-b border-[#232332]">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-purple-400" />
@@ -977,7 +959,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     onClick={onNewNote}
                     className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-3.5 h-3.5" />
                     <span>Nueva</span>
                   </button>
                   <button
@@ -992,12 +974,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
 
               {recentNotes.length === 0 ? (
-                <div className="py-8 text-center text-xs text-gray-400">
+                <div className="py-8 text-center text-sm text-gray-400">
                   <p className="font-medium text-gray-300">Sin notas aún</p>
                   <button
                     type="button"
                     onClick={onNewNote}
-                    className="mt-2 text-purple-400 hover:underline font-medium"
+                    className="mt-2 text-purple-400 hover:underline font-medium text-sm"
                   >
                     Crea la primera nota
                   </button>
@@ -1006,32 +988,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div className="divide-y divide-[#232332]">
                   {recentNotes.map(n => {
                     const shortDate = formatShortDate(n.updated_at);
-                    const titleText = n.title?.trim() || n.plain_text?.slice(0, 40)?.trim() || 'Nota sin título';
+                    // Extract first non-empty line of content if title is missing
+                    const firstContentLine = n.plain_text?.split('\n').find(l => l.trim().length > 0)?.trim();
+                    const titleText = (n.title && n.title.trim().length > 0 && n.title !== 'Nueva Nota')
+                      ? n.title.trim() 
+                      : (firstContentLine || n.plain_text?.slice(0, 45)?.trim() || 'Nota sin título');
 
                     return (
                       <div
                         key={n.id}
                         onClick={() => onOpenNote(n)}
-                        className="group flex items-start justify-between py-2.5 px-2 hover:bg-[#1a1a26] rounded transition cursor-pointer gap-3"
+                        className="group flex items-center justify-between min-h-[56px] py-2.5 px-2 hover:bg-[#1a1a26] rounded-xl transition cursor-pointer gap-3"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
-                            <h3 className="text-xs font-semibold text-gray-200 group-hover:text-white transition truncate">
+                            <h3 className="text-sm font-medium text-gray-200 group-hover:text-white transition truncate">
                               {titleText}
                             </h3>
-                            <span className="text-[10px] text-gray-500 font-mono flex-shrink-0">
+                            {/* Short date: standard typography, non-monospace */}
+                            <span className="text-xs text-gray-400 font-normal flex-shrink-0">
                               {shortDate}
                             </span>
                           </div>
 
                           {n.plain_text && (
-                            <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                            <p className="text-xs text-gray-400 truncate mt-0.5">
                               {n.plain_text}
                             </p>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1 flex-shrink-0 pt-0.5">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {/* Favorite star */}
                           <button
                             type="button"
@@ -1039,14 +1026,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               e.stopPropagation();
                               onToggleFavoriteNote(n);
                             }}
-                            className={`p-1 rounded transition ${
+                            className={`p-1.5 rounded-lg transition ${
                               n.is_favorite 
                                 ? 'text-amber-400 hover:text-amber-300' 
                                 : 'text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100'
                             }`}
                             title={n.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
                           >
-                            <Star className={`w-3.5 h-3.5 ${n.is_favorite ? 'fill-amber-400' : ''}`} />
+                            <Star className={`w-4 h-4 ${n.is_favorite ? 'fill-amber-400' : ''}`} />
                           </button>
 
                           {/* Delete note button */}
@@ -1055,13 +1042,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               type="button"
                               disabled={deletingNoteId === n.id}
                               onClick={(e) => handleDeleteNote(e, n)}
-                              className="p-1 text-gray-500 hover:text-red-400 rounded hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
+                              className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition"
                               title="Eliminar nota"
                             >
                               {deletingNoteId === n.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                                <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                               ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               )}
                             </button>
                           )}

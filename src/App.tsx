@@ -851,7 +851,7 @@ export function App() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen w-screen overflow-hidden bg-obsidian-bg">
+    <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
       {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained header) */}
       {currentView !== 'home' && (
         <header className="lg:hidden h-14 bg-[#141419] border-b border-[#23232b] flex items-center justify-between px-4 z-30 flex-shrink-0">
@@ -975,7 +975,12 @@ export function App() {
       />
 
       {/* Main Content Workspace */}
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0 pb-14 lg:pb-0 relative">
+      <main 
+        className="flex-1 flex flex-col overflow-hidden min-w-0 lg:pb-0 relative"
+        style={{
+          paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))'
+        }}
+      >
         {/* If user is editing a note, display the RichNoteEditor */}
         {isEditingNote && activeNote ? (
           <RichNoteEditor
