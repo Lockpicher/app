@@ -19,7 +19,7 @@ import { ViewMode } from '../lib/types';
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'person' | 'object') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object') => void;
   onOpenSearch: () => void;
   isEditorOpen?: boolean;
 }
@@ -56,7 +56,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   // Creation options for Capacities-style "+" button
   const createOptions: {
-    id: 'note' | 'task' | 'page' | 'project' | 'person' | 'object';
+    id: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object';
     label: string;
     subtitle: string;
     icon: any;
@@ -66,7 +66,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     {
       id: 'note',
       label: 'Nueva Nota',
-      subtitle: 'Texto enriquecido y Markdown',
+      subtitle: 'Editor de texto enriquecido',
       icon: FileText,
       color: 'text-purple-400',
       bg: 'bg-purple-950/40 border-purple-800/40'
@@ -74,10 +74,18 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     {
       id: 'task',
       label: 'Nueva Tarea',
-      subtitle: 'Kanban y lista operativa',
+      subtitle: 'Crear tarea en la lista y Kanban',
       icon: CheckSquare,
       color: 'text-amber-400',
       bg: 'bg-amber-950/40 border-amber-800/40'
+    },
+    {
+      id: 'notebook',
+      label: 'Nuevo Cuaderno',
+      subtitle: 'Organizador de notas por tema',
+      icon: Book,
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-950/40 border-emerald-800/40'
     },
     {
       id: 'page',
@@ -90,7 +98,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     {
       id: 'project',
       label: 'Nuevo Proyecto',
-      subtitle: 'Objetivo con fecha límite',
+      subtitle: 'Objetivo con fechas y tareas',
       icon: FolderKanban,
       color: 'text-blue-400',
       bg: 'bg-blue-950/40 border-blue-800/40'
@@ -100,13 +108,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       label: 'Nuevo Contacto',
       subtitle: 'Ficha personal & cumpleaños',
       icon: User,
-      color: 'text-emerald-400',
-      bg: 'bg-emerald-950/40 border-emerald-800/40'
+      color: 'text-teal-400',
+      bg: 'bg-teal-950/40 border-teal-800/40'
     },
     {
       id: 'object',
-      label: 'Nuevo Objeto / Entidad',
-      subtitle: 'Recurso, libro o personalizado',
+      label: 'Nuevo Objeto',
+      subtitle: 'Entidad personalizada o recurso',
       icon: Boxes,
       color: 'text-pink-400',
       bg: 'bg-pink-950/40 border-pink-800/40'
@@ -117,11 +125,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     <>
       {/* Create Sheet / Menu Overlay for Mobile */}
       {isMenuOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end lg:hidden animate-in fade-in duration-150">
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end lg:hidden animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú de creación rápida"
+        >
           <div 
             ref={menuRef}
             className="bg-[#181822] border-t border-[#2e2e42] rounded-t-3xl p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto"
-            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
               <div className="flex items-center gap-2">
@@ -130,13 +143,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white">Crear Nuevo Elemento</h3>
-                  <p className="text-[10px] text-gray-400">Selecciona el tipo de contenido a registrar</p>
+                  <p className="text-[10px] text-gray-400">Selecciona qué deseas añadir a tu Segundo Cerebro</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsMenuOpen(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#20202e] border border-[#2c2c3e]"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#20202e] border border-[#2c2c3e] transition"
+                aria-label="Cerrar menú de creación"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -154,6 +168,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                       onOpenQuickCreate(opt.id);
                     }}
                     className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between group active:scale-[0.98] ${opt.bg}`}
+                    aria-label={`Crear ${opt.label}`}
                   >
                     <div className="flex items-center justify-between w-full mb-2">
                       <div className={`w-8 h-8 rounded-xl bg-[#14141c] border border-white/10 flex items-center justify-center ${opt.color}`}>
@@ -180,6 +195,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           height: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))'
         }}
+        aria-label="Navegación inferior"
       >
         {/* 1. Inicio */}
         <button
@@ -189,6 +205,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             isHomeActive ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Inicio"
+          aria-current={isHomeActive ? 'page' : undefined}
         >
           <Home className={`w-5 h-5 mb-0.5 ${isHomeActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] leading-none">Inicio</span>
@@ -202,6 +219,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             isCalendarActive ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Calendario"
+          aria-current={isCalendarActive ? 'page' : undefined}
         >
           <Calendar className={`w-5 h-5 mb-0.5 ${isCalendarActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] leading-none">Calendario</span>
@@ -213,8 +231,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             type="button"
             onClick={() => setIsMenuOpen(prev => !prev)}
             className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-900/40 active:scale-95 transition transform -translate-y-1.5 border border-white/20"
-            title="Crear nota, tarea, página u objeto"
+            title="Crear nueva tarea, nota, cuaderno, página u objeto"
             aria-label="Crear nuevo elemento"
+            aria-expanded={isMenuOpen}
+            aria-haspopup="dialog"
           >
             <Plus className={`w-6 h-6 transition-transform duration-200 ${isMenuOpen ? 'rotate-45' : 'rotate-0'}`} />
           </button>
@@ -228,6 +248,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             isTasksActive ? 'text-amber-400 font-bold' : 'text-gray-400 hover:text-gray-200'
           }`}
           aria-label="Ir a Tareas"
+          aria-current={isTasksActive ? 'page' : undefined}
         >
           <CheckSquare className={`w-5 h-5 mb-0.5 ${isTasksActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] leading-none">Tareas</span>

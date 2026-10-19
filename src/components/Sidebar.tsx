@@ -25,10 +25,13 @@ import {
   Archive,
   BookOpen,
   X,
-  Home
+  Home,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
+import { useTheme } from '../lib/themeContext';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -82,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectObjectType,
   objects = []
 }) => {
+  const { theme, toggleTheme } = useTheme();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   // Group collapse states (persisted in localStorage)
@@ -319,9 +323,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
 
-            {/* Close button for Mobile / Collapse button for Desktop */}
+            {/* Close button for Mobile / Collapse button for Desktop & Theme Toggle */}
             {!isCollapsed && (
               <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202a] transition"
+                  title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+                  aria-label="Alternar tema claro u oscuro"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                  )}
+                </button>
+
                 {onCloseMobile && (
                   <button
                     onClick={onCloseMobile}
@@ -348,7 +366,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Expand toggle when in collapsed mode on desktop */}
           {isCollapsed && onToggleCollapse && (
-            <div className="hidden lg:flex justify-center mt-2">
+            <div className="hidden lg:flex flex-col items-center gap-1.5 mt-2">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="p-1.5 text-gray-400 hover:text-white rounded-md hover:bg-[#20202a] transition"
+                title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+                aria-label="Alternar tema claro u oscuro"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+              </button>
               <button
                 onClick={onToggleCollapse}
                 className="p-1 text-gray-400 hover:text-white rounded-md hover:bg-[#20202a]"
@@ -361,53 +392,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Quick Actions Bar */}
+        {/* Quick Actions Bar - Unified Single "Nuevo" Button (Shortcut N) & Search (Ctrl K) */}
         <div className="p-2 border-b border-[#23232b] flex-shrink-0 space-y-1.5">
           {!isCollapsed ? (
             <>
-              {/* Compact 3-action buttons grid */}
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onNewNotebook) onNewNotebook();
-                    if (onCloseMobile) onCloseMobile();
-                  }}
-                  className="flex items-center justify-center gap-1 py-1 px-1 bg-[#1e1e2a] hover:bg-[#262638] text-blue-300 rounded-md text-[10px] font-semibold transition border border-blue-500/20 text-center"
-                  title="Crear un nuevo cuaderno"
-                >
-                  <Book className="w-3 h-3 text-blue-400 flex-shrink-0" />
-                  <span className="truncate">Cuaderno</span>
-                </button>
+              {/* Single primary creation button: "Nuevo" with 'N' shortcut */}
+              <button
+                type="button"
+                onClick={() => {
+                  onNewNote();
+                  if (onCloseMobile) onCloseMobile();
+                }}
+                className="w-full flex items-center justify-between px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition shadow-sm shadow-blue-900/30 group active:scale-[0.98]"
+                title="Crear elemento (Atajo: N)"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Nuevo</span>
+                </span>
+                <kbd className="text-[10px] bg-blue-700/80 px-1.5 py-0.5 rounded text-blue-100 font-mono font-normal">
+                  N
+                </kbd>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    onNewNote();
-                    if (onCloseMobile) onCloseMobile();
-                  }}
-                  className="flex items-center justify-center gap-1 py-1 px-1 bg-purple-600/90 hover:bg-purple-600 text-white rounded-md text-[10px] font-semibold transition shadow-sm shadow-purple-900/30 text-center"
-                  title="Crear una nota de texto enriquecido"
-                >
-                  <Plus className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">Nota</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onNewTaskNote) onNewTaskNote();
-                    if (onCloseMobile) onCloseMobile();
-                  }}
-                  className="flex items-center justify-center gap-1 py-1 px-1 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-md text-[10px] font-semibold transition shadow-sm shadow-emerald-900/30 text-center"
-                  title="Crear una lista de tareas rápida"
-                >
-                  <CheckSquare className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">Tarea</span>
-                </button>
-              </div>
-
-              {/* Quick Switcher Button */}
+              {/* Unified Quick Switcher Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -415,6 +423,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   if (onCloseMobile) onCloseMobile();
                 }}
                 className="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#1b1b22] hover:bg-[#23232d] text-gray-400 hover:text-gray-200 rounded-md text-xs transition border border-[#292934]"
+                title="Búsqueda global (Ctrl + K)"
               >
                 <span className="flex items-center gap-2 truncate">
                   <Search className="w-3.5 h-3.5 text-gray-400" />
@@ -432,15 +441,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={onOpenQuickSwitcher}
                 className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202a] transition"
-                title="Búsqueda global (Ctrl + K)"
+                title="Buscar todo (Ctrl + K)"
               >
                 <Search className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={onNewNote}
-                className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition shadow-sm"
-                title="Nueva Nota"
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition shadow-sm"
+                title="Nuevo (N)"
               >
                 <Plus className="w-4 h-4" />
               </button>

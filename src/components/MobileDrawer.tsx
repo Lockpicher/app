@@ -22,9 +22,12 @@ import {
   Sparkles,
   X,
   ShieldCheck,
-  Home
+  Home,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
+import { useTheme } from '../lib/themeContext';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -70,6 +73,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onCreateCustomType,
   counts
 }) => {
+  const { theme, toggleTheme } = useTheme();
+
   // Collapsible section states (persisted)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     try {
@@ -158,14 +163,30 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] border border-[#2b2b38]"
-            aria-label="Cerrar panel de navegación"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] border border-[#2b2b38] transition"
+              title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+              aria-label="Alternar tema claro u oscuro"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-400" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-[#1c1c24] border border-[#2b2b38] transition"
+              aria-label="Cerrar panel de navegación"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Navigation Body */}

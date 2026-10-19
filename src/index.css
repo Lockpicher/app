@@ -39,7 +39,8 @@ html.light header {
 
 html.light header span,
 html.light header h1,
-html.light header h2 {
+html.light header h2,
+html.light header h3 {
   color: #0f172a !important;
 }
 
@@ -71,9 +72,116 @@ html.light .text-white {
   color: #0f172a !important;
 }
 
+html.light .text-gray-100,
+html.light .text-gray-200 {
+  color: #1e293b !important;
+}
+
 html.light .text-gray-300,
 html.light .text-gray-400 {
   color: #475569 !important;
+}
+
+/* Background overrides in light theme */
+html.light .bg-\[\#111116\],
+html.light .bg-\[\#121217\],
+html.light .bg-\[\#141419\],
+html.light .bg-\[\#14141c\],
+html.light .bg-\[\#16161a\],
+html.light .bg-\[\#101014\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-\[\#161620\],
+html.light .bg-\[\#16161f\],
+html.light .bg-\[\#181822\],
+html.light .bg-\[\#181824\],
+html.light .bg-\[\#1a1a24\],
+html.light .bg-\[\#1a1a28\],
+html.light .bg-\[\#1b1b22\],
+html.light .bg-\[\#1b1b26\],
+html.light .bg-\[\#1c1c24\],
+html.light .bg-\[\#1c1c26\],
+html.light .bg-\[\#1e1e24\],
+html.light .bg-\[\#1e1e28\],
+html.light .bg-\[\#1e1e2a\],
+html.light .bg-\[\#1e1e2c\],
+html.light .bg-\[\#20202a\],
+html.light .bg-\[\#20202e\] {
+  background-color: #f8fafc !important;
+}
+
+html.light .hover\:bg-\[\#1b1b26\]:hover,
+html.light .hover\:bg-\[\#1c1c24\]:hover,
+html.light .hover\:bg-\[\#1f1f2d\]:hover,
+html.light .hover\:bg-\[\#20202a\]:hover,
+html.light .hover\:bg-\[\#23232d\]:hover,
+html.light .hover\:bg-\[\#252535\]:hover,
+html.light .hover\:bg-\[\#262638\]:hover,
+html.light .hover\:bg-\[\#282836\]:hover,
+html.light .hover\:bg-\[\#28283c\]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Border overrides in light theme */
+html.light .border-\[\#23232b\],
+html.light .border-\[\#23232c\],
+html.light .border-\[\#23232f\],
+html.light .border-\[\#232332\],
+html.light .border-\[\#242434\],
+html.light .border-\[\#252538\],
+html.light .border-\[\#272738\],
+html.light .border-\[\#292934\],
+html.light .border-\[\#2a2a32\],
+html.light .border-\[\#2b2b38\],
+html.light .border-\[\#2b2b3a\],
+html.light .border-\[\#2c2c3e\],
+html.light .border-\[\#2d2d3e\],
+html.light .border-\[\#2e2e42\],
+html.light .border-\[\#343442\] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Modal and dialog sheets in light theme */
+html.light .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Editor in light theme */
+html.light .ProseMirror {
+  color: #0f172a !important;
+}
+
+html.light .ProseMirror h1,
+html.light .ProseMirror h2,
+html.light .ProseMirror h3 {
+  color: #0f172a !important;
+}
+
+html.light .ProseMirror code {
+  background-color: #e2e8f0 !important;
+  color: #4f46e5 !important;
+}
+
+html.light .ProseMirror pre {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light .ProseMirror pre code {
+  background-color: transparent !important;
+  color: #0f172a !important;
+}
+
+html.light .markdown-body {
+  color: #0f172a !important;
+}
+
+html.light .markdown-body h1,
+html.light .markdown-body h2,
+html.light .markdown-body h3 {
+  color: #0f172a !important;
 }
 
 /* Custom Scrollbars */
