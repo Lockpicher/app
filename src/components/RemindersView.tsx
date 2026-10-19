@@ -60,7 +60,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#161622] overflow-hidden">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-4 sm:px-8 py-3.5 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
             <Bell className="w-5 h-5 text-amber-400" />

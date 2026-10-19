@@ -310,7 +310,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden">
       {/* Top Header */}
-      <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5 border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
+      <div className="px-4 sm:px-6 md:px-8 py-3 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252530] bg-[#141419] flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
             <Boxes className="w-5 h-5 text-blue-400 flex-shrink-0" />

@@ -135,12 +135,14 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       // Recargar archivos
       onFoldersChanged();
     } catch (err: any) {
-      setSyncResultModal({
+      setSyncResultModal(prev => ({
         open: true,
         type: 'sync',
         connected: false,
+        bucket: prev.bucket || 'app',
+        endpoint: prev.endpoint,
         error: err.message || 'Error durante la sincronización'
-      });
+      }));
     } finally {
       setIsSyncing(false);
     }
@@ -346,7 +348,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden text-gray-200">
       {/* Top Header */}
-      <div className="px-6 py-4 border-b border-[#252532] bg-[#13131a] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252532] bg-[#13131a] flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-cyan-950/60 border border-cyan-800/40 text-cyan-400">

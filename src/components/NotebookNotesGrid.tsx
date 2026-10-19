@@ -213,7 +213,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       )}
 
       {/* Top Header */}
-      <div className="px-4 sm:px-8 py-3.5 sm:py-5 border-b border-[#252538] bg-[#14141e] flex items-center justify-between flex-wrap gap-3">
+      <div className="px-4 sm:px-8 py-3.5 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#14141e] flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onBackToNotebooks}

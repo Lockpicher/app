@@ -55,7 +55,12 @@ export function getR2Client(): { client: S3Client; bucket: string; publicUrl?: s
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const bucket = process.env.R2_BUCKET_NAME || 'antigravity-storage';
   const publicUrl = process.env.R2_PUBLIC_URL || '';
-  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  let rawEndpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  if (rawEndpoint) {
+    // Si el usuario configuró el endpoint con /bucket al final (ej: ...cloudflarestorage.com/app), limpiarlo para el S3Client
+    rawEndpoint = rawEndpoint.replace(new RegExp(`/${bucket}/?$`, 'i'), '').replace(/\/$/, '');
+  }
+  const endpoint = rawEndpoint;
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
     throw new Error('Configuración de Cloudflare R2 incompleta. Faltan variables: ' + [
@@ -114,8 +119,12 @@ export async function testR2Connection(): Promise<{
       };
     }
 
-    const { client, bucket } = getR2Client();
-    const endpoint = process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '');
+    const { client, bucket, publicUrl } = getR2Client();
+    let rawEndpoint = process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '');
+    if (rawEndpoint) {
+      rawEndpoint = rawEndpoint.replace(new RegExp(`/${bucket}/?$`, 'i'), '').replace(/\/$/, '');
+    }
+    const endpoint = rawEndpoint;
 
     // Intentamos probar enviando un HeadObject o probando el cliente
     try {
@@ -133,10 +142,13 @@ export async function testR2Connection(): Promise<{
 
     return { connected: true, bucket, endpoint };
   } catch (err: any) {
+    let cleanEp = process.env.R2_ENDPOINT || '';
+    const b = process.env.R2_BUCKET_NAME || '';
+    if (cleanEp && b) cleanEp = cleanEp.replace(new RegExp(`/${b}/?$`, 'i'), '');
     return {
       connected: false,
-      bucket: process.env.R2_BUCKET_NAME || '',
-      endpoint: process.env.R2_ENDPOINT || '',
+      bucket: b,
+      endpoint: cleanEp,
       error: err.message || 'Error de conexión con Cloudflare R2'
     };
   }

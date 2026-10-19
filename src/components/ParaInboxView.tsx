@@ -112,7 +112,7 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#16161f] overflow-hidden">
       {/* Top Banner / Header */}
-      <div className="px-5 sm:px-8 py-5 border-b border-[#252538] bg-[#14141c] flex items-center justify-between flex-wrap gap-4">
+      <div className="px-5 sm:px-8 py-4 sm:py-5 pt-[max(1rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#14141c] flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">

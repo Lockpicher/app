@@ -1106,59 +1106,7 @@ export function App() {
 
   return (
     <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
-      {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained editor, home, calendar or tasks) */}
-      {currentView !== 'home' && currentView !== 'calendar' && currentView !== 'tasks' && !isEditingNote && (
-        <header className="lg:hidden h-14 bg-[#141419] border-b border-[#23232b] flex items-center justify-between px-4 z-30 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 -ml-1 text-gray-300 hover:text-white rounded-lg hover:bg-[#20202a] active:bg-[#282836] transition"
-              aria-label="Abrir menú de navegación"
-            >
-              <Menu className="w-5 h-5 text-gray-200" />
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
-                <span className="text-xs font-bold">SC</span>
-              </div>
-              <span className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-xs">
-                {currentView === 'para_inbox' && 'Capturar (Inbox)'}
-                {currentView === 'para_projects' && 'Proyectos (PARA)'}
-                {currentView === 'para_areas' && 'Áreas de Responsabilidad'}
-                {currentView === 'para_resources' && 'Recursos'}
-                {currentView === 'para_archives' && 'Archivo Histórico'}
-                {currentView === 'para_review' && 'Revisión Periódica'}
-                {currentView === 'habits' && 'Hábitos'}
-                {currentView === 'notebooks' && 'Cuadernos'}
-                {currentView === 'all_notes' && 'Todas las notas'}
-                {currentView === 'favorites' && 'Favoritos'}
-                {currentView === 'reminders' && 'Recordatorios'}
-                {currentView === 'projects' && 'Proyectos'}
-                {currentView === 'objects' && 'Objetos'}
-                {currentView === 'graph' && 'Grafo'}
-                {currentView === 'files' && 'Archivos R2'}
-              </span>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Light / Dark Mode Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#20202a] active:bg-[#282836] transition"
-              title={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
-              aria-label="Alternar tema claro u oscuro"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-indigo-400" />
-              )}
-            </button>
-          </div>
-        </header>
-      )}
 
 
 

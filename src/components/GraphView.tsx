@@ -389,7 +389,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#111116] overflow-hidden select-none relative">
       {/* Top Floating Controls */}
-      <div className="absolute top-3 sm:top-4 left-3 sm:left-6 right-3 sm:right-auto z-10 bg-[#191922]/90 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#2d2d3d] shadow-xl flex flex-wrap items-center gap-2 sm:gap-4 max-w-full">
+      <div className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-3 sm:left-6 right-3 sm:right-auto z-10 bg-[#191922]/90 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#2d2d3d] shadow-xl flex flex-wrap items-center gap-2 sm:gap-4 max-w-full">
         <div className="flex items-center gap-2">
           <Share2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
           <span className="text-xs font-bold text-white tracking-wide">Grafo de Red</span>

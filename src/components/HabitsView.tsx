@@ -365,7 +365,7 @@ export const HabitsView: React.FC<HabitsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#111117] text-gray-100 overflow-y-auto">
       {/* Top Header */}
-      <div className="px-4 sm:px-8 py-5 border-b border-[#222232] bg-[#161622] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="px-4 sm:px-8 py-4 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#222232] bg-[#161622] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20">

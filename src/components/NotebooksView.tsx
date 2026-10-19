@@ -72,7 +72,7 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#161620] overflow-hidden">
       {/* Header */}
-      <div className="px-4 sm:px-8 py-4 sm:py-5 border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-3">
+      <div className="px-4 sm:px-8 py-3.5 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#14141d] flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 sm:gap-2.5">
             <Book className="w-5 h-5 text-blue-400" />
