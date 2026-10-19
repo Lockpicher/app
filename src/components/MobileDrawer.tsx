@@ -19,14 +19,18 @@ import {
   Settings,
   ChevronRight,
   Flame,
-  X
+  X,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
+import { auth, AuthUser } from '../lib/auth';
 
 interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenAuth?: () => void;
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
   notes: AppNote[];
@@ -56,6 +60,7 @@ interface MobileDrawerProps {
 export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   isOpen,
   onClose,
+  onOpenAuth,
   currentView,
   onSelectView,
   notes,
@@ -68,6 +73,11 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   counts
 }) => {
   const { theme, toggleTheme } = useTheme();
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    return auth.onAuthStateChanged((u) => setCurrentUser(u));
+  }, []);
 
   // Touch drag state to swipe down to dismiss
   const [dragOffset, setDragOffset] = useState(0);
@@ -269,6 +279,33 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                 <span>Tema: {theme === 'dark' ? 'Oscuro' : 'Claro'}</span>
               </span>
               <span className="text-xs text-blue-400 font-medium">Cambiar</span>
+            </button>
+
+            {/* Cuenta / Iniciar Sesión */}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                if (onOpenAuth) onOpenAuth();
+              }}
+              className="w-full h-12 min-h-[48px] px-3 rounded-xl flex items-center justify-between text-sm text-gray-300 hover:bg-[#1c1c24] active:bg-[#22222e] transition"
+            >
+              <span className="flex items-center gap-3 overflow-hidden">
+                <div className="w-6 h-6 rounded-full bg-blue-600/30 border border-blue-500/40 text-blue-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                  {currentUser?.email ? (currentUser.name ? currentUser.name.charAt(0).toUpperCase() : currentUser.email.charAt(0).toUpperCase()) : <User className="w-3.5 h-3.5" />}
+                </div>
+                <div className="text-left overflow-hidden min-w-0">
+                  <span className="block truncate text-xs text-white">
+                    {currentUser?.name || currentUser?.email || 'Iniciar Sesión'}
+                  </span>
+                  <span className="block text-[10px] text-gray-400">
+                    {currentUser ? 'Cuenta sincronizada' : 'Acceder a tu cuenta'}
+                  </span>
+                </div>
+              </span>
+              <span className="text-xs text-purple-400 font-medium flex-shrink-0">
+                {currentUser ? 'Perfil' : 'Entrar'}
+              </span>
             </button>
           </div>
 

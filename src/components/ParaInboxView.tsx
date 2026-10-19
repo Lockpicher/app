@@ -16,7 +16,8 @@ import {
   Calendar,
   Layers,
   Archive,
-  BookOpen
+  BookOpen,
+  Trash2
 } from 'lucide-react';
 import { 
   AppNote, 
@@ -38,6 +39,7 @@ interface ParaInboxViewProps {
   onOpenNote?: (note: AppNote) => void;
   onOpenProject?: (project: AppProject) => void;
   onOpenObject?: (obj: AppObject) => void;
+  onDeleteTask?: (taskId: string) => Promise<void>;
 }
 
 export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
@@ -50,7 +52,8 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
   onClassifyItem,
   onOpenNote,
   onOpenProject,
-  onOpenObject
+  onOpenObject,
+  onDeleteTask
 }) => {
   // Capture input state
   const [captureTitle, setCaptureTitle] = useState('');
@@ -208,13 +211,29 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
                         )}
                       </div>
 
-                      <button
-                        onClick={() => setClassifyingItem({ id: task.id, type: 'task', title: task.title })}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#20202e] hover:bg-[#2b2b3e] text-amber-300 text-[11px] font-medium border border-amber-500/20 transition flex-shrink-0"
-                      >
-                        <span>Organizar en PARA</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => setClassifyingItem({ id: task.id, type: 'task', title: task.title })}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#20202e] hover:bg-[#2b2b3e] text-amber-300 text-[11px] font-medium border border-amber-500/20 transition"
+                        >
+                          <span>Organizar en PARA</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                        {onDeleteTask && (
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`¿Estás seguro de que deseas eliminar la tarea "${task.title}"?`)) {
+                                await onDeleteTask(task.id);
+                              }
+                            }}
+                            title="Eliminar tarea"
+                            aria-label="Eliminar tarea"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition border border-transparent hover:border-red-500/20"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

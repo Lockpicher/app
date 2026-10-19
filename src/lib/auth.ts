@@ -9,6 +9,23 @@ export interface AuthUser {
 
 const DEFAULT_WORKSPACE_EMAIL = 'usuario@segundocerebro.com';
 const DEFAULT_WORKSPACE_PASSWORD = 'SegundoCerebro2026!';
+const LOGGED_OUT_KEY = 'sc_user_explicitly_logged_out';
+
+/**
+ * Normaliza el identificador ingresado por el usuario:
+ * Si es un correo válido (contiene @), se usa directamente.
+ * Si es un nombre de usuario plano (ej. 'admin' o 'johna'), se convierte en un formato de correo de dominio local.
+ */
+export function normalizeUserIdentifier(input: string): string {
+  const clean = input.trim();
+  if (!clean) return clean;
+  if (clean.includes('@')) {
+    return clean.toLowerCase();
+  }
+  // Convertir nombre de usuario simple a email canónico
+  const safeUsername = clean.toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+  return `${safeUsername}@segundocerebro.local`;
+}
 
 class AuthService {
   private currentUser: AuthUser | null = null;
@@ -34,12 +51,20 @@ class AuthService {
     }
   }
 
-  // Check current session or automatically sign in to workspace account
+  // Check current session
   public async initSession(): Promise<AuthUser | null> {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
       try {
+        const isExplicitlyLoggedOut = typeof window !== 'undefined' && localStorage.getItem(LOGGED_OUT_KEY) === 'true';
+
+        if (isExplicitlyLoggedOut) {
+          this.currentUser = null;
+          this.notifyListeners();
+          return null;
+        }
+
         const { data, error } = await insforge.auth.getCurrentUser();
         if (data?.user) {
           this.currentUser = {
@@ -52,48 +77,15 @@ class AuthService {
           return this.currentUser;
         }
 
-        // If no active session, auto-authenticate with workspace user for seamless Storage writes
-        console.log('Iniciando sesión en espacio de trabajo...');
-        const signInRes = await insforge.auth.signInWithPassword({
-          email: DEFAULT_WORKSPACE_EMAIL,
-          password: DEFAULT_WORKSPACE_PASSWORD
-        });
-
-        if (signInRes.data?.user) {
-          this.currentUser = {
-            id: signInRes.data.user.id,
-            email: signInRes.data.user.email,
-            name: (signInRes.data.user.profile as any)?.name || 'Usuario Segundo Cerebro',
-            createdAt: signInRes.data.user.createdAt
-          };
-          this.notifyListeners();
-          return this.currentUser;
-        }
-
-        // If user doesn't exist, sign up
-        if (signInRes.error) {
-          const signUpRes = await insforge.auth.signUp({
-            email: DEFAULT_WORKSPACE_EMAIL,
-            password: DEFAULT_WORKSPACE_PASSWORD,
-            name: 'Usuario Segundo Cerebro'
-          });
-          if (signUpRes.data?.user) {
-            this.currentUser = {
-              id: signUpRes.data.user.id,
-              email: signUpRes.data.user.email,
-              name: 'Usuario Segundo Cerebro',
-              createdAt: signUpRes.data.user.createdAt
-            };
-            this.notifyListeners();
-            return this.currentUser;
-          }
-        }
+        this.currentUser = null;
+        this.notifyListeners();
+        return null;
       } catch (err) {
         console.error('Error al inicializar sesión de InsForge:', err);
+        this.currentUser = null;
+        this.notifyListeners();
       } finally {
-        if (!this.currentUser) {
-          this.initPromise = null;
-        }
+        this.initPromise = null;
       }
       return null;
     })();
@@ -129,24 +121,20 @@ class AuthService {
     }
 
     if (!isTokenValid || !this.currentUser) {
-      console.log('Renovando token de sesión activa de InsForge...');
-      this.initPromise = null;
-      const res = await insforge.auth.signInWithPassword({
-        email: DEFAULT_WORKSPACE_EMAIL,
-        password: DEFAULT_WORKSPACE_PASSWORD
-      });
-
-      if (res.data?.user && res.data.accessToken) {
+      // Check current session from InsForge tokenManager
+      const userRes = await insforge.auth.getCurrentUser();
+      const currentToken = (insforge as any).tokenManager?.getAccessToken?.() || null;
+      if (userRes.data?.user && currentToken) {
         this.currentUser = {
-          id: res.data.user.id,
-          email: res.data.user.email,
-          name: (res.data.user.profile as any)?.name || 'Usuario Segundo Cerebro',
-          createdAt: res.data.user.createdAt
+          id: userRes.data.user.id,
+          email: userRes.data.user.email,
+          name: (userRes.data.user.profile as any)?.name || userRes.data.user.email.split('@')[0],
+          createdAt: userRes.data.user.createdAt
         };
-        token = res.data.accessToken;
+        token = currentToken;
         this.notifyListeners();
       } else {
-        throw new Error('No se pudo autenticar la sesión con InsForge. Comprueba tu conexión de red.');
+        throw new Error('Debes iniciar sesión para realizar operaciones de almacenamiento.');
       }
     }
 
@@ -158,11 +146,17 @@ class AuthService {
     return this.initSession();
   }
 
-  public async signIn(email: string, password: string):Promise<{ user: AuthUser | null; error: Error | null }> {
+  public async signIn(identifier: string, password: string): Promise<{ user: AuthUser | null; error: Error | null }> {
     try {
+      const email = normalizeUserIdentifier(identifier);
       const { data, error } = await insforge.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
-        return { user: null, error: error || new Error('No se pudo iniciar sesión') };
+        return { user: null, error: error || new Error('Usuario/contraseña incorrectos') };
+      }
+
+      // Eliminar bandera de logout explícito
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOGGED_OUT_KEY);
       }
 
       this.currentUser = {
@@ -178,17 +172,24 @@ class AuthService {
     }
   }
 
-  public async signUp(email: string, password: string, name?: string): Promise<{ user: AuthUser | null; error: Error | null }> {
+  public async signUp(identifier: string, password: string, name?: string): Promise<{ user: AuthUser | null; error: Error | null }> {
     try {
-      const { data, error } = await insforge.auth.signUp({ email, password, name });
+      const email = normalizeUserIdentifier(identifier);
+      const displayName = name || (identifier.includes('@') ? identifier.split('@')[0] : identifier);
+      const { data, error } = await insforge.auth.signUp({ email, password, name: displayName });
       if (error || !data?.user) {
-        return { user: null, error: error || new Error('No se pudo registrar') };
+        return { user: null, error: error || new Error('No se pudo registrar la cuenta') };
+      }
+
+      // Eliminar bandera de logout explícito
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOGGED_OUT_KEY);
       }
 
       this.currentUser = {
         id: data.user.id,
         email: data.user.email,
-        name: name || data.user.email.split('@')[0],
+        name: displayName,
         createdAt: data.user.createdAt
       };
       this.notifyListeners();
@@ -200,6 +201,10 @@ class AuthService {
 
   public async signOut(): Promise<void> {
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOGGED_OUT_KEY, 'true');
+      }
+      this.initPromise = null;
       await insforge.auth.signOut();
     } catch (e) {
       console.warn('Error durante signOut:', e);

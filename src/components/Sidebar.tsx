@@ -69,6 +69,7 @@ interface SidebarProps {
   activeObjectType?: string;
   onSelectObjectType?: (typeId: string) => void;
   objects?: AppObject[];
+  onOpenAuth?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -91,7 +92,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   objectTypes = [],
   activeObjectType = 'all',
   onSelectObjectType,
-  objects = []
+  objects = [],
+  onOpenAuth
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -851,29 +853,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Footer: User profile */}
-        <div className="p-2.5 border-t border-[#23232b] bg-[#101014] text-[11px] text-gray-400 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className={`flex items-center gap-2 overflow-hidden ${isCollapsed ? 'justify-center w-full' : ''}`}>
+        <div className="p-2 border-t border-[#23232b] bg-[#101014] text-[11px] text-gray-400 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className={`w-full flex items-center justify-between p-1.5 rounded-xl hover:bg-[#1c1c28] transition group text-left ${
+              isCollapsed ? 'justify-center' : ''
+            }`}
+            title={currentUser ? `Conectado como ${currentUser.email} (Clic para gestionar)` : 'Iniciar sesión'}
+          >
+            <div className={`flex items-center gap-2 overflow-hidden ${isCollapsed ? 'justify-center' : ''}`}>
               <div 
-                className="w-6 h-6 rounded-full bg-blue-600/30 border border-blue-500/40 text-blue-300 flex items-center justify-center font-bold text-[10px] flex-shrink-0"
-                title={currentUser?.email || 'Sesión activa'}
+                className="w-7 h-7 rounded-full bg-blue-600/30 border border-blue-500/40 text-blue-300 flex items-center justify-center font-bold text-xs flex-shrink-0 group-hover:border-blue-400 group-hover:scale-105 transition"
               >
-                {currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
+                {currentUser?.email ? (currentUser.name ? currentUser.name.charAt(0).toUpperCase() : currentUser.email.charAt(0).toUpperCase()) : <User className="w-3.5 h-3.5" />}
               </div>
 
               {!isCollapsed && (
                 <div className="overflow-hidden min-w-0">
-                  <p className="text-xs text-gray-200 truncate font-medium">
-                    {currentUser?.email || 'Usuario Conectado'}
+                  <p className="text-xs text-gray-200 truncate font-medium group-hover:text-white transition">
+                    {currentUser?.name || currentUser?.email || 'Iniciar Sesión'}
                   </p>
                   <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>Sincronizado</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${currentUser ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                    <span>{currentUser ? 'Cuenta activa' : 'Toca para acceder'}</span>
                   </div>
                 </div>
               )}
             </div>
-          </div>
+
+            {!isCollapsed && (
+              <span className="text-[10px] text-gray-500 group-hover:text-blue-400 px-1.5 py-0.5 rounded bg-[#161622] border border-[#272738] transition">
+                {currentUser ? 'Perfil' : 'Entrar'}
+              </span>
+            )}
+          </button>
         </div>
       </aside>
     </>

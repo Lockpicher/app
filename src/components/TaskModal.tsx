@@ -195,10 +195,19 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   // Layout Mode: 'panel' (slide-over drawer on right) or 'modal' (centered)
   const [panelMode, setPanelMode] = useState<'panel' | 'modal'>('panel');
+
+  // Handle Safe Close with Unsaved Changes Warning
+  const handleSafeClose = () => {
+    if (hasUnsavedChanges) {
+      if (confirm('Tienes cambios sin guardar en esta tarea. ¿Seguro que deseas salir y descartarlos?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
 
   // Keyboard shortcut: Escape to close safe
   useEffect(() => {
@@ -212,16 +221,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, hasUnsavedChanges]);
 
-  // Handle Safe Close with Unsaved Changes Warning
-  const handleSafeClose = () => {
-    if (hasUnsavedChanges) {
-      if (confirm('Tienes cambios sin guardar en esta tarea. ¿Seguro que deseas salir y descartarlos?')) {
-        onClose();
-      }
-    } else {
-      onClose();
-    }
-  };
+  if (!isOpen) return null;
 
   // Formatting helpers for Markdown editor
   const applyFormat = (prefix: string, suffix = '') => {

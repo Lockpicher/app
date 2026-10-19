@@ -25,6 +25,8 @@ import { ParaReviewView } from './components/ParaReviewView';
 import { HabitsView } from './components/HabitsView';
 import { UploadModal } from './components/UploadModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
+import { AuthModal } from './components/AuthModal';
+import { auth, AuthUser } from './lib/auth';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
 import { registerServiceWorker, syncPersonBirthdayReminders } from './lib/birthdays';
@@ -102,6 +104,22 @@ export function App() {
   const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isGlobalVoiceModalOpen, setIsGlobalVoiceModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+
+  // Subscribe to auth state
+  useEffect(() => {
+    let isInitial = true;
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setCurrentUser(u);
+      if (isInitial) {
+        isInitial = false;
+        setIsAuthChecking(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -196,9 +214,27 @@ export function App() {
   };
 
   useEffect(() => {
-    loadData();
-    registerServiceWorker().catch(() => {});
-  }, []);
+    if (!isAuthChecking) {
+      if (currentUser) {
+        loadData();
+        registerServiceWorker().catch(() => {});
+      } else {
+        // Usuario desconectado: limpiar datos y no cargar nada
+        setLoading(false);
+        setNotebooks([]);
+        setNotes([]);
+        setReminders([]);
+        setProjects([]);
+        setTasks([]);
+        setObjects([]);
+        setLinks([]);
+        setAttachments([]);
+        setFolders([]);
+        setHabits([]);
+        setHabitLogs([]);
+      }
+    }
+  }, [currentUser, isAuthChecking]);
 
   // Reminders scheduler listener
   useEffect(() => {
@@ -1015,6 +1051,40 @@ export function App() {
   const activeNote = notes.find(n => n.id === selectedNoteId);
   const selectedNotebook = notebooks.find(nb => nb.id === selectedNotebookId) || null;
 
+  // 1. Verificación inicial de sesión
+  if (isAuthChecking) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#0f0f14] text-white">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          <p className="text-xs text-gray-400">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Si no hay usuario autenticado, NO mostrar la app; mostrar únicamente el panel de Login
+  if (!currentUser) {
+    return (
+      <div className="relative min-h-screen min-h-[100dvh] w-screen flex items-center justify-center p-4 bg-[#0c0c11] overflow-hidden">
+        {/* Ambient glow effects */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+
+        <AuthModal
+          isOpen={true}
+          onClose={() => {}}
+          currentUser={null}
+          isMandatory={true}
+          onAuthSuccess={async () => {
+            await loadData();
+          }}
+        />
+      </div>
+    );
+  }
+
+  // 3. Cargando base de datos después de autenticarse
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#121217] text-white">
@@ -1152,6 +1222,7 @@ export function App() {
           setCurrentView('objects');
         }}
         objects={objects}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main Content Workspace */}
@@ -1396,6 +1467,7 @@ export function App() {
                   setActiveObjectType(obj.object_type);
                   setCurrentView('objects');
                 }}
+                onDeleteTask={handleDeleteTask}
               />
             )}
 
@@ -1565,6 +1637,7 @@ export function App() {
       <MobileDrawer
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
         currentView={currentView}
         onSelectView={(v) => {
           setIsEditingNote(false);
@@ -1688,6 +1761,19 @@ export function App() {
         notebooks={notebooks}
         projects={projects}
         onSaveVoiceNote={handleSaveGlobalVoiceNote}
+      />
+
+      {/* Global Authentication Modal (Login / Sign Up / Account Management) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onAuthSuccess={async () => {
+          await loadData();
+        }}
+        onSignOut={async () => {
+          await loadData();
+        }}
       />
     </div>
   );
