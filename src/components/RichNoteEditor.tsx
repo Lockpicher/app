@@ -1559,24 +1559,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               </div>
             </div>
 
-            {/* Note Tags, Date and Metadata Header aligned with title axis */}
+            {/* Note Date and Metadata Header aligned with title axis (Clean header without tags input) */}
             <div className="flex items-center justify-between text-xs text-gray-400 pb-3 border-b border-[#222232] flex-wrap gap-2">
-              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                <Tag className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => {
-                    setTagsInput(e.target.value);
-                    setSaveStatus('dirty');
-                  }}
-                  placeholder="Añadir etiquetas separadas por coma..."
-                  className="bg-transparent text-xs text-gray-300 outline-none w-full placeholder-gray-600 focus:placeholder-gray-500"
-                />
-              </div>
               <div className="flex items-center gap-2 font-mono text-[11px] text-gray-400">
                 <Calendar className="w-3 h-3 text-gray-400" />
-                <span>{new Date(note.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <span>Última edición: {new Date(note.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             </div>
 
@@ -1600,13 +1587,14 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                   editor.commands.focus('end');
                 }
               }}
-              className="w-full min-h-[450px] text-gray-100 cursor-text pb-10"
+              className="w-full min-h-[450px] text-gray-100 cursor-text pb-6"
             >
               <EditorContent editor={editor} className="outline-none" />
             </div>
 
-            {/* Zoho Notebook Style: Quick Add Task Bar */}
-            <div className="pt-2 pb-32 border-t border-[#20202e] flex items-center justify-between gap-3">
+            {/* Editor Bottom Actions Row: Left "+ Agregar elemento de tarea" | Right "Añadir etiquetas..." */}
+            <div className="pt-3 pb-32 border-t border-[#20202e] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Left: Quick Add Task Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -1614,15 +1602,28 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                     editor.chain().focus('end').toggleTaskList().run();
                   }
                 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 transition group"
+                className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 transition group flex-shrink-0 active:scale-95"
+                title="Agregar elemento de tarea en el editor"
               >
                 <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                 <span>+ Agregar elemento de tarea</span>
               </button>
 
-              <span className="text-[11px] font-mono text-gray-500">
-                Presiona Enter dentro de una tarea para crear otra automáticamente
-              </span>
+              {/* Right: Tags input aligned in the same row */}
+              <div className="flex items-center gap-2 bg-[#181824] px-3 py-1.5 rounded-xl border border-[#2b2b3e] focus-within:border-indigo-500/60 transition flex-1 sm:max-w-md w-full">
+                <Tag className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => {
+                    setTagsInput(e.target.value);
+                    setSaveStatus('dirty');
+                  }}
+                  placeholder="Añadir etiquetas separadas por coma..."
+                  className="bg-transparent text-xs text-gray-200 outline-none w-full placeholder-gray-500 focus:placeholder-gray-400 font-sans"
+                  aria-label="Etiquetas de la nota"
+                />
+              </div>
             </div>
           </div>
         </div>
