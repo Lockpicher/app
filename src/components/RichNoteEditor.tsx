@@ -72,7 +72,9 @@ import {
   Image as ImageIcon,
   ChevronDown,
   Rows,
-  Columns
+  Columns,
+  RotateCw,
+  AlertTriangle
 } from 'lucide-react';
 
 import { 
@@ -126,7 +128,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [isFavorite, setIsFavorite] = useState(!!note.is_favorite);
   const [isPinned, setIsPinned] = useState(!!note.is_pinned);
   const [tagsInput, setTagsInput] = useState((note.tags || []).join(', '));
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty'>('saved');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
 
   // Universal Link Selector state & Trigger
   const [isUniversalLinkModalOpen, setIsUniversalLinkModalOpen] = useState(false);
@@ -319,11 +322,12 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
   // Perform Save with robust error handling and classification
   const isSavingRef = useRef(false);
-  const handleSave = async () => {
-    if (!editor || isSavingRef.current) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (!editor || isSavingRef.current) return false;
     try {
       isSavingRef.current = true;
       setSaveStatus('saving');
+      setSaveErrorMessage(null);
       const json = editor.getJSON();
       const html = editor.getHTML();
       const plainText = editor.getText();
@@ -372,13 +376,25 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       });
 
       setSaveStatus('saved');
+      setSaveErrorMessage(null);
+      return true;
     } catch (err: any) {
       console.error('Error guardando nota en InsForge:', err);
       // Keep local content dirty so user does not lose changes and can retry
-      setSaveStatus('dirty');
+      setSaveStatus('error');
+      setSaveErrorMessage(err.message || 'Error de conexión');
+      return false;
     } finally {
       isSavingRef.current = false;
     }
+  };
+
+  // Safe Back handler: if changes are dirty or error, save before leaving
+  const handleSafeBack = async () => {
+    if (saveStatus === 'dirty' || saveStatus === 'error') {
+      await handleSave();
+    }
+    onBack();
   };
 
   // Auto-save debounce (800ms for fast responsiveness without freezing)
@@ -740,34 +756,182 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         </div>
       )}
 
-      {/* Top Header & Metadata Bar */}
-      <div className="px-6 py-3 border-b border-[#252538] bg-[#111117] flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-          <button
-            onClick={onBack}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202e] transition"
-            title="Volver a la cuadrícula de notas"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+      {/* Top Header & Metadata Bar - Fully Responsive with Dedicated Mobile Action Tier */}
+      <div className="border-b border-[#252538] bg-[#111117] flex-shrink-0 z-20">
+        {/* Tier 1: Main Bar (Back, Title, Status & Primary Actions: Guardar, Eliminar, Favorito) */}
+        <div className="px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 min-h-[48px]">
+          {/* Left: Back button & Title */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={handleSafeBack}
+              className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#20202e] transition flex-shrink-0"
+              title="Volver (guarda cambios automáticamente)"
+              aria-label="Volver a la vista anterior"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
 
-          <span className="text-xs font-semibold text-gray-400 truncate max-w-[200px] sm:max-w-xs">
-            {title || 'Nota sin título'}
-          </span>
+            <span className="text-xs font-semibold text-gray-300 truncate max-w-[140px] sm:max-w-xs block">
+              {title || 'Nota sin título'}
+            </span>
+
+            {/* Save Status Indicator - Always visible next to title/back */}
+            <div 
+              className={`flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded border transition flex-shrink-0 ${
+                saveStatus === 'saved' 
+                  ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
+                  : saveStatus === 'saving'
+                  ? 'bg-blue-950/40 text-blue-400 border-blue-800/40 animate-pulse'
+                  : saveStatus === 'error'
+                  ? 'bg-red-950/50 text-red-400 border-red-800/50'
+                  : 'bg-amber-950/40 text-amber-400 border-amber-800/40'
+              }`}
+              title={
+                saveStatus === 'error' 
+                  ? `Error al guardar: ${saveErrorMessage || 'Reintentar'}` 
+                  : saveStatus === 'saving'
+                  ? 'Guardando cambios en InsForge...'
+                  : saveStatus === 'saved'
+                  ? 'Cambios guardados con éxito'
+                  : 'Hay cambios pendientes de guardar'
+              }
+            >
+              {saveStatus === 'saved' && (
+                <>
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span className="hidden xs:inline">Guardado</span>
+                </>
+              )}
+              {saveStatus === 'saving' && (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                  <span>Guardando…</span>
+                </>
+              )}
+              {saveStatus === 'dirty' && (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span className="hidden sm:inline">Pendiente</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex items-center gap-1 text-red-300 hover:text-white underline font-semibold"
+                  title="Pulsar para reintentar guardado"
+                >
+                  <AlertTriangle className="w-3 h-3 text-red-400" />
+                  <span>Error · Reintentar</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Permanent Actions (Desktop displays all; Mobile guarantees Guardar + Eliminar + Favorito) */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Desktop-only: Selectors inline */}
+            <div className="hidden md:flex items-center gap-1.5">
+              {/* Notebook Selector */}
+              <div className="flex items-center gap-1.5 bg-[#181824] px-2 py-1 rounded-lg border border-[#2b2b3e]">
+                <Book className="w-3.5 h-3.5 text-blue-400" />
+                <select
+                  value={notebookId}
+                  onChange={(e) => {
+                    setNotebookId(e.target.value);
+                    setSaveStatus('dirty');
+                  }}
+                  className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer max-w-[120px] truncate"
+                >
+                  <option value="" className="bg-[#181824]">Sin Cuaderno</option>
+                  {notebooks.map(nb => (
+                    <option key={nb.id} value={nb.id} className="bg-[#181824]">{nb.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Project Selector */}
+              <div className="flex items-center gap-1.5 bg-[#181824] px-2 py-1 rounded-lg border border-[#2b2b3e]">
+                <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
+                <select
+                  value={projectId}
+                  onChange={(e) => {
+                    setProjectId(e.target.value);
+                    setSaveStatus('dirty');
+                  }}
+                  className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer max-w-[120px] truncate"
+                >
+                  <option value="" className="bg-[#181824]">Sin Proyecto</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id} className="bg-[#181824]">{p.title}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Favorite Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsFavorite(!isFavorite);
+                setSaveStatus('dirty');
+              }}
+              className={`p-1.5 rounded-lg transition ${
+                isFavorite ? 'text-amber-400 bg-amber-500/10' : 'text-gray-400 hover:text-white hover:bg-[#20202e]'
+              }`}
+              title={isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+              aria-label="Favorito"
+            >
+              <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
+
+            {/* Manual Save Button - Always visible, never hidden */}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saveStatus === 'saving' || isDeleting}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-95 ${
+                saveStatus === 'saving' 
+                  ? 'bg-blue-800 cursor-wait opacity-80' 
+                  : saveStatus === 'error'
+                  ? 'bg-red-600 hover:bg-red-500'
+                  : 'bg-blue-600 hover:bg-blue-500'
+              }`}
+              title="Guardar nota manualmente"
+              aria-label="Guardar nota"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">{saveStatus === 'saving' ? 'Guardando…' : 'Guardar'}</span>
+            </button>
+
+            {/* Delete Button - Always visible next to Guardar */}
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              disabled={isDeleting || saveStatus === 'saving'}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/40 hover:border-red-800/60 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Eliminar esta nota"
+              aria-label="Eliminar nota"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Eliminar</span>
+            </button>
+          </div>
         </div>
 
-        {/* Notebook & Project Selectors */}
-        <div className="flex items-center gap-2">
-          {/* Notebook Selector */}
-          <div className="flex items-center gap-1.5 bg-[#181824] px-2.5 py-1.5 rounded-lg border border-[#2b2b3e]">
-            <Book className="w-3.5 h-3.5 text-blue-400" />
+        {/* Tier 2: Mobile Metadata Bar (Cuaderno, Proyecto y Estado detallado en pantallas estrechas) */}
+        <div className="md:hidden px-3 py-1.5 bg-[#14141d] border-t border-[#1e1e2c] flex items-center justify-between gap-2 overflow-x-auto no-scrollbar text-xs">
+          {/* Mobile Notebook Selector */}
+          <div className="flex items-center gap-1.5 bg-[#191925] px-2 py-1 rounded-md border border-[#2b2b3e] flex-1 min-w-[130px]">
+            <Book className="w-3 h-3 text-blue-400 flex-shrink-0" />
             <select
               value={notebookId}
               onChange={(e) => {
                 setNotebookId(e.target.value);
                 setSaveStatus('dirty');
               }}
-              className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer"
+              className="bg-transparent text-[11px] text-gray-200 outline-none cursor-pointer w-full"
             >
               <option value="" className="bg-[#181824]">Sin Cuaderno</option>
               {notebooks.map(nb => (
@@ -776,16 +940,16 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             </select>
           </div>
 
-          {/* Project Selector */}
-          <div className="flex items-center gap-1.5 bg-[#181824] px-2.5 py-1.5 rounded-lg border border-[#2b2b3e]">
-            <FolderKanban className="w-3.5 h-3.5 text-purple-400" />
+          {/* Mobile Project Selector */}
+          <div className="flex items-center gap-1.5 bg-[#191925] px-2 py-1 rounded-md border border-[#2b2b3e] flex-1 min-w-[130px]">
+            <FolderKanban className="w-3 h-3 text-purple-400 flex-shrink-0" />
             <select
               value={projectId}
               onChange={(e) => {
                 setProjectId(e.target.value);
                 setSaveStatus('dirty');
               }}
-              className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer max-w-[130px] truncate"
+              className="bg-transparent text-[11px] text-gray-200 outline-none cursor-pointer w-full"
             >
               <option value="" className="bg-[#181824]">Sin Proyecto</option>
               {projects.map(p => (
@@ -793,67 +957,6 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               ))}
             </select>
           </div>
-
-          {/* Favorite Toggle */}
-          <button
-            onClick={() => {
-              setIsFavorite(!isFavorite);
-              setSaveStatus('dirty');
-            }}
-            className={`p-2 rounded-lg transition ${
-              isFavorite ? 'text-amber-400 bg-amber-500/10' : 'text-gray-400 hover:text-white hover:bg-[#20202e]'
-            }`}
-            title={isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
-          >
-            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-          </button>
-
-          {/* Save Status Indicator */}
-          <div className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-[#181824] border border-[#262638]">
-            {saveStatus === 'saved' && (
-              <span className="flex items-center gap-1 text-emerald-400">
-                <Check className="w-3 h-3" />
-                Guardado
-              </span>
-            )}
-            {saveStatus === 'saving' && (
-              <span className="flex items-center gap-1 text-blue-400 animate-pulse">
-                Guardando...
-              </span>
-            )}
-            {saveStatus === 'dirty' && (
-              <span className="flex items-center gap-1 text-amber-400">
-                Cambios pendientes
-              </span>
-            )}
-          </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saveStatus === 'saving' || isDeleting}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-95 ${
-              saveStatus === 'saving' 
-                ? 'bg-blue-800 cursor-wait opacity-80' 
-                : 'bg-blue-600 hover:bg-blue-500'
-            }`}
-            title="Guardar nota"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{saveStatus === 'saving' ? 'Guardando...' : 'Guardar'}</span>
-          </button>
-
-          {/* Delete Button (Discreet danger styling, adjacent to Save) */}
-          <button
-            type="button"
-            onClick={handleDeleteClick}
-            disabled={isDeleting || saveStatus === 'saving'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/50 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Eliminar esta nota"
-            aria-label="Eliminar nota"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Eliminar</span>
-          </button>
         </div>
       </div>
 
@@ -1407,17 +1510,54 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         >
           {/* Centered Document Column (840px max width) */}
           <div className="max-w-[840px] mx-auto w-full space-y-6">
-            {/* Note Title inside the document column */}
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setSaveStatus('dirty');
-              }}
-              placeholder="Título de la nota..."
-              className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-white outline-none placeholder-gray-600 font-sans tracking-tight leading-tight"
-            />
+            {/* Note Title and save indicator inside the document column */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setSaveStatus('dirty');
+                  }}
+                  placeholder="Título de la nota..."
+                  className="flex-1 bg-transparent text-2xl sm:text-3xl font-extrabold text-white outline-none placeholder-gray-600 font-sans tracking-tight leading-tight min-w-[200px]"
+                />
+
+                {/* Inline Save Status indicator right by the title */}
+                <div className="flex items-center gap-2">
+                  {saveStatus === 'saved' && (
+                    <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-800/40">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Guardado</span>
+                    </span>
+                  )}
+                  {saveStatus === 'saving' && (
+                    <span className="flex items-center gap-1.5 text-xs font-mono text-blue-400 bg-blue-950/50 px-2.5 py-1 rounded-full border border-blue-800/40 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Guardando…</span>
+                    </span>
+                  )}
+                  {saveStatus === 'dirty' && (
+                    <span className="flex items-center gap-1.5 text-xs font-mono text-amber-400 bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-800/40">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      <span>Cambios pendientes…</span>
+                    </span>
+                  )}
+                  {saveStatus === 'error' && (
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      className="flex items-center gap-1.5 text-xs font-mono text-red-300 bg-red-950/60 hover:bg-red-900/60 px-3 py-1 rounded-full border border-red-800/50 transition active:scale-95"
+                      title="Pulsar para reintentar guardar"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                      <span>Error al guardar · Reintentar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Note Tags, Date and Metadata Header aligned with title axis */}
             <div className="flex items-center justify-between text-xs text-gray-400 pb-3 border-b border-[#222232] flex-wrap gap-2">

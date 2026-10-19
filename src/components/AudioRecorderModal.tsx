@@ -12,15 +12,20 @@ import {
   AlertCircle, 
   Clock, 
   Volume2, 
-  FileText 
+  FileText,
+  Book,
+  FolderKanban
 } from 'lucide-react';
 import { storage } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
+import { AppNotebook, AppProject } from '../lib/types';
 
 interface AudioRecorderModalProps {
   isOpen: boolean;
   onClose: () => void;
   notebookId?: string | null;
+  notebooks?: AppNotebook[];
+  projects?: AppProject[];
   onSaveVoiceNote: (data: {
     title: string;
     audioUrl: string;
@@ -28,13 +33,18 @@ interface AudioRecorderModalProps {
     transcription?: string;
     transcriptionStatus: 'none' | 'pending' | 'completed' | 'error';
     notebookId?: string | null;
+    projectId?: string | null;
+    fileSize?: number;
+    mimeType?: string;
   }) => Promise<void>;
 }
 
 export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
   isOpen,
   onClose,
-  notebookId,
+  notebookId: initialNotebookId,
+  notebooks = [],
+  projects = [],
   onSaveVoiceNote
 }) => {
   const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'paused' | 'stopped'>('idle');
@@ -42,6 +52,9 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
+  const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   
   // Status states
   const [isProcessing, setIsProcessing] = useState(false);
@@ -61,6 +74,9 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       setAudioBlob(null);
       setAudioUrl(null);
       setTitle(`Nota de voz ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`);
+      setSelectedNotebookId(initialNotebookId || (notebooks.find(n => n.is_default)?.id) || (notebooks[0]?.id) || null);
+      setSelectedProjectId(null);
+      setShowDiscardConfirm(false);
       setIsProcessing(false);
       setProcessingStep('');
       setTranscriptionText('');
@@ -69,7 +85,7 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
     } else {
       stopRecordingCleanup();
     }
-  }, [isOpen]);
+  }, [isOpen, initialNotebookId]);
 
   const stopRecordingCleanup = () => {
     if (timerIntervalRef.current) {
@@ -86,17 +102,39 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
     }
   };
 
+  const handleAttemptClose = () => {
+    if (isProcessing) return;
+    if (recordingState === 'recording' || recordingState === 'paused' || (recordingState === 'stopped' && audioBlob)) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardConfirm(false);
+    stopRecordingCleanup();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const startRecording = async () => {
     try {
       setErrorMessage(null);
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setErrorMessage('Tu navegador o dispositivo no soporta grabación de audio desde el micrófono.');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
       
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+        ? 'audio/webm' 
+        : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -105,8 +143,8 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       };
 
       mediaRecorder.onstop = () => {
-        const mimeType = mediaRecorder.mimeType || 'audio/webm';
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const finalMime = mediaRecorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: finalMime });
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
@@ -125,33 +163,60 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       }, 1000);
     } catch (err: any) {
       console.error('Error accediendo al micrófono:', err);
-      setErrorMessage('No se pudo acceder al micrófono: ' + (err.message || 'Verifica los permisos en tu navegador'));
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setErrorMessage('Permiso denegado: Por favor habilita el acceso al micrófono en los ajustes de tu navegador para poder grabar.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setErrorMessage('No se detectó ningún micrófono conectado en este dispositivo.');
+      } else {
+        setErrorMessage('Error al acceder al micrófono: ' + (err.message || 'Verifica los permisos'));
+      }
     }
   };
 
   const pauseRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      setRecordingState('paused');
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      try {
+        mediaRecorderRef.current.pause();
+        setRecordingState('paused');
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      } catch (e) {
+        console.warn('Pause error:', e);
+      }
     }
   };
 
   const resumeRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
-      mediaRecorderRef.current.resume();
-      setRecordingState('recording');
-      timerIntervalRef.current = setInterval(() => {
-        setElapsedSeconds(prev => prev + 1);
-      }, 1000);
+      try {
+        mediaRecorderRef.current.resume();
+        setRecordingState('recording');
+        timerIntervalRef.current = setInterval(() => {
+          setElapsedSeconds(prev => prev + 1);
+        }, 1000);
+      } catch (e) {
+        console.warn('Resume error:', e);
+      }
     }
   };
 
   const stopRecording = () => {
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.warn('Stop error:', e);
+      }
     }
+  };
+
+  const resetRecording = () => {
+    stopRecordingCleanup();
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingState('idle');
+    setElapsedSeconds(0);
+    setErrorMessage(null);
   };
 
   const formatTimer = (sec: number) => {
@@ -219,7 +284,10 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
         durationSeconds: elapsedSeconds,
         transcription: finalTranscription || undefined,
         transcriptionStatus: status,
-        notebookId: notebookId || undefined
+        notebookId: selectedNotebookId || undefined,
+        projectId: selectedProjectId || undefined,
+        fileSize: audioBlob.size,
+        mimeType: audioBlob.type || 'audio/webm'
       });
 
       onClose();
@@ -234,21 +302,28 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-[#181824] border border-[#2d2d42] rounded-2xl max-w-lg w-full flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#181824] border border-[#2d2d42] rounded-2xl max-w-lg w-full flex flex-col shadow-2xl overflow-hidden relative">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252538] flex items-center justify-between bg-[#14141e]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
               <Mic className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Grabadora de Voz & Transcripción</h3>
-              <p className="text-[11px] text-gray-400">Impulsado por ElevenLabs Scribe STT</p>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                Nueva Nota de Voz
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40">
+                  Cloudflare R2 + Scribe
+                </span>
+              </h3>
+              <p className="text-[11px] text-gray-400">Graba tus ideas hablando y consérvalas con transcripción</p>
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252538] transition"
+            onClick={handleAttemptClose}
+            disabled={isProcessing}
+            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252538] transition disabled:opacity-40"
+            title="Cerrar modal"
           >
             <X className="w-4 h-4" />
           </button>
@@ -261,7 +336,7 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
           </div>
         )}
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Note Title */}
           <div>
             <label className="text-xs font-semibold text-gray-300 block mb-1.5">
@@ -272,35 +347,84 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej. Ideas sobre el nuevo lanzamiento..."
-              className="w-full px-3 py-2 bg-[#121218] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-red-500 font-medium"
+              className="w-full px-3 py-2 bg-[#121218] border border-[#2c2c3e] rounded-xl text-xs text-white outline-none focus:border-blue-500 font-medium"
             />
           </div>
 
+          {/* Optional Notebook & Project Pickers */}
+          {(notebooks.length > 0 || projects.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {notebooks.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-medium text-gray-400 flex items-center gap-1.5 mb-1">
+                    <Book className="w-3 h-3 text-purple-400" />
+                    Cuaderno de destino
+                  </label>
+                  <select
+                    value={selectedNotebookId || ''}
+                    onChange={(e) => setSelectedNotebookId(e.target.value || null)}
+                    disabled={isProcessing}
+                    className="w-full px-2.5 py-1.5 bg-[#121218] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">(Sin cuaderno asignado)</option>
+                    {notebooks.map(nb => (
+                      <option key={nb.id} value={nb.id}>
+                        {nb.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {projects.length > 0 && (
+                <div>
+                  <label className="text-[11px] font-medium text-gray-400 flex items-center gap-1.5 mb-1">
+                    <FolderKanban className="w-3 h-3 text-blue-400" />
+                    Proyecto asociado (Opcional)
+                  </label>
+                  <select
+                    value={selectedProjectId || ''}
+                    onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                    disabled={isProcessing}
+                    className="w-full px-2.5 py-1.5 bg-[#121218] border border-[#2c2c3e] rounded-lg text-xs text-white outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">(Ningún proyecto)</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Recording Canvas */}
-          <div className="p-8 bg-[#12121a] rounded-2xl border border-[#262638] flex flex-col items-center justify-center text-center relative overflow-hidden">
+          <div className="p-6 bg-[#12121a] rounded-2xl border border-[#262638] flex flex-col items-center justify-center text-center relative overflow-hidden">
             {/* Animated Pulses when recording */}
             {recordingState === 'recording' && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="w-40 h-40 rounded-full bg-red-500/10 animate-ping" />
-                <span className="w-56 h-56 rounded-full bg-red-500/5 animate-pulse" />
+                <span className="w-36 h-36 rounded-full bg-blue-500/10 animate-ping" />
+                <span className="w-48 h-48 rounded-full bg-blue-500/5 animate-pulse" />
               </div>
             )}
 
             {/* Timer */}
-            <div className="text-4xl font-mono font-bold text-white mb-3 tracking-wider">
+            <div className="text-4xl font-mono font-bold text-white mb-2 tracking-wider">
               {formatTimer(elapsedSeconds)}
             </div>
 
-            <p className="text-xs text-gray-400 mb-6">
-              {recordingState === 'idle' && 'Presiona el botón para iniciar la grabación'}
+            <p className="text-xs text-gray-400 mb-5">
+              {recordingState === 'idle' && 'Pulsa el micrófono para iniciar la grabación'}
               {recordingState === 'recording' && 'Grabando audio... Habla claramente'}
               {recordingState === 'paused' && 'Grabación pausada'}
-              {recordingState === 'stopped' && 'Grabación lista para guardar y transcribir'}
+              {recordingState === 'stopped' && 'Grabación lista para escuchar y guardar'}
             </p>
 
             {/* Audio Preview if stopped */}
             {recordingState === 'stopped' && audioUrl && (
-              <div className="w-full mb-6">
+              <div className="w-full mb-5">
                 <audio controls src={audioUrl} className="w-full h-10 rounded-lg" />
               </div>
             )}
@@ -311,7 +435,7 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
                 <button
                   type="button"
                   onClick={startRecording}
-                  className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-900/40 transition transform hover:scale-105"
+                  className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-900/40 transition transform hover:scale-105 active:scale-95"
                   title="Iniciar Grabación"
                 >
                   <Mic className="w-7 h-7" />
@@ -365,12 +489,12 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
               {recordingState === 'stopped' && (
                 <button
                   type="button"
-                  onClick={startRecording}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#252538] hover:bg-[#303046] text-gray-300 rounded-xl text-xs font-medium transition"
-                  title="Grabar de nuevo"
+                  onClick={resetRecording}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#252538] hover:bg-[#303046] text-gray-300 rounded-xl text-xs font-medium transition active:scale-95"
+                  title="Descartar y volver a grabar"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Grabar de nuevo
+                  Descartar y volver a grabar
                 </button>
               )}
             </div>
@@ -389,8 +513,9 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
         <div className="px-6 py-3.5 border-t border-[#252538] flex items-center justify-between bg-[#14141e]">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs text-gray-400 hover:text-white rounded-xl transition"
+            onClick={handleAttemptClose}
+            disabled={isProcessing}
+            className="px-4 py-2 text-xs text-gray-400 hover:text-white rounded-xl transition disabled:opacity-40"
           >
             Cancelar
           </button>
@@ -399,12 +524,43 @@ export const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
             type="button"
             onClick={handleSaveAndTranscribe}
             disabled={!audioBlob || isProcessing}
-            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-red-600 to-indigo-600 hover:from-red-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg transition disabled:opacity-40"
+            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg transition disabled:opacity-40 active:scale-95"
           >
             <Sparkles className="w-4 h-4" />
-            {isProcessing ? 'Procesando...' : 'Guardar y Transcribir'}
+            {isProcessing ? 'Guardando en R2...' : 'Guardar nota de voz'}
           </button>
         </div>
+
+        {/* Discard Confirmation Dialog */}
+        {showDiscardConfirm && (
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-sm z-30 flex items-center justify-center p-6 animate-fadeIn">
+            <div className="bg-[#1c1c28] border border-[#323246] rounded-2xl p-5 max-w-sm w-full space-y-3 text-center shadow-2xl">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-bold text-white">¿Descartar grabación?</h4>
+              <p className="text-xs text-gray-400">
+                Tienes un audio en curso o grabado sin guardar. Si sales ahora se perderá.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDiscardConfirm(false)}
+                  className="px-3.5 py-1.5 bg-[#252538] hover:bg-[#303046] text-gray-300 rounded-xl text-xs font-medium transition"
+                >
+                  Continuar grabando
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDiscard}
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold transition"
+                >
+                  Sí, descartar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

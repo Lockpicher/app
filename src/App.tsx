@@ -24,6 +24,7 @@ import { ParaArchiveView } from './components/ParaArchiveView';
 import { ParaReviewView } from './components/ParaReviewView';
 import { HabitsView } from './components/HabitsView';
 import { UploadModal } from './components/UploadModal';
+import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
 import { registerServiceWorker, syncPersonBirthdayReminders } from './lib/birthdays';
@@ -100,6 +101,7 @@ export function App() {
   const [globalEditingTask, setGlobalEditingTask] = useState<AppTask | null>(null);
   const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isGlobalVoiceModalOpen, setIsGlobalVoiceModalOpen] = useState(false);
 
   // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -870,9 +872,11 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'voice') => {
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
+    } else if (type === 'voice') {
+      setIsGlobalVoiceModalOpen(true);
     } else if (type === 'task') {
       const created = await handleCreateTask({
         title: 'Nueva Tarea',
@@ -928,6 +932,86 @@ export function App() {
     }
   };
 
+  // Handler for global voice note creation with R2 and InsForge metadata
+  const handleSaveGlobalVoiceNote = async (data: {
+    title: string;
+    audioUrl: string;
+    durationSeconds: number;
+    transcription?: string;
+    transcriptionStatus: 'none' | 'pending' | 'completed' | 'error';
+    notebookId?: string | null;
+    projectId?: string | null;
+    fileSize?: number;
+    mimeType?: string;
+  }) => {
+    // 1. Determine target notebook (fallback to default or first)
+    const targetNbId = data.notebookId || 
+      selectedNotebookId || 
+      (notebooks.find(n => n.is_default)?.id) || 
+      (notebooks[0]?.id) || 
+      null;
+
+    // 2. Create audio note in app_notes
+    const contentHtml = data.transcription 
+      ? `<p><strong>Transcripción ElevenLabs Scribe:</strong></p><p>${data.transcription}</p>`
+      : '<p>Nota de voz</p>';
+
+    const createdNote = await db.createNote({
+      title: data.title || 'Nota de voz',
+      note_type: 'audio',
+      audio_url: data.audioUrl,
+      audio_duration: data.durationSeconds,
+      audio_transcription: data.transcription || null,
+      audio_transcription_status: data.transcriptionStatus || 'none',
+      content: contentHtml,
+      plain_text: data.transcription || 'Nota de voz',
+      notebook_id: targetNbId,
+      project_id: data.projectId || null,
+      category: 'Audio'
+    });
+
+    if (createdNote) {
+      setNotes(prev => [createdNote, ...prev]);
+
+      // 3. Register file metadata in app_attachments so it appears in "Archivos y Medios"
+      try {
+        const urlObj = new URL(data.audioUrl, window.location.origin);
+        const r2Key = urlObj.searchParams.get('key') || `uploads/audio/${data.title}.webm`;
+        const fileName = r2Key.split('/').pop() || `${data.title}.webm`;
+
+        const newAttachment = await db.recordAttachment({
+          entity_id: createdNote.id,
+          entity_type: 'note',
+          file_name: fileName,
+          display_name: data.title || 'Nota de voz',
+          file_url: data.audioUrl,
+          file_path: r2Key,
+          r2_key: r2Key,
+          bucket_name: 'cloudflare-r2',
+          storage_provider: 'r2',
+          file_size: data.fileSize || 0,
+          mime_type: data.mimeType || 'audio/webm',
+          migration_status: 'migrated',
+          metadata: {
+            duration_seconds: data.durationSeconds,
+            transcription: data.transcription || null,
+            source: 'quick_voice_note'
+          }
+        });
+
+        if (newAttachment) {
+          setAttachments(prev => [newAttachment, ...prev]);
+        }
+      } catch (attachErr) {
+        console.warn('Error registrando metadatos en app_attachments (no crítico):', attachErr);
+      }
+
+      // Open the note in the editor
+      setSelectedNoteId(createdNote.id);
+      setIsEditingNote(true);
+    }
+  };
+
   const activeNote = notes.find(n => n.id === selectedNoteId);
   const selectedNotebook = notebooks.find(nb => nb.id === selectedNotebookId) || null;
 
@@ -944,8 +1028,8 @@ export function App() {
 
   return (
     <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
-      {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained header) */}
-      {currentView !== 'home' && (
+      {/* Mobile Top App Bar (visible on <lg screens when not showing an inner self-contained editor or home) */}
+      {currentView !== 'home' && !isEditingNote && (
         <header className="lg:hidden h-14 bg-[#141419] border-b border-[#23232b] flex items-center justify-between px-4 z-30 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1017,6 +1101,7 @@ export function App() {
           setIsEditingNote(true);
         }}
         onNewNote={() => handleNewNote({ note_type: 'text', title: 'Nueva Nota' })}
+        onNewVoiceNote={() => setIsGlobalVoiceModalOpen(true)}
         onNewTaskNote={() => {
           const defaultTaskListHtml = `
             <ul data-type="taskList">
@@ -1593,6 +1678,16 @@ export function App() {
           setIsEditingNote(false);
           setCurrentView('files');
         }}
+      />
+
+      {/* Global Voice Note Recorder Modal (Cloudflare R2 + Scribe STT) */}
+      <AudioRecorderModal
+        isOpen={isGlobalVoiceModalOpen}
+        onClose={() => setIsGlobalVoiceModalOpen(false)}
+        notebookId={selectedNotebookId}
+        notebooks={notebooks}
+        projects={projects}
+        onSaveVoiceNote={handleSaveGlobalVoiceNote}
       />
     </div>
   );

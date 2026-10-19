@@ -15,14 +15,15 @@ import {
   Sparkles,
   Menu,
   MoreHorizontal,
-  Paperclip
+  Paperclip,
+  Mic
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'voice') => void;
   onOpenSearch: () => void;
   onOpenMore?: () => void;
   isMoreOpen?: boolean;
@@ -61,9 +62,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const isCalendarActive = currentView === 'calendar';
   const isTasksActive = currentView === 'tasks';
 
-  // Creation options for Capacities-style "+" button (8 items in 2x4 grid)
+  // Creation options for Capacities-style "+" button (9 items in responsive grid)
   const createOptions: {
-    id: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file';
+    id: 'note' | 'task' | 'voice' | 'file' | 'notebook' | 'page' | 'project' | 'person' | 'object';
     label: string;
     subtitle: string;
     icon: any;
@@ -85,6 +86,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       icon: CheckSquare,
       color: 'text-amber-400',
       bg: 'bg-amber-950/40 border-amber-800/40'
+    },
+    {
+      id: 'voice',
+      label: 'Nueva nota de voz',
+      subtitle: 'Graba y guarda tus ideas hablando.',
+      icon: Mic,
+      color: 'text-blue-400',
+      bg: 'bg-blue-950/40 border-blue-800/40'
     },
     {
       id: 'file',
@@ -115,8 +124,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       label: 'Nuevo Proyecto',
       subtitle: 'Objetivo con fechas y tareas',
       icon: FolderKanban,
-      color: 'text-blue-400',
-      bg: 'bg-blue-950/40 border-blue-800/40'
+      color: 'text-violet-400',
+      bg: 'bg-violet-950/40 border-violet-800/40'
     },
     {
       id: 'person',

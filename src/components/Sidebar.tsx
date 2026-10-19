@@ -29,7 +29,8 @@ import {
   Sun,
   Moon,
   Flame,
-  Paperclip
+  Paperclip,
+  Mic
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -42,6 +43,7 @@ interface SidebarProps {
   selectedNoteId: string | null;
   onSelectNote: (id: string) => void;
   onNewNote: () => void;
+  onNewVoiceNote?: () => void;
   onNewTaskNote?: () => void;
   onNewNotebook?: () => void;
   onUploadFile?: () => void;
@@ -76,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedNoteId,
   onSelectNote,
   onNewNote,
+  onNewVoiceNote,
   onNewTaskNote,
   onNewNotebook,
   onUploadFile,
@@ -384,28 +387,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Quick Actions Bar - Unified Single "Nuevo" Button (Shortcut N) & Search (Ctrl K) */}
+        {/* Quick Actions Bar - Unified Single "Nuevo" Button (Shortcut N), Voice note & Search (Ctrl K) */}
         <div className="p-2 border-b border-[#23232b] flex-shrink-0 space-y-1.5">
           {!isCollapsed ? (
             <>
-              {/* Single primary creation button: "Nuevo" with 'N' shortcut */}
-              <button
-                type="button"
-                onClick={() => {
-                  onNewNote();
-                  if (onCloseMobile) onCloseMobile();
-                }}
-                className="w-full flex items-center justify-between px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition shadow-sm shadow-blue-900/30 group active:scale-[0.98]"
-                title="Crear elemento (Atajo: N)"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Nuevo</span>
-                </span>
-                <kbd className="text-[10px] bg-blue-700/80 px-1.5 py-0.5 rounded text-blue-100 font-mono font-normal">
-                  N
-                </kbd>
-              </button>
+              {/* Primary creation row with New Note and Voice Note */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNewNote();
+                    if (onCloseMobile) onCloseMobile();
+                  }}
+                  className="flex-1 flex items-center justify-between px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition shadow-sm shadow-blue-900/30 group active:scale-[0.98]"
+                  title="Crear elemento (Atajo: N)"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Nuevo</span>
+                  </span>
+                  <kbd className="text-[10px] bg-blue-700/80 px-1.5 py-0.5 rounded text-blue-100 font-mono font-normal">
+                    N
+                  </kbd>
+                </button>
+
+                {onNewVoiceNote && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onNewVoiceNote();
+                      if (onCloseMobile) onCloseMobile();
+                    }}
+                    className="p-1.5 bg-[#1b1b24] hover:bg-[#252534] border border-[#2e2e42] hover:border-blue-500/50 text-blue-400 hover:text-blue-300 rounded-lg transition active:scale-95 flex items-center justify-center flex-shrink-0"
+                    title="Nueva nota de voz (Grabar audio)"
+                    aria-label="Nueva nota de voz"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
 
               {/* Unified Quick Switcher Button */}
               <button
@@ -445,6 +465,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <Plus className="w-4 h-4" />
               </button>
+              {onNewVoiceNote && (
+                <button
+                  type="button"
+                  onClick={onNewVoiceNote}
+                  className="p-2 bg-[#1c1c28] text-blue-400 hover:text-blue-300 rounded-lg hover:bg-[#252538] transition border border-[#2d2d40]"
+                  title="Nueva nota de voz"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
         </div>
