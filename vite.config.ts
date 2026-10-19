@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { r2Middleware } from './src/lib/r2VitePlugin';
+import { loadEnvFiles, getR2ObjectStream } from './src/lib/r2Server';
 
 export default defineConfig({
   plugins: [
@@ -22,12 +23,13 @@ export default defineConfig({
             return;
           }
 
+          loadEnvFiles();
           const apiKey = process.env.ELEVENLABS_API_KEY;
           if (!apiKey) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
-              error: 'Clave ELEVENLABS_API_KEY no configurada en el servidor. Por favor define ELEVENLABS_API_KEY en las variables de entorno para habilitar la transcripción automática con ElevenLabs Scribe.'
+              error: 'Clave ELEVENLABS_API_KEY no configurada. Por favor añade ELEVENLABS_API_KEY en tu archivo .env para habilitar la transcripción automática con ElevenLabs Scribe.'
             }));
             return;
           }
@@ -51,7 +53,14 @@ export default defineConfig({
                   res.end(JSON.stringify({ error: 'audio_url es requerido' }));
                   return;
                 }
-                const audioFetch = await fetch(json.audio_url);
+
+                let fetchTarget = json.audio_url;
+                if (fetchTarget.startsWith('/')) {
+                  const host = req.headers.host || 'localhost:3000';
+                  fetchTarget = `http://${host}${fetchTarget}`;
+                }
+
+                const audioFetch = await fetch(fetchTarget);
                 if (!audioFetch.ok) {
                   throw new Error(`No se pudo descargar el archivo de audio: ${audioFetch.statusText}`);
                 }

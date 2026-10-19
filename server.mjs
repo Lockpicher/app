@@ -443,7 +443,12 @@ const server = http.createServer(async (req, res) => {
           if (!json.audio_url) {
             return sendJson(res, 400, { error: 'audio_url es requerido' });
           }
-          const audioFetch = await fetch(json.audio_url);
+          let fetchTarget = json.audio_url;
+          if (fetchTarget.startsWith('/')) {
+            const host = req.headers.host || `localhost:${PORT}`;
+            fetchTarget = `http://${host}${fetchTarget}`;
+          }
+          const audioFetch = await fetch(fetchTarget);
           if (!audioFetch.ok) throw new Error('No se pudo descargar el archivo de audio');
           audioBuffer = Buffer.from(await audioFetch.arrayBuffer());
           if (json.language_code) languageCode = json.language_code;
