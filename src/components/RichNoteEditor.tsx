@@ -1675,14 +1675,6 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               </div>
             </div>
 
-            {/* Note Date and Metadata Header aligned with title axis (Clean header without tags input) */}
-            <div className="flex items-center justify-between text-xs text-gray-400 pb-3 border-b border-[#222232] flex-wrap gap-2">
-              <div className="flex items-center gap-2 font-mono text-[11px] text-gray-400">
-                <Calendar className="w-3 h-3 text-gray-400" />
-                <span>Última edición: {new Date(note.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            </div>
-
             {/* TipTap Rich Text Area */}
             <div 
               onClick={(e) => {
@@ -1709,36 +1701,46 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             </div>
 
             {/* Editor Bottom Actions Row: Left "+ Agregar elemento de tarea" | Right "Añadir etiquetas..." */}
-            <div className="pt-3 pb-32 border-t border-[#20202e] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Left: Quick Add Task Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (editor) {
-                    editor.chain().focus('end').toggleTaskList().run();
-                  }
-                }}
-                className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 transition group flex-shrink-0 active:scale-95"
-                title="Agregar elemento de tarea en el editor"
-              >
-                <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                <span>+ Agregar elemento de tarea</span>
-              </button>
-
-              {/* Right: Tags input aligned in the same row */}
-              <div className="flex items-center gap-2 bg-[#181824] px-3 py-1.5 rounded-xl border border-[#2b2b3e] focus-within:border-indigo-500/60 transition flex-1 sm:max-w-md w-full">
-                <Tag className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => {
-                    setTagsInput(e.target.value);
-                    setSaveStatus('dirty');
+            <div className="pt-3 pb-32 border-t border-[#20202e] flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Left: Quick Add Task Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editor) {
+                      editor.chain().focus('end').toggleTaskList().run();
+                    }
                   }}
-                  placeholder="Añadir etiquetas separadas por coma..."
-                  className="bg-transparent text-xs text-gray-200 outline-none w-full placeholder-gray-500 focus:placeholder-gray-400 font-sans"
-                  aria-label="Etiquetas de la nota"
-                />
+                  className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-800/40 transition group flex-shrink-0 active:scale-95"
+                  title="Agregar elemento de tarea en el editor"
+                >
+                  <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                  <span>+ Agregar elemento de tarea</span>
+                </button>
+
+                {/* Right: Tags input aligned in the same row */}
+                <div className="flex items-center gap-2 bg-[#181824] px-3 py-1.5 rounded-xl border border-[#2b2b3e] focus-within:border-indigo-500/60 transition flex-1 sm:max-w-md w-full">
+                  <Tag className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={tagsInput}
+                    onChange={(e) => {
+                      setTagsInput(e.target.value);
+                      setSaveStatus('dirty');
+                    }}
+                    placeholder="Añadir etiquetas separadas por coma..."
+                    className="bg-transparent text-xs text-gray-200 outline-none w-full placeholder-gray-500 focus:placeholder-gray-400 font-sans"
+                    aria-label="Etiquetas de la nota"
+                  />
+                </div>
+              </div>
+
+              {/* Note Date and Metadata at the bottom */}
+              <div className="flex items-center justify-between text-xs text-gray-400 pt-1">
+                <div className="flex items-center gap-2 font-mono text-[11px] text-gray-500">
+                  <Calendar className="w-3 h-3 text-gray-500" />
+                  <span>Última edición: {new Date(note.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
               </div>
             </div>
           </div>
