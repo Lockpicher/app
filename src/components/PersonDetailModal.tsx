@@ -54,6 +54,7 @@ import {
 } from '../lib/types';
 import { calculateAge, formatBirthdayDisplay } from '../lib/birthdays';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
+import { DatePickerInput } from './DatePickerInput';
 import { db } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 
@@ -984,16 +985,14 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-amber-300 font-semibold block mb-1 flex items-center gap-1">
-                          <span>🎂 Fecha de Cumpleaños *</span>
-                          <span className="text-[10px] text-gray-400 font-normal">(Obligatorio)</span>
+                        <label className="text-[11px] text-amber-300 font-semibold block mb-1">
+                          🎂 Fecha de Cumpleaños *
                         </label>
-                        <input
-                          type="date"
-                          required
+                        <DatePickerInput
                           value={birthday}
-                          onChange={e => setBirthday(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-[#181824] border border-amber-600/50 rounded-lg text-xs text-white outline-none focus:border-amber-500 font-mono"
+                          onChange={setBirthday}
+                          isBirthday={true}
+                          placeholder="Elegir cumpleaños en calendario..."
                         />
                       </div>
                       <div>
@@ -1707,14 +1706,24 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                           <option value="url">Enlace / URL</option>
                           <option value="number">Número</option>
                         </select>
-                        <input
-                          type={newFieldType === 'date' ? 'date' : 'text'}
-                          required
-                          placeholder="Valor"
-                          value={newFieldValue}
-                          onChange={e => setNewFieldValue(e.target.value)}
-                          className="px-2.5 py-1.5 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none"
-                        />
+                        {newFieldType === 'date' ? (
+                          <div className="flex-1">
+                            <DatePickerInput
+                              value={newFieldValue}
+                              onChange={setNewFieldValue}
+                              placeholder="Elegir fecha..."
+                            />
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            required
+                            placeholder="Valor"
+                            value={newFieldValue}
+                            onChange={e => setNewFieldValue(e.target.value)}
+                            className="px-2.5 py-1.5 bg-[#121217] border border-[#2b2b3a] rounded-lg text-xs text-white outline-none"
+                          />
+                        )}
                       </div>
                       <div className="flex justify-end gap-2 pt-1">
                         <button type="button" onClick={() => setIsAddingField(false)} className="px-3 py-1 text-xs text-gray-400">Cancelar</button>

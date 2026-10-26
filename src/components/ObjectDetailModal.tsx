@@ -62,6 +62,7 @@ import {
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
+import { DatePickerInput } from './DatePickerInput';
 import { r2Storage } from '../lib/r2Client';
 
 interface ObjectDetailModalProps {
@@ -653,9 +654,16 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
                                 />
                                 <span className="text-xs text-white">{field.label}</span>
                               </label>
+                            ) : field.type === 'date' || field.key === 'birthday' || field.key === 'cumpleanos' ? (
+                              <DatePickerInput
+                                value={val || ''}
+                                onChange={newDate => handlePropertyChange(field.key, newDate)}
+                                isBirthday={object?.object_type === 'person' || field.key === 'birthday' || field.key === 'cumpleanos'}
+                                placeholder="Elegir fecha en calendario..."
+                              />
                             ) : (
                               <input
-                                type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                                type={field.type === 'number' ? 'number' : 'text'}
                                 value={val}
                                 onChange={e => handlePropertyChange(field.key, e.target.value)}
                                 className="w-full px-3 py-1.5 bg-[#1a1a24] border border-[#2f2f42] rounded-lg text-xs text-white outline-none focus:border-emerald-500"

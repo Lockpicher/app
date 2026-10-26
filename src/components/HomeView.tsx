@@ -26,7 +26,8 @@ import {
   Moon,
   Inbox,
   Mic,
-  Send
+  Send,
+  Lock
 } from 'lucide-react';
 import { AppTask, AppNote, AppProject, AppHabit, AppHabitLog, TaskPriority, HabitLogStatus } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
@@ -1146,8 +1147,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
-                            <h3 className="text-sm font-medium text-gray-200 group-hover:text-white transition truncate">
-                              {titleText}
+                            <h3 className="text-sm font-medium text-gray-200 group-hover:text-white transition truncate flex items-center gap-1.5">
+                              {n.is_locked && (
+                                <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                              )}
+                              <span className="truncate">{titleText}</span>
                             </h3>
                             {/* Short date: standard typography, non-monospace */}
                             <span className="text-xs text-gray-400 font-normal flex-shrink-0">
@@ -1155,11 +1159,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             </span>
                           </div>
 
-                          {n.plain_text && (
+                          {n.is_locked ? (
+                            <p className="text-xs text-amber-400/80 truncate mt-0.5 flex items-center gap-1 font-mono text-[11px]">
+                              <span>🔒 Contenido protegido con contraseña</span>
+                            </p>
+                          ) : n.plain_text ? (
                             <p className="text-xs text-gray-400 truncate mt-0.5">
                               {n.plain_text}
                             </p>
-                          )}
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -1236,7 +1244,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       className="group flex items-center justify-between py-2 px-2 hover:bg-[#1a1a26] rounded transition cursor-pointer gap-2"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <FileText className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        {n.is_locked ? (
+                          <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        )}
                         <span className="text-xs font-medium text-gray-200 group-hover:text-white transition truncate">
                           {n.title || 'Nota sin título'}
                         </span>

@@ -78,7 +78,7 @@ export function formatBirthdayDisplay(birthdayStr?: string): string {
  */
 export async function syncPersonBirthdayReminders(
   person: AppObject,
-  existingReminders: AppReminder[]
+  existingReminders: AppReminder[] = []
 ): Promise<AppReminder[]> {
   const props = person.properties || {};
   const birthday = props.birthday || props.cumpleanos || props.fecha_nacimiento;
@@ -87,16 +87,25 @@ export async function syncPersonBirthdayReminders(
   const settings = getBirthdaySettings();
   if (!settings.enabled) return existingReminders;
 
+  let currentReminders = existingReminders;
+  if (currentReminders.length === 0) {
+    try {
+      currentReminders = await db.getReminders();
+    } catch {
+      currentReminders = [];
+    }
+  }
+
   const parts = String(birthday).split('-');
   const month = parts.length === 3 ? parts[1] : parts[0];
   const day = parts.length === 3 ? parts[2] : parts[1];
 
-  if (!month || !day) return existingReminders;
+  if (!month || !day) return currentReminders;
 
   const currentYear = new Date().getFullYear();
   const yearsToSchedule = [currentYear, currentYear + 1];
 
-  let updatedList = [...existingReminders];
+  let updatedList = [...currentReminders];
 
   for (const year of yearsToSchedule) {
     // 1. Same Day Birthday target

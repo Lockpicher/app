@@ -890,8 +890,13 @@ export function App() {
   // ==========================================
   const handleNavigateToEntity = (id: string, type: string) => {
     if (type === 'note') {
-      setSelectedNoteId(id);
-      setIsEditingNote(true);
+      const targetNote = notes.find(n => n.id === id);
+      if (targetNote) {
+        handleOpenNote(targetNote);
+      } else {
+        setSelectedNoteId(id);
+        setIsEditingNote(true);
+      }
       setCurrentView('notebooks');
     } else if (type === 'task') {
       setIsEditingNote(false);
@@ -1131,8 +1136,13 @@ export function App() {
         notes={notes}
         selectedNoteId={selectedNoteId}
         onSelectNote={(id) => {
-          setSelectedNoteId(id);
-          setIsEditingNote(true);
+          const targetNote = notes.find(n => n.id === id);
+          if (targetNote) {
+            handleOpenNote(targetNote);
+          } else {
+            setSelectedNoteId(id);
+            setIsEditingNote(true);
+          }
         }}
         onNewNote={() => handleNewNote({ note_type: 'text', title: 'Nueva Nota' })}
         onNewVoiceNote={() => setIsGlobalVoiceModalOpen(true)}
@@ -1236,10 +1246,7 @@ export function App() {
                   setIsGlobalTaskModalOpen(true);
                 }}
                 onDeleteTask={handleDeleteTask}
-                onOpenNote={(note) => {
-                  setSelectedNoteId(note.id);
-                  setIsEditingNote(true);
-                }}
+                onOpenNote={handleOpenNote}
                 onDeleteNote={handleDeleteNote}
                 onToggleFavoriteNote={handleToggleFavorite}
                 onNewTask={() => {
@@ -1611,8 +1618,13 @@ export function App() {
         notes={notes}
         selectedNoteId={selectedNoteId}
         onSelectNote={(id) => {
-          setSelectedNoteId(id);
-          setIsEditingNote(true);
+          const targetNote = notes.find(n => n.id === id);
+          if (targetNote) {
+            handleOpenNote(targetNote);
+          } else {
+            setSelectedNoteId(id);
+            setIsEditingNote(true);
+          }
         }}
         onTogglePinNote={(id) => {
           const n = notes.find(item => item.id === id);

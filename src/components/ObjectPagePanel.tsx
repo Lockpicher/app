@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
+import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -35,7 +37,20 @@ import {
   ChevronRight,
   MessageSquare,
   AlertCircle,
-  Share2
+  Share2,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  Highlighter,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Image as ImageIcon,
+  Link2,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import { 
   AppObject, 
@@ -51,6 +66,8 @@ import {
 } from '../lib/types';
 import { UniversalLinkSelectorModal, UniversalLinkItem } from './UniversalLinkSelectorModal';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
+import { DatePickerInput } from './DatePickerInput';
+import { syncPersonBirthdayReminders } from '../lib/birthdays';
 import { db } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 
@@ -146,16 +163,131 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
     };
   }, [typeDef, object.object_type, customTypes]);
 
+  // Image Upload state for editor
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const editorImageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadImage = async (file: File) => {
+    if (!file || !file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido.');
+      return;
+    }
+    try {
+      setIsUploadingImage(true);
+      const res = await r2Storage.uploadFile(file, `objects/${object.id}/content-images`);
+      
+      if (editor) {
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'image',
+            attrs: { src: res.url, alt: file.name }
+          })
+          .insertContent('<p></p>')
+          .run();
+      }
+
+      try {
+        const rec = await db.recordAttachment({
+          entity_id: object.id,
+          entity_type: 'object',
+          file_name: res.name,
+          display_name: file.name,
+          file_url: res.url,
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
+          file_size: res.size,
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+        });
+        if (rec && onAttachmentCreated) {
+          onAttachmentCreated(rec);
+        }
+      } catch (attErr) {
+        console.warn('Error registrando adjunto en base de datos:', attErr);
+      }
+
+      setSaveStatus('dirty');
+    } catch (err: any) {
+      alert('Error subiendo imagen: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setIsUploadingImage(false);
+      if (editorImageInputRef.current) editorImageInputRef.current.value = '';
+    }
+  };
+
+  const handleInsertImageUrl = () => {
+    const url = prompt('Introduce la URL de la imagen externa:');
+    if (url && url.trim()) {
+      editor?.chain().focus().setImage({ src: url.trim(), alt: 'Imagen externa' }).insertContent('<p></p>').run();
+      setSaveStatus('dirty');
+    }
+  };
+
+  const handleToggleLink = () => {
+    if (!editor) return;
+    const previousUrl = editor.getAttributes('link').href;
+    const url = prompt('Introduce la URL del enlace:', previousUrl || 'https://');
+    if (url === null) return;
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  };
+
   // TipTap Note Content Editor inside Object
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Underline,
+      Highlight.configure({ multicolor: true }),
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'rounded-xl max-w-full my-3 border border-[#2b2b3d] shadow-md cursor-zoom-in'
+        }
+      }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-blue-400 underline' } })
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-blue-400 underline cursor-pointer' } })
     ],
     content: object.content || '',
+    editorProps: {
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (items) {
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+              const file = items[i].getAsFile();
+              if (file) {
+                event.preventDefault();
+                handleUploadImage(file);
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      },
+      handleDrop: (_view, event, _slice, moved) => {
+        if (!moved && event.dataTransfer?.files?.length) {
+          const files = event.dataTransfer.files;
+          for (let i = 0; i < files.length; i++) {
+            if (files[i].type.startsWith('image/')) {
+              event.preventDefault();
+              handleUploadImage(files[i]);
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+    },
     onUpdate: ({ editor: curEditor }) => {
       setSaveStatus('dirty');
 
@@ -186,6 +318,27 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
       }
     }
   });
+
+  // Sync editor content and object properties when object changes
+  useEffect(() => {
+    if (object) {
+      setTitle(object.title || '');
+      setDescription(object.description || '');
+      setThumbnailUrl(object.thumbnail_url || '');
+      const rawProps = object.properties || {};
+      const bday = rawProps.birthday || rawProps.cumpleanos || rawProps.fecha_nacimiento || '';
+      setProperties({
+        ...rawProps,
+        ...(bday ? { birthday: bday, cumpleanos: bday, fecha_nacimiento: bday } : {})
+      });
+      setSaveStatus('saved');
+    }
+    if (editor && object?.content !== undefined) {
+      if (editor.getHTML() !== object.content) {
+        editor.commands.setContent(object.content || '');
+      }
+    }
+  }, [object.id]);
 
   // Load links and interactions
   useEffect(() => {
@@ -237,13 +390,35 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
       setSaveStatus('saving');
       const htmlContent = editor ? editor.getHTML() : object.content;
 
-      await onUpdate(object.id, {
+      const bday = properties.birthday || properties.cumpleanos || properties.fecha_nacimiento;
+      const propsToSave = {
+        ...properties,
+        ...(object.object_type === 'person' && bday ? {
+          birthday: bday,
+          cumpleanos: bday,
+          fecha_nacimiento: bday
+        } : {})
+      };
+
+      const updated = await onUpdate(object.id, {
         title: title.trim() || 'Objeto sin título',
         description: description.trim() || undefined,
         content: htmlContent,
         thumbnail_url: thumbnailUrl.trim() || undefined,
-        properties
+        properties: propsToSave
       });
+
+      if (object.object_type === 'person') {
+        try {
+          await syncPersonBirthdayReminders({
+            ...object,
+            title: title.trim() || object.title,
+            properties: propsToSave
+          });
+        } catch (e) {
+          console.warn('Error sincronizando recordatorios de cumpleaños:', e);
+        }
+      }
 
       setSaveStatus('saved');
     } catch (err: any) {
@@ -374,22 +549,48 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
     };
   };
 
-  // Inline editable key properties (top 3)
+  // Inline editable key properties (para personas siempre incluye Cargo, Correo, Teléfono y Cumpleaños)
   const keyProperties = useMemo(() => {
     const fields = effectiveTypeDef.fields || [];
-    return fields.slice(0, 3);
-  }, [effectiveTypeDef]);
+    if (object.object_type === 'person') {
+      const personKeys = ['rol', 'email', 'telefono', 'birthday'];
+      const result: typeof fields = [];
+      personKeys.forEach(k => {
+        const found = fields.find(f => f.key === k);
+        if (found) {
+          result.push(found);
+        } else if (k === 'birthday') {
+          result.push({ key: 'birthday', label: 'Fecha de Cumpleaños', type: 'date', required: false });
+        } else if (k === 'rol') {
+          result.push({ key: 'rol', label: 'Cargo / Rol', type: 'text' });
+        } else if (k === 'email') {
+          result.push({ key: 'email', label: 'Correo Electrónico', type: 'email' });
+        } else if (k === 'telefono') {
+          result.push({ key: 'telefono', label: 'Teléfono', type: 'phone' });
+        }
+      });
+      return result;
+    }
+    return fields.slice(0, 4);
+  }, [effectiveTypeDef, object.object_type]);
 
-  // Other populated properties
+  // Other populated properties (excluye las propiedades clave que ya se muestran en la cabecera principal)
   const populatedProperties = useMemo(() => {
+    const keySet = new Set(keyProperties.map(k => k.key));
+    if (keySet.has('birthday')) {
+      keySet.add('cumpleanos');
+      keySet.add('fecha_nacimiento');
+    }
+
     const keys = Object.keys(properties).filter(k => {
+      if (keySet.has(k)) return false;
       // Exclude internal technical fields
       if (k === 'subtitle' || k === 'is_pinned' || k === 'cover_url' || k === 'thumbnail_url') return false;
       const val = properties[k];
       return val !== undefined && val !== null && String(val).trim() !== '';
     });
     return keys;
-  }, [properties]);
+  }, [properties, keyProperties]);
 
   // Group outgoing and incoming links by entity type
   const groupedLinks = useMemo(() => {
@@ -582,30 +783,49 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                   </div>
                 </div>
 
-                {/* 3 Propiedades clave en línea (editables tocando) */}
+                {/* Propiedades clave en línea (Rol, Correo, Teléfono, Cumpleaños) */}
                 {keyProperties.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2">
                     {keyProperties.map(field => {
-                      const val = properties[field.key] || '';
+                      const val = properties[field.key] || (field.key === 'birthday' ? (properties.cumpleanos || properties.fecha_nacimiento || '') : '');
+                      const isDate = field.type === 'date' || field.key === 'birthday' || field.key === 'cumpleanos' || field.key === 'fecha_nacimiento';
+                      const isBirthday = field.key === 'birthday' || field.key === 'cumpleanos' || field.key === 'fecha_nacimiento' || (isDate && object.object_type === 'person');
 
                       return (
                         <div 
                           key={field.key} 
-                          className="bg-[#181824] border border-[#262638] rounded-xl px-3 py-2 flex flex-col"
+                          className="bg-[#181824] border border-[#262638] rounded-xl px-3 py-2 flex flex-col justify-between"
                         >
                           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                             {field.label}
                           </span>
-                          <input
-                            type={field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : 'text'}
-                            value={val}
-                            onChange={(e) => {
-                              setProperties(prev => ({ ...prev, [field.key]: e.target.value }));
-                              setSaveStatus('dirty');
-                            }}
-                            placeholder="Toca para editar..."
-                            className="bg-transparent text-xs text-gray-200 outline-none placeholder-gray-600 mt-0.5 truncate"
-                          />
+                          {isDate ? (
+                            <DatePickerInput
+                              value={val}
+                              onChange={(newDate) => {
+                                setProperties(prev => ({ 
+                                  ...prev, 
+                                  [field.key]: newDate,
+                                  ...(isBirthday ? { birthday: newDate, cumpleanos: newDate, fecha_nacimiento: newDate } : {})
+                                }));
+                                setSaveStatus('dirty');
+                              }}
+                              isBirthday={isBirthday}
+                              compact={true}
+                              placeholder="Elegir fecha..."
+                            />
+                          ) : (
+                            <input
+                              type={field.type === 'email' ? 'email' : 'text'}
+                              value={val}
+                              onChange={(e) => {
+                                setProperties(prev => ({ ...prev, [field.key]: e.target.value }));
+                                setSaveStatus('dirty');
+                              }}
+                              placeholder="Toca para editar..."
+                              className="bg-transparent text-xs text-gray-200 outline-none placeholder-gray-600 mt-0.5 truncate"
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -643,36 +863,254 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                 </button>
               </div>
 
-              {/* 5. CONTENIDO: Notas enriquecidas con soporte TipTap, [[ y @ */}
+              {/* 5. CONTENIDO: Notas enriquecidas con soporte TipTap, Formato e Imágenes */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                    Contenido & Notas
-                  </h4>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Contenido y notas enriquecidas</span>
+                    </h4>
+                    {isUploadingImage && (
+                      <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Subiendo imagen a R2...</span>
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[11px] text-gray-500">
                     Escribe <kbd className="px-1 py-0.5 rounded bg-[#1e1e2c] text-blue-400 font-mono">[[</kbd> o <kbd className="px-1 py-0.5 rounded bg-[#1e1e2c] text-blue-400 font-mono">@</kbd> para vincular
                   </span>
                 </div>
 
-                <div 
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    const entityLink = target.closest('[data-entity-id]');
-                    if (entityLink) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const eId = entityLink.getAttribute('data-entity-id');
-                      const eType = entityLink.getAttribute('data-entity-type') || 'object';
-                      if (eId && onNavigateToEntity) {
-                        onNavigateToEntity(eId, eType);
+                <div className="w-full bg-[#161622] border border-[#242436] focus-within:border-blue-500/50 rounded-2xl overflow-hidden shadow-sm transition">
+                  {/* Barra de herramientas de texto enriquecido */}
+                  {editor && (
+                    <div className="flex items-center flex-wrap gap-1 px-3 py-2 bg-[#181826] border-b border-[#252538] text-gray-300">
+                      {/* Encabezados H1, H2, H3 */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e]">
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Título principal (H1)"
+                        >
+                          H1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Título secundario (H2)"
+                        >
+                          H2
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Subtítulo (H3)"
+                        >
+                          H3
+                        </button>
+                      </div>
+
+                      {/* Estilos tipográficos: Bold, Italic, Underline, Strike, Highlight, Code */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e]">
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleBold().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Negrita (Ctrl+B)"
+                        >
+                          <Bold className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleItalic().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Cursiva (Ctrl+I)"
+                        >
+                          <Italic className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleUnderline().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('underline') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Subrayado (Ctrl+U)"
+                        >
+                          <UnderlineIcon className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleStrike().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('strike') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Tachado"
+                        >
+                          <Strikethrough className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleHighlight().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('highlight') ? 'bg-amber-500/30 text-amber-300' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Resaltador"
+                        >
+                          <Highlighter className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleCode().run()}
+                          className={`p-1.5 rounded-md text-xs font-mono transition ${editor.isActive('code') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Código"
+                        >
+                          <Code className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Listas & Citas */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e]">
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleBulletList().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Lista con viñetas"
+                        >
+                          <List className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Lista numerada"
+                        >
+                          <ListOrdered className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleTaskList().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('taskList') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Lista de tareas / Checklist"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('blockquote') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Cita"
+                        >
+                          <Quote className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Enlace & Vínculos */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e]">
+                        <button
+                          type="button"
+                          onClick={handleToggleLink}
+                          className={`p-1.5 rounded-md text-xs transition ${editor.isActive('link') ? 'bg-blue-600 text-white' : 'hover:bg-[#252538] text-gray-300'}`}
+                          title="Insertar enlace"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsLinkSelectorOpen(true)}
+                          className="px-2 py-1 rounded-md text-xs font-semibold bg-[#20202e] hover:bg-[#28283c] text-blue-300 border border-blue-500/20 flex items-center gap-1 transition"
+                          title="Vincular con [[ o @"
+                        >
+                          <span>[[ ]]</span>
+                          <span className="hidden sm:inline">Vincular</span>
+                        </button>
+                      </div>
+
+                      {/* Deshacer / Rehacer */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e] hidden md:flex">
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().undo().run()}
+                          disabled={!editor.can().undo()}
+                          className="p-1.5 rounded-md text-xs text-gray-400 hover:text-white disabled:opacity-30 transition"
+                          title="Deshacer (Ctrl+Z)"
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editor.chain().focus().redo().run()}
+                          disabled={!editor.can().redo()}
+                          className="p-1.5 rounded-md text-xs text-gray-400 hover:text-white disabled:opacity-30 transition"
+                          title="Rehacer (Ctrl+Y)"
+                        >
+                          <Redo2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Botón Destacado: Adjuntar Imagen */}
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input
+                          type="file"
+                          ref={editorImageInputRef}
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUploadImage(e.target.files[0]);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={isUploadingImage}
+                          onClick={() => editorImageInputRef.current?.click()}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition shadow-sm disabled:opacity-50"
+                          title="Adjuntar imagen desde tu dispositivo (sube a R2)"
+                        >
+                          {isUploadingImage ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span className="hidden sm:inline">Subiendo...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Adjuntar imagen</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleInsertImageUrl}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#252538] transition"
+                          title="Insertar imagen por URL web"
+                        >
+                          <Globe className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lienzo del Editor TipTap */}
+                  <div 
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      const entityLink = target.closest('[data-entity-id]');
+                      if (entityLink) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const eId = entityLink.getAttribute('data-entity-id');
+                        const eType = entityLink.getAttribute('data-entity-type') || 'object';
+                        if (eId && onNavigateToEntity) {
+                          onNavigateToEntity(eId, eType);
+                        }
+                        return;
                       }
-                      return;
-                    }
-                    if (editor && !editor.isFocused) editor.commands.focus('end');
-                  }}
-                  className="w-full min-h-[300px] bg-[#161622] border border-[#242436] focus-within:border-blue-500/50 rounded-2xl p-4 text-gray-100 cursor-text shadow-sm"
-                >
-                  <EditorContent editor={editor} className="outline-none" />
+                      if (editor && !editor.isFocused) editor.commands.focus('end');
+                    }}
+                    className="p-4 min-h-[320px] text-gray-100 cursor-text"
+                  >
+                    <EditorContent editor={editor} className="outline-none" />
+                  </div>
                 </div>
               </div>
 
@@ -853,21 +1291,42 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                       const val = properties[key];
                       const matchedDef = effectiveTypeDef.fields?.find(f => f.key === key);
                       const label = matchedDef?.label || key.replace(/_/g, ' ');
+                      const isDate = matchedDef?.type === 'date' || key === 'birthday' || key === 'cumpleanos' || key === 'fecha_nacimiento';
+                      const isBirthday = key === 'birthday' || key === 'cumpleanos' || key === 'fecha_nacimiento' || (isDate && object.object_type === 'person');
 
                       return (
                         <div key={key} className="bg-[#181824] border border-[#252538] rounded-xl px-3 py-2 flex items-center justify-between gap-3">
                           <span className="text-xs text-gray-400 font-medium capitalize truncate max-w-[120px]">
                             {label}
                           </span>
-                          <input
-                            type="text"
-                            value={val || ''}
-                            onChange={(e) => {
-                              setProperties(prev => ({ ...prev, [key]: e.target.value }));
-                              setSaveStatus('dirty');
-                            }}
-                            className="bg-transparent text-xs text-gray-200 text-right outline-none flex-1 truncate font-sans"
-                          />
+                          {isDate ? (
+                            <div className="flex-1 max-w-[220px]">
+                              <DatePickerInput
+                                value={val || ''}
+                                onChange={(newDate) => {
+                                  setProperties(prev => ({ 
+                                    ...prev, 
+                                    [key]: newDate,
+                                    ...(isBirthday ? { birthday: newDate, cumpleanos: newDate } : {})
+                                  }));
+                                  setSaveStatus('dirty');
+                                }}
+                                isBirthday={isBirthday}
+                                compact={true}
+                                placeholder="Elegir fecha..."
+                              />
+                            </div>
+                          ) : (
+                            <input
+                              type="text"
+                              value={val || ''}
+                              onChange={(e) => {
+                                setProperties(prev => ({ ...prev, [key]: e.target.value }));
+                                setSaveStatus('dirty');
+                              }}
+                              className="bg-transparent text-xs text-gray-200 text-right outline-none flex-1 truncate font-sans"
+                            />
+                          )}
                         </div>
                       );
                     })}

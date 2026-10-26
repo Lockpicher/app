@@ -30,12 +30,15 @@ import {
   Music,
   Film,
   FileText,
-  Check
+  Check,
+  Cake
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, AppArea, AppLink, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { CustomTypeBuilderModal } from './CustomTypeBuilderModal';
 import { ObjectPagePanel } from './ObjectPagePanel';
+import { DatePickerInput } from './DatePickerInput';
+import { syncPersonBirthdayReminders } from '../lib/birthdays';
 import { db } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 
@@ -239,6 +242,15 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         // Notify parent state without re-invoking database insert
         if (onCreateObject) {
           await onCreateObject(createdObj);
+        }
+
+        // Sync birthday reminders if person
+        if (createdObj.object_type === 'person') {
+          try {
+            await syncPersonBirthdayReminders(createdObj);
+          } catch (bdayErr) {
+            console.warn('Error sincronizando recordatorios:', bdayErr);
+          }
         }
 
         // Open newly created object detail
@@ -1014,6 +1026,31 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 className="w-full px-3.5 py-2 bg-[#121218] border border-[#2a2a3c] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
               />
             </div>
+
+            {/* Selector de Cumpleaños interactivo para Personas */}
+            {newType === 'person' && (
+              <div>
+                <label className="text-xs text-amber-300 font-semibold block mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Cake className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Fecha de Cumpleaños</span>
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-normal">(Elegir en calendario)</span>
+                </label>
+                <DatePickerInput
+                  value={newFormProperties.birthday || ''}
+                  onChange={(dateStr) => {
+                    setNewFormProperties(prev => ({
+                      ...prev,
+                      birthday: dateStr,
+                      cumpleanos: dateStr
+                    }));
+                  }}
+                  isBirthday={true}
+                  placeholder="Toca para elegir fecha en calendario..."
+                />
+              </div>
+            )}
 
             <p className="text-[11px] text-gray-400 leading-relaxed pt-1">
               Las propiedades, portada, adjuntos en R2 y vínculos se completan al abrir el panel del objeto.
