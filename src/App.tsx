@@ -26,6 +26,8 @@ import { HabitsView } from './components/HabitsView';
 import { UploadModal } from './components/UploadModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AuthModal } from './components/AuthModal';
+import { PasswordUnlockModal } from './components/PasswordUnlockModal';
+import { isNoteUnlocked, unlockNoteSession, isNotebookUnlocked, unlockNotebookSession, verifyPassword } from './lib/security';
 import { auth, AuthUser } from './lib/auth';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
@@ -109,6 +111,9 @@ export function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+
+  // Global Unlock Modal for locked notes
+  const [unlockTargetNote, setUnlockTargetNote] = useState<AppNote | null>(null);
 
   // Subscribe to auth state
   useEffect(() => {
@@ -373,6 +378,11 @@ export function App() {
   };
 
   const handleOpenNote = (note: AppNote) => {
+    // Si la nota está protegida con contraseña y no ha sido desbloqueada en esta sesión, pedir clave
+    if (note.is_locked && note.password_hash && !isNoteUnlocked(note.id)) {
+      setUnlockTargetNote(note);
+      return;
+    }
     setSelectedNoteId(note.id);
     setIsEditingNote(true);
   };
@@ -1731,6 +1741,26 @@ export function App() {
           await loadData();
         }}
       />
+
+      {/* Global Password Unlock Modal for Notes opened from any view */}
+      {unlockTargetNote && (
+        <PasswordUnlockModal
+          isOpen={!!unlockTargetNote}
+          title={`Desbloquear Nota "${unlockTargetNote.title || 'Sin título'}"`}
+          subtitle="Ingresa la contraseña para acceder al contenido de esta nota."
+          onClose={() => setUnlockTargetNote(null)}
+          onVerify={async (password) => {
+            return verifyPassword(password, unlockTargetNote.password_hash || '');
+          }}
+          onSuccess={() => {
+            unlockNoteSession(unlockTargetNote.id);
+            const targetId = unlockTargetNote.id;
+            setUnlockTargetNote(null);
+            setSelectedNoteId(targetId);
+            setIsEditingNote(true);
+          }}
+        />
+      )}
     </div>
   );
 }

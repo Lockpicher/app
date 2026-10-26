@@ -21,13 +21,16 @@ import {
   Clock,
   Book,
   Pin,
-  Check
+  Check,
+  Lock
 } from 'lucide-react';
 import { AppNote, AppNotebook, NoteType } from '../lib/types';
 import { getCoverById } from '../lib/covers';
+import { isNoteUnlocked, unlockNoteSession, verifyPassword } from '../lib/security';
 import { storage } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 import { AudioRecorderModal } from './AudioRecorderModal';
+import { PasswordUnlockModal } from './PasswordUnlockModal';
 
 interface NotebookNotesGridProps {
   notebook: AppNotebook | null; // null if viewing "Todas las notas"
@@ -62,6 +65,15 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
   const [isUploadingImageNote, setIsUploadingImageNote] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
+  const [unlockTargetNote, setUnlockTargetNote] = useState<AppNote | null>(null);
+
+  const handleNoteCardClick = (noteItem: AppNote) => {
+    if (noteItem.is_locked && noteItem.password_hash && !isNoteUnlocked(noteItem.id)) {
+      setUnlockTargetNote(noteItem);
+      return;
+    }
+    onOpenNote(noteItem);
+  };
 
   // Helper: Extract task items from note HTML content
   const extractTaskList = (html: string): { total: number; completed: number; items: { text: string; checked: boolean }[] } => {
@@ -450,13 +462,18 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
               return (
                 <div
                   key={noteItem.id}
-                  onClick={() => onOpenNote(noteItem)}
+                  onClick={() => handleNoteCardClick(noteItem)}
                   className="bg-[#181824] rounded-2xl border border-[#2b2b3d] hover:border-blue-500/50 transition-all duration-200 p-4 flex flex-col justify-between group shadow-sm hover:shadow-xl cursor-pointer h-64 relative overflow-hidden select-none"
                 >
                   {/* Top Row: Type Pill, Favorite & Actions */}
                   <div className="flex items-center justify-between gap-1 mb-2">
                     <div className="flex items-center gap-1.5 overflow-hidden">
-                      {isTasks ? (
+                      {noteItem.is_locked ? (
+                        <span className="flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/40">
+                          <Lock className="w-2.5 h-2.5 text-amber-400" />
+                          Bloqueada
+                        </span>
+                      ) : isTasks ? (
                         <span className="flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">
                           <CheckSquare className="w-2.5 h-2.5 text-emerald-400" />
                           Tarea
@@ -622,6 +639,13 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
                           {noteItem.audio_transcription || excerpt || 'Audio guardado'}
                         </p>
                       </div>
+                    ) : noteItem.is_locked ? (
+                      /* Locked Note Excerpt */
+                      <div className="flex-1 flex flex-col items-center justify-center p-3 text-center space-y-1 bg-[#14141e] rounded-xl border border-[#232332]">
+                        <Lock className="w-5 h-5 text-amber-400/80 mb-0.5" />
+                        <span className="text-xs font-semibold text-gray-200">Nota Protegida</span>
+                        <span className="text-[10px] text-gray-400">Haz clic para desbloquear con tu contraseña</span>
+                      </div>
                     ) : (
                       /* Plain text excerpt snippet */
                       <p className="text-[11px] text-gray-400 line-clamp-4 leading-relaxed">
@@ -669,6 +693,25 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           });
         }}
       />
+
+      {/* Password Unlock Modal for Locked Note */}
+      {unlockTargetNote && (
+        <PasswordUnlockModal
+          isOpen={!!unlockTargetNote}
+          title={`Desbloquear Nota "${unlockTargetNote.title || 'Sin título'}"`}
+          subtitle="Ingresa la contraseña de esta nota para ver y editar su contenido."
+          onClose={() => setUnlockTargetNote(null)}
+          onVerify={async (password) => {
+            return verifyPassword(password, unlockTargetNote.password_hash || '');
+          }}
+          onSuccess={() => {
+            unlockNoteSession(unlockTargetNote.id);
+            const target = unlockTargetNote;
+            setUnlockTargetNote(null);
+            onOpenNote(target);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -53,6 +53,8 @@ export interface AppNotebook {
   order_index: number;
   is_default: boolean;
   is_archived: boolean;
+  is_locked?: boolean;
+  password_hash?: string | null;
   created_at: string;
   updated_at: string;
   notes_count?: number;
@@ -86,6 +88,8 @@ export interface AppNote {
   audio_transcription_status?: 'none' | 'pending' | 'transcribing' | 'completed' | 'error';
   reminder_at?: string | null;
   reminder_status?: 'none' | 'pending' | 'completed' | 'dismissed';
+  is_locked?: boolean;
+  password_hash?: string | null;
   properties?: Record<string, any>;
   created_at: string;
   updated_at: string;

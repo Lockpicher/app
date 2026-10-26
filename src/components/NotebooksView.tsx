@@ -11,11 +11,14 @@ import {
   FolderPlus,
   BookOpen,
   Sparkles,
-  Layers
+  Layers,
+  Lock
 } from 'lucide-react';
 import { AppNotebook, AppNote } from '../lib/types';
 import { getCoverById } from '../lib/covers';
+import { isNotebookUnlocked, unlockNotebookSession, verifyPassword } from '../lib/security';
 import { NotebookModal } from './NotebookModal';
+import { PasswordUnlockModal } from './PasswordUnlockModal';
 
 interface NotebooksViewProps {
   notebooks: AppNotebook[];
@@ -39,6 +42,9 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedNotebook, setSelectedNotebook] = useState<AppNotebook | null>(null);
 
+  // Desbloqueo de contraseña
+  const [unlockTarget, setUnlockTarget] = useState<AppNotebook | null>(null);
+
   const filteredNotebooks = notebooks.filter(nb => {
     if (showArchived ? !nb.is_archived : nb.is_archived) return false;
     if (searchQuery.trim()) {
@@ -57,8 +63,20 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
 
   const handleOpenEdit = (nb: AppNotebook, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    if (nb.is_locked && nb.password_hash && !isNotebookUnlocked(nb.id)) {
+      setUnlockTarget(nb);
+      return;
+    }
     setSelectedNotebook(nb);
     setIsModalOpen(true);
+  };
+
+  const handleNotebookClick = (nb: AppNotebook) => {
+    if (nb.is_locked && nb.password_hash && !isNotebookUnlocked(nb.id)) {
+      setUnlockTarget(nb);
+      return;
+    }
+    onOpenNotebook(nb);
   };
 
   const handleSaveModal = async (data: Partial<AppNotebook>) => {
@@ -145,7 +163,7 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
               return (
                 <div
                   key={nb.id}
-                  onClick={() => onOpenNotebook(nb)}
+                  onClick={() => handleNotebookClick(nb)}
                   className="flex flex-col items-center group cursor-pointer select-none text-center"
                 >
                   {/* Clean Visual Cover Card (3:4 ratio, clean corners, no spine, no text overlay) */}
@@ -181,6 +199,15 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     </div>
+
+                    {/* Lock indicator */}
+                    {nb.is_locked && (
+                      <div className="absolute bottom-2.5 right-2.5 z-10">
+                        <span className="p-1 rounded-lg bg-black/70 backdrop-blur-md text-amber-400 border border-amber-500/30 flex items-center justify-center shadow">
+                          <Lock className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    )}
 
                     {/* Subtle default indicator if notebook is primary */}
                     {nb.is_default && (
@@ -228,6 +255,25 @@ export const NotebooksView: React.FC<NotebooksViewProps> = ({
         onSave={handleSaveModal}
         onDelete={onDeleteNotebook}
       />
+
+      {/* Password Unlock Modal */}
+      {unlockTarget && (
+        <PasswordUnlockModal
+          isOpen={!!unlockTarget}
+          title={`Desbloquear Cuaderno "${unlockTarget.name}"`}
+          subtitle="Ingresa la contraseña de este cuaderno para acceder a sus notas."
+          onClose={() => setUnlockTarget(null)}
+          onVerify={async (password) => {
+            return verifyPassword(password, unlockTarget.password_hash || '');
+          }}
+          onSuccess={() => {
+            unlockNotebookSession(unlockTarget.id);
+            const target = unlockTarget;
+            setUnlockTarget(null);
+            onOpenNotebook(target);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -74,7 +74,9 @@ import {
   Rows,
   Columns,
   RotateCw,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 import { 
@@ -90,6 +92,7 @@ import {
 } from '../lib/types';
 import { db, storage } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
+import { hashPassword } from '../lib/security';
 import { AudioRecorderModal } from './AudioRecorderModal';
 import { UniversalLinkSelectorModal, UniversalLinkItem } from './UniversalLinkSelectorModal';
 
@@ -127,6 +130,10 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [projectId, setProjectId] = useState(note.project_id || '');
   const [isFavorite, setIsFavorite] = useState(!!note.is_favorite);
   const [isPinned, setIsPinned] = useState(!!note.is_pinned);
+  const [isLocked, setIsLocked] = useState(!!note.is_locked);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [existingHash, setExistingHash] = useState<string | null>(note.password_hash || null);
+  const [showPasswordBox, setShowPasswordBox] = useState(false);
   const [tagsInput, setTagsInput] = useState((note.tags || []).join(', '));
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
@@ -361,6 +368,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         calculatedType = 'text';
       }
 
+      let finalHash: string | null = null;
+      if (isLocked) {
+        if (passwordInput.trim()) {
+          finalHash = await hashPassword(passwordInput);
+          setExistingHash(finalHash);
+          setPasswordInput('');
+        } else if (existingHash) {
+          finalHash = existingHash;
+        } else {
+          setSaveStatus('error');
+          setSaveErrorMessage('Establece una contraseña para bloquear la nota');
+          return false;
+        }
+      }
+
       await onSave(note.id, {
         title: title.trim() || 'Nota sin título',
         content: html,
@@ -370,6 +392,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         project_id: projectId || undefined,
         is_favorite: isFavorite,
         is_pinned: isPinned,
+        is_locked: isLocked,
+        password_hash: finalHash,
         tags,
         note_type: calculatedType,
         thumbnail_url: thumbUrl
@@ -870,6 +894,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               </div>
             </div>
 
+            {/* Password Lock Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowPasswordBox(!showPasswordBox);
+              }}
+              className={`p-1.5 rounded-lg transition relative ${
+                isLocked ? 'text-amber-400 bg-amber-500/15' : 'text-gray-400 hover:text-white hover:bg-[#20202e]'
+              }`}
+              title={isLocked ? 'Nota protegida con contraseña (clic para configurar)' : 'Proteger esta nota con contraseña'}
+              aria-label="Contraseña"
+            >
+              {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+            </button>
+
             {/* Favorite Toggle */}
             <button
               type="button"
@@ -959,6 +998,63 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Password Protection Dropdown / Settings Banner */}
+      {showPasswordBox && (
+        <div className="px-4 sm:px-6 py-3 bg-[#13131c] border-b border-[#2b2b3d] animate-fadeIn flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-semibold text-white block">
+                Protección con Contraseña
+              </span>
+              <span className="text-[11px] text-gray-400">
+                {isLocked
+                  ? 'Esta nota requiere contraseña para abrirse.'
+                  : 'Protege esta nota para que nadie pueda ver su contenido sin la clave.'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <label className="flex items-center gap-2 cursor-pointer bg-[#1b1b26] px-3 py-1.5 rounded-xl border border-[#2b2b3e]">
+              <input
+                type="checkbox"
+                checked={isLocked}
+                onChange={(e) => {
+                  setIsLocked(e.target.checked);
+                  setSaveStatus('dirty');
+                }}
+                className="rounded bg-[#121218] border-[#2c2c3e] text-amber-500 focus:ring-0"
+              />
+              <span className="text-gray-200 font-medium">Bloquear</span>
+            </label>
+
+            {isLocked && (
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setSaveStatus('dirty');
+                }}
+                placeholder={existingHash ? "Nueva clave (o blanco para mantener)" : "Escribe contraseña o PIN..."}
+                className="px-3 py-1.5 bg-[#171722] border border-[#2c2c3e] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-amber-500 flex-1 sm:w-56"
+              />
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowPasswordBox(false)}
+              className="px-3 py-1.5 rounded-xl bg-[#20202e] hover:bg-[#28283a] text-gray-300 font-medium transition"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Voice Note Audio Banner (If Note has audio attached) */}
       {(note.audio_url || note.note_type === 'audio') && (

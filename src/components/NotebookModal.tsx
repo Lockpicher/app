@@ -9,10 +9,14 @@ import {
   Trash2, 
   Archive, 
   Sparkles,
-  AlertTriangle 
+  AlertTriangle,
+  Lock,
+  Unlock,
+  Key
 } from 'lucide-react';
 import { AppNotebook, CoverType } from '../lib/types';
 import { PRESET_COVERS, getCoverById } from '../lib/covers';
+import { hashPassword } from '../lib/security';
 import { storage } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
 
@@ -41,6 +45,11 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
   const [isDefault, setIsDefault] = useState(false);
   const [isArchived, setIsArchived] = useState(false);
 
+  // Protección con contraseña
+  const [isLocked, setIsLocked] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [existingHash, setExistingHash] = useState<string | null>(null);
+
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -61,6 +70,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
         setSolidColor(notebook.color || '#3b82f6');
         setIsDefault(!!notebook.is_default);
         setIsArchived(!!notebook.is_archived);
+        setIsLocked(!!notebook.is_locked);
+        setExistingHash(notebook.password_hash || null);
+        setPasswordInput('');
       } else {
         setName('');
         setDescription('');
@@ -70,6 +82,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
         setSolidColor('#3b82f6');
         setIsDefault(false);
         setIsArchived(false);
+        setIsLocked(false);
+        setExistingHash(null);
+        setPasswordInput('');
       }
       setErrorMsg(null);
     }
@@ -113,6 +128,19 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
         coverUrlToSave = customCoverUrl;
       }
 
+      let finalHash: string | null = null;
+      if (isLocked) {
+        if (passwordInput.trim()) {
+          finalHash = await hashPassword(passwordInput);
+        } else if (existingHash) {
+          finalHash = existingHash;
+        } else {
+          setErrorMsg('Debes establecer una contraseña para bloquear el cuaderno.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       await onSave({
         name: name.trim(),
         description: description.trim() || undefined,
@@ -120,7 +148,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
         cover_url: coverUrlToSave || undefined,
         color: solidColor,
         is_default: isDefault,
-        is_archived: isArchived
+        is_archived: isArchived,
+        is_locked: isLocked,
+        password_hash: finalHash
       });
 
       onClose();
@@ -252,6 +282,45 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                     />
                     <span>Archivar Cuaderno</span>
                   </label>
+                )}
+              </div>
+
+              {/* Password Protection Box */}
+              <div className="pt-2 p-3.5 rounded-xl bg-[#13131c] border border-[#262638] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={isLocked}
+                      onChange={(e) => setIsLocked(e.target.checked)}
+                      className="rounded bg-[#121218] border-[#2c2c3e] text-amber-500 focus:ring-0"
+                    />
+                    <span className="flex items-center gap-1.5">
+                      {isLocked ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Unlock className="w-3.5 h-3.5 text-gray-400" />}
+                      Proteger con Contraseña
+                    </span>
+                  </label>
+
+                  {isLocked && existingHash && (
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-md">
+                      ✓ Clave activa
+                    </span>
+                  )}
+                </div>
+
+                {isLocked && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <input
+                      type="password"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      placeholder={existingHash ? "Escribe nueva contraseña para cambiarla (o déjalo en blanco para conservarla)" : "Crea una contraseña o PIN para este cuaderno..."}
+                      className="w-full px-3 py-2 bg-[#171722] border border-[#2c2c3e] rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-amber-500"
+                    />
+                    <p className="text-[10px] text-gray-400">
+                      Cualquier persona que intente abrir este cuaderno deberá ingresar esta clave para ver sus notas.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
