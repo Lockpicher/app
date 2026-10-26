@@ -1,8 +1,0 @@
-com.kubbonet.segundocerebro.app-resValues-0 C:\Antigravity\android-app\app\build\generated\res\resValues\debug
-com.kubbonet.segundocerebro.app-updated_navigation_xml-1 C:\Antigravity\android-app\app\build\generated\updated_navigation_xml\debug
-com.kubbonet.segundocerebro.app-packageDebugResources-2 C:\Antigravity\android-app\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.kubbonet.segundocerebro.app-packageDebugResources-3 C:\Antigravity\android-app\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.kubbonet.segundocerebro.app-debug-4 C:\Antigravity\android-app\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.kubbonet.segundocerebro.app-debug-5 C:\Antigravity\android-app\app\src\debug\res
-com.kubbonet.segundocerebro.app-main-6 C:\Antigravity\android-app\app\src\main\res
-gradleHome-0 C:\Users\Johna\.gradle
