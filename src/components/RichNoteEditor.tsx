@@ -421,15 +421,25 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     onBack();
   };
 
-  // Auto-save debounce (800ms for fast responsiveness without freezing)
+  // Auto-save debounce:
+  // - 800ms normalmente para respuesta instantánea
+  // - Pausado si el usuario tiene el panel de contraseña abierto y está escribiendo una nueva clave, para que no corte mientras escribe
   useEffect(() => {
+    // Si el usuario está escribiendo una nueva contraseña, dar suficiente tiempo o esperar a que termine
+    const isTypingPassword = showPasswordBox && isLocked && passwordInput.length > 0;
+    const delay = isTypingPassword ? 3000 : 800;
+
     const timer = setTimeout(() => {
       if (saveStatus === 'dirty') {
+        // Si activó el candado pero el campo de contraseña aún está vacío y no hay hash previo, no intentar guardar aún para no mostrar error
+        if (isLocked && !passwordInput.trim() && !existingHash) {
+          return;
+        }
         handleSave();
       }
-    }, 800);
+    }, delay);
     return () => clearTimeout(timer);
-  }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, tagsInput]);
+  }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, isLocked, passwordInput, tagsInput, showPasswordBox]);
 
   // Close table dropdown menu when clicking outside
   useEffect(() => {
@@ -1040,6 +1050,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                   setPasswordInput(e.target.value);
                   setSaveStatus('dirty');
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setShowPasswordBox(false);
+                    handleSave();
+                  }
+                }}
                 placeholder={existingHash ? "Nueva clave (o blanco para mantener)" : "Escribe contraseña o PIN..."}
                 className="px-3 py-1.5 bg-[#171722] border border-[#2c2c3e] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-amber-500 flex-1 sm:w-56"
               />
@@ -1047,10 +1064,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
             <button
               type="button"
-              onClick={() => setShowPasswordBox(false)}
-              className="px-3 py-1.5 rounded-xl bg-[#20202e] hover:bg-[#28283a] text-gray-300 font-medium transition"
+              onClick={() => {
+                setShowPasswordBox(false);
+                handleSave();
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition shadow-sm"
             >
-              Listo
+              Aplicar y Guardar
             </button>
           </div>
         </div>

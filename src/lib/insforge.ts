@@ -39,6 +39,45 @@ export const insforge = createClient({
 
 // === DATABASE API ===
 
+// Helpers para serializar y deserializar metadatos de seguridad de cuadernos dentro de description
+function parseNotebookMetadata(nb: any): AppNotebook {
+  if (!nb) return nb;
+  let is_locked = false;
+  let password_hash: string | null = null;
+  let cleanDesc = nb.description || '';
+
+  const lockRegex = /\s*\[LOCK_META:([A-Za-z0-9+/=]+)\]\s*$/;
+  const match = cleanDesc.match(lockRegex);
+  if (match) {
+    try {
+      const decoded = JSON.parse(atob(match[1]));
+      is_locked = !!decoded.is_locked;
+      password_hash = decoded.password_hash || null;
+      cleanDesc = cleanDesc.replace(lockRegex, '').trim();
+    } catch (e) {
+      console.warn('Error parseando LOCK_META de cuaderno:', e);
+    }
+  }
+
+  return {
+    ...nb,
+    description: cleanDesc,
+    is_locked,
+    password_hash
+  } as AppNotebook;
+}
+
+function encodeNotebookDescription(description?: string | null, is_locked?: boolean, password_hash?: string | null): string | undefined {
+  let baseDesc = (description || '').replace(/\s*\[LOCK_META:[A-Za-z0-9+/=]+\]\s*$/, '').trim();
+  if (is_locked && password_hash) {
+    try {
+      const metaStr = btoa(JSON.stringify({ is_locked: true, password_hash }));
+      baseDesc = baseDesc ? `${baseDesc} [LOCK_META:${metaStr}]` : `[LOCK_META:${metaStr}]`;
+    } catch {}
+  }
+  return baseDesc || undefined;
+}
+
 export const db = {
   // Cuadernos (Zoho Notebook style)
   async getNotebooks(includeArchived = false): Promise<AppNotebook[]> {
@@ -54,32 +93,59 @@ export const db = {
 
     const { data, error } = await query;
     if (error) console.error('Error fetching notebooks:', error);
-    return (data as unknown as AppNotebook[]) || [];
+    if (!data) return [];
+    return (data as any[]).map(parseNotebookMetadata);
   },
 
   async createNotebook(notebook: Partial<AppNotebook>): Promise<AppNotebook | null> {
+    const { is_locked, password_hash, description, ...directFields } = notebook;
+    const finalDesc = encodeNotebookDescription(description, is_locked, password_hash);
+
+    const payload = {
+      ...directFields,
+      description: finalDesc
+    };
+
     const { data, error } = await insforge.database
       .from('app_notebooks')
-      .insert([notebook])
+      .insert([payload])
       .select();
     if (error) {
       console.error('Error creating notebook:', error);
       throw error;
     }
-    return (data as unknown as AppNotebook[])?.[0] || null;
+    const created = (data as unknown as AppNotebook[])?.[0] || null;
+    return created ? parseNotebookMetadata(created) : null;
   },
 
   async updateNotebook(id: string, updates: Partial<AppNotebook>): Promise<AppNotebook | null> {
+    const { id: _ignored, is_locked, password_hash, description, ...directFields } = updates;
+    
+    // Si se pasa is_locked o password_hash o description, calculamos el description final
+    let finalDesc = description;
+    if (is_locked !== undefined || password_hash !== undefined || description !== undefined) {
+      finalDesc = encodeNotebookDescription(description, is_locked, password_hash);
+    }
+
+    const payload: Record<string, any> = {
+      ...directFields,
+      updated_at: new Date().toISOString()
+    };
+    if (finalDesc !== undefined) {
+      payload.description = finalDesc;
+    }
+
     const { data, error } = await insforge.database
       .from('app_notebooks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
       .select();
     if (error) {
       console.error('Error updating notebook:', error);
       throw error;
     }
-    return (data as unknown as AppNotebook[])?.[0] || null;
+    const updated = (data as unknown as AppNotebook[])?.[0] || null;
+    return updated ? parseNotebookMetadata(updated) : null;
   },
 
   async deleteNotebook(id: string, transferNotesToNotebookId?: string): Promise<boolean> {
@@ -133,17 +199,21 @@ export const db = {
       return {
         ...row,
         area_id: row.area_id || p.area_id || null,
-        para_category: row.para_category || p.para_category || undefined
+        para_category: row.para_category || p.para_category || undefined,
+        is_locked: row.is_locked !== undefined ? row.is_locked : !!p.is_locked,
+        password_hash: row.password_hash || p.password_hash || null
       } as AppNote;
     });
   },
 
   async createNote(note: Partial<AppNote>): Promise<AppNote | null> {
-    const { area_id, para_category, ...directFields } = note as any;
+    const { area_id, para_category, is_locked, password_hash, ...directFields } = note as any;
     const finalProperties = {
       ...(note.properties || {}),
       ...(area_id !== undefined ? { area_id } : {}),
-      ...(para_category !== undefined ? { para_category } : {})
+      ...(para_category !== undefined ? { para_category } : {}),
+      ...(is_locked !== undefined ? { is_locked } : {}),
+      ...(password_hash !== undefined ? { password_hash } : {})
     };
 
     const payload = {
@@ -166,19 +236,23 @@ export const db = {
     return {
       ...created,
       area_id: created.area_id || p.area_id || null,
-      para_category: created.para_category || p.para_category || undefined
+      para_category: created.para_category || p.para_category || undefined,
+      is_locked: created.is_locked !== undefined ? created.is_locked : !!p.is_locked,
+      password_hash: created.password_hash || p.password_hash || null
     };
   },
 
   async updateNote(id: string, updates: Partial<AppNote>): Promise<AppNote | null> {
-    const { id: _ignored, area_id, para_category, ...directFields } = updates as any;
+    const { id: _ignored, area_id, para_category, is_locked, password_hash, ...directFields } = updates as any;
     
     let finalProperties = updates.properties;
-    if (area_id !== undefined || para_category !== undefined || finalProperties) {
+    if (area_id !== undefined || para_category !== undefined || is_locked !== undefined || password_hash !== undefined || finalProperties) {
       finalProperties = {
         ...(finalProperties || {}),
         ...(area_id !== undefined ? { area_id } : {}),
-        ...(para_category !== undefined ? { para_category } : {})
+        ...(para_category !== undefined ? { para_category } : {}),
+        ...(is_locked !== undefined ? { is_locked } : {}),
+        ...(password_hash !== undefined ? { password_hash } : {})
       };
     }
 
@@ -206,7 +280,9 @@ export const db = {
     return {
       ...updated,
       area_id: updated.area_id || p.area_id || null,
-      para_category: updated.para_category || p.para_category || undefined
+      para_category: updated.para_category || p.para_category || undefined,
+      is_locked: updated.is_locked !== undefined ? updated.is_locked : !!p.is_locked,
+      password_hash: updated.password_hash || p.password_hash || null
     };
   },
 
