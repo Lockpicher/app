@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Boxes, 
   Plus, 
@@ -31,7 +31,10 @@ import {
   Film,
   FileText,
   Check,
-  Cake
+  Cake,
+  Star,
+  Bookmark,
+  Glasses
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, AppArea, AppLink, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
@@ -94,6 +97,12 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'gallery'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLinkId, setFilterLinkId] = useState<string>('all'); // Filter by related entity (e.g. company, project)
+
+  // Book-specific filters and sorting
+  const [bookStatusFilter, setBookStatusFilter] = useState<string>('all');
+  const [bookGenreFilter, setBookGenreFilter] = useState<string>('all');
+  const [bookRatingFilter, setBookRatingFilter] = useState<number>(0);
+  const [bookSortBy, setBookSortBy] = useState<'date' | 'title' | 'author' | 'progress' | 'rating'>('date');
 
   // Modals state
   const [isCreatingObject, setIsCreatingObject] = useState(false);
@@ -276,42 +285,117 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     ...objects.filter(o => o.object_type === 'company').map(c => ({ id: c.id, title: c.title, type: 'company' as const, label: `Empresa: ${c.title}` }))
   ];
 
+  // Available genres from existing book objects
+  const availableBookGenres = useMemo(() => {
+    const genres = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'book') {
+        const g = o.properties?.genero || o.properties?.genre;
+        if (g && typeof g === 'string' && g.trim()) genres.add(g.trim());
+      }
+    });
+    return Array.from(genres);
+  }, [objects]);
+
+  // Currently reading books for quick access banner
+  const currentlyReadingBooks = useMemo(() => {
+    return objects.filter(o => 
+      o.object_type === 'book' && 
+      (o.properties?.reading_status === 'reading' || o.properties?.estado_lectura === 'reading')
+    );
+  }, [objects]);
+
   // Filter objects by type, search query and related link
-  const filteredObjects = objects.filter(obj => {
-    // 1. Filter by object type
-    if (selectedType !== 'all' && obj.object_type !== selectedType) return false;
+  const filteredObjects: AppObject[] = useMemo(() => {
+    const result: AppObject[] = objects.filter((obj: AppObject) => {
+      // 1. Filter by object type
+      if (selectedType !== 'all' && obj.object_type !== selectedType) return false;
 
-    // 2. Filter by specific related link (bidirectional check)
-    if (filterLinkId !== 'all') {
-      const isDirectlyLinked = links.some(l => 
-        (l.from_id === obj.id && l.to_id === filterLinkId) ||
-        (l.to_id === obj.id && l.from_id === filterLinkId)
-      );
-      // Legacy fallback check for project_id
-      const isLegacyProjectLinked = obj.project_id === filterLinkId;
-      if (!isDirectlyLinked && !isLegacyProjectLinked) return false;
+      // 2. Filter by specific related link (bidirectional check)
+      if (filterLinkId !== 'all') {
+        const isDirectlyLinked = links.some(l => 
+          (l.from_id === obj.id && l.to_id === filterLinkId) ||
+          (l.to_id === obj.id && l.from_id === filterLinkId)
+        );
+        // Legacy fallback check for project_id
+        const isLegacyProjectLinked = obj.project_id === filterLinkId;
+        if (!isDirectlyLinked && !isLegacyProjectLinked) return false;
+      }
+
+      // 3. Search query: Title, description, properties and related entities titles
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = obj.title.toLowerCase().includes(q);
+        const matchDesc = obj.description?.toLowerCase().includes(q);
+        const matchProps = JSON.stringify(obj.properties || {}).toLowerCase().includes(q);
+
+        // Also check if any linked entity title matches query (e.g. search "Google" finds people linked to Google)
+        const linkedEntityIds = links
+          .filter(l => l.from_id === obj.id || l.to_id === obj.id)
+          .map(l => l.from_id === obj.id ? l.to_id : l.from_id);
+        
+        const matchLinkedEntity = objects.some(o => linkedEntityIds.includes(o.id) && o.title.toLowerCase().includes(q)) ||
+                                  projects.some(p => (linkedEntityIds.includes(p.id) || obj.project_id === p.id) && p.title.toLowerCase().includes(q));
+
+        if (!matchTitle && !matchDesc && !matchProps && !matchLinkedEntity) return false;
+      }
+
+      // 4. Book-specific filters when viewing books
+      if (selectedType === 'book') {
+        const props = obj.properties || {};
+        if (bookStatusFilter !== 'all') {
+          const st = props.reading_status || props.estado_lectura || 'want_to_read';
+          if (st !== bookStatusFilter) return false;
+        }
+
+        if (bookGenreFilter !== 'all') {
+          const g = props.genero || props.genre || '';
+          if (g !== bookGenreFilter) return false;
+        }
+
+        if (bookRatingFilter > 0) {
+          const r = Number(props.calificacion || props.rating || 0);
+          if (r < bookRatingFilter) return false;
+        }
+      }
+
+      return true;
+    });
+
+    // 5. Book sorting when in books view
+    if (selectedType === 'book') {
+      result.sort((a, b) => {
+        const pA = a.properties || {};
+        const pB = b.properties || {};
+
+        if (bookSortBy === 'title') {
+          return a.title.localeCompare(b.title);
+        } else if (bookSortBy === 'author') {
+          const authorA = pA.autor || pA.author || '';
+          const authorB = pB.autor || pB.author || '';
+          return authorA.localeCompare(authorB);
+        } else if (bookSortBy === 'progress') {
+          const totalA = Number(pA.total_pages || pA.page_count || 0);
+          const currA = Number(pA.current_page || 0);
+          const pctA = totalA > 0 ? (currA / totalA) : 0;
+
+          const totalB = Number(pB.total_pages || pB.page_count || 0);
+          const currB = Number(pB.current_page || 0);
+          const pctB = totalB > 0 ? (currB / totalB) : 0;
+
+          return pctB - pctA;
+        } else if (bookSortBy === 'rating') {
+          const rA = Number(pA.calificacion || pA.rating || 0);
+          const rB = Number(pB.calificacion || pB.rating || 0);
+          return rB - rA;
+        } else {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+      });
     }
 
-    // 3. Search query: Title, description, properties and related entities titles
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = obj.title.toLowerCase().includes(q);
-      const matchDesc = obj.description?.toLowerCase().includes(q);
-      const matchProps = JSON.stringify(obj.properties || {}).toLowerCase().includes(q);
-
-      // Also check if any linked entity title matches query (e.g. search "Google" finds people linked to Google)
-      const linkedEntityIds = links
-        .filter(l => l.from_id === obj.id || l.to_id === obj.id)
-        .map(l => l.from_id === obj.id ? l.to_id : l.from_id);
-      
-      const matchLinkedEntity = objects.some(o => linkedEntityIds.includes(o.id) && o.title.toLowerCase().includes(q)) ||
-                                projects.some(p => (linkedEntityIds.includes(p.id) || obj.project_id === p.id) && p.title.toLowerCase().includes(q));
-
-      return matchTitle || matchDesc || matchProps || matchLinkedEntity;
-    }
-
-    return true;
-  });
+    return result;
+  }, [objects, selectedType, filterLinkId, searchQuery, links, projects, bookStatusFilter, bookGenreFilter, bookRatingFilter, bookSortBy]);
 
   const getTypeMeta = (typeId: string) => {
     const def = allTypeDefinitions.find(t => t.id === typeId);
@@ -473,8 +557,141 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         </div>
       </div>
 
+      {/* Book-Specific Library Filter & Sort Toolbar */}
+      {selectedType === 'book' && (
+        <div className="px-4 sm:px-6 md:px-8 py-2.5 bg-[#101015] border-b border-[#20202c] flex items-center justify-between gap-3 flex-wrap animate-fadeIn">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mr-1 flex items-center gap-1">
+              <Glasses className="w-3.5 h-3.5 text-purple-400" />
+              <span>Estado:</span>
+            </span>
+
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'reading', label: 'Leyendo' },
+              { id: 'want_to_read', label: 'Por Leer' },
+              { id: 'paused', label: 'Pausados' },
+              { id: 'finished', label: 'Terminados' },
+              { id: 'abandoned', label: 'Abandonados' }
+            ].map(st => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setBookStatusFilter(st.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                  bookStatusFilter === st.id
+                    ? 'bg-purple-600 text-white shadow-sm font-semibold'
+                    : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Genre Filter */}
+            {availableBookGenres.length > 0 && (
+              <select
+                value={bookGenreFilter}
+                onChange={e => setBookGenreFilter(e.target.value)}
+                className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+              >
+                <option value="all">Todos los géneros</option>
+                {availableBookGenres.map((g: string) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Rating Filter */}
+            <select
+              value={bookRatingFilter}
+              onChange={e => setBookRatingFilter(Number(e.target.value))}
+              className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+            >
+              <option value={0}>Todas las calificaciones</option>
+              <option value={5}>⭐⭐⭐⭐⭐ (5 estrellas)</option>
+              <option value={4}>⭐⭐⭐⭐ (4+ estrellas)</option>
+              <option value={3}>⭐⭐⭐ (3+ estrellas)</option>
+            </select>
+
+            {/* Sort by */}
+            <select
+              value={bookSortBy}
+              onChange={e => setBookSortBy(e.target.value as any)}
+              className="bg-[#181824] border border-purple-500/40 rounded-lg px-2.5 py-1 text-xs text-purple-300 outline-none cursor-pointer font-medium"
+            >
+              <option value="date">Más recientes</option>
+              <option value="title">Título (A-Z)</option>
+              <option value="author">Autor</option>
+              <option value="progress">Mayor progreso (%)</option>
+              <option value="rating">Mayor calificación</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+        {/* Prominent "Leyendo Actualmente" Quick Banner */}
+        {selectedType === 'book' && currentlyReadingBooks.length > 0 && (
+          <div className="mb-6 bg-gradient-to-r from-purple-950/40 via-[#181828] to-[#12121a] border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-lg animate-fadeIn">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <Bookmark className="w-4 h-4 text-purple-400" />
+                <span>Leyendo actualmente ({currentlyReadingBooks.length})</span>
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {currentlyReadingBooks.map((book: AppObject) => {
+                const bProps = book.properties || {};
+                const bTotal = Number(bProps.total_pages || bProps.page_count || 0);
+                const bCurrent = Number(bProps.current_page || 0);
+                const bPct = bTotal > 0 ? Math.min(100, Math.round((bCurrent / bTotal) * 100)) : 0;
+                const bAuthor = bProps.autor || bProps.author || '';
+
+                return (
+                  <div
+                    key={book.id}
+                    onClick={() => setSelectedDetailObject(book)}
+                    className="p-3 bg-[#13131e] border border-[#28283e] hover:border-purple-500/60 rounded-xl transition cursor-pointer flex items-center gap-3 group"
+                  >
+                    <div className="w-12 h-16 rounded-md overflow-hidden bg-purple-950 flex-shrink-0 border border-white/10 shadow">
+                      {book.thumbnail_url ? (
+                        <img src={book.thumbnail_url} alt={book.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-purple-950 flex items-center justify-center text-[10px] font-bold text-white p-1 text-center font-serif">
+                          {book.title.slice(0, 3)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition">
+                        {book.title}
+                      </h4>
+                      {bAuthor && (
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{bAuthor}</p>
+                      )}
+
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                          <span>{bPct}%</span>
+                          <span>{bCurrent} / {bTotal || '?'} págs.</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-[#252536] rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-purple-500 to-emerald-400" style={{ width: `${bPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {filteredObjects.length === 0 ? (
           <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center gap-3">
             <Boxes className="w-10 h-10 text-gray-600 stroke-[1.5]" />
@@ -632,6 +849,143 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                         <span className="text-[10px] text-gray-500">Sin proyecto</span>
                       )}
 
+                      <span className="text-[10px] font-mono text-gray-400">
+                        {new Date(obj.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Special Card Representation for Books
+              if (obj.object_type === 'book') {
+                const bookAuthor = props.autor || props.author || '';
+                const bookStatus = props.reading_status || props.estado_lectura || 'want_to_read';
+                const bookRating = Number(props.calificacion || props.rating || 0);
+                const bookTotal = Number(props.total_pages || props.page_count || 0);
+                const bookCurrent = Number(props.current_page || 0);
+                const bookPct = bookTotal > 0 ? Math.min(100, Math.round((bookCurrent / bookTotal) * 100)) : 0;
+                const bookFormat = props.formato || props.format || 'physical';
+                const hasPdf = Boolean(props.main_pdf_url || props.pdf_url);
+
+                const statusLabel = 
+                  bookStatus === 'reading' ? 'Leyendo' :
+                  bookStatus === 'finished' ? 'Terminado' :
+                  bookStatus === 'paused' ? 'Pausado' :
+                  bookStatus === 'abandoned' ? 'Abandonado' : 'Por Leer';
+
+                const statusColor = 
+                  bookStatus === 'reading' ? 'bg-amber-950/60 text-amber-300 border-amber-800/40' :
+                  bookStatus === 'finished' ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40' :
+                  bookStatus === 'paused' ? 'bg-gray-800/60 text-gray-300 border-gray-700/40' :
+                  bookStatus === 'abandoned' ? 'bg-red-950/60 text-red-300 border-red-800/40' :
+                  'bg-blue-950/60 text-blue-300 border-blue-800/40';
+
+                return (
+                  <div
+                    key={obj.id}
+                    onClick={() => setSelectedDetailObject(obj)}
+                    className="bg-[#191924] rounded-2xl border border-[#28283a] hover:border-purple-500/50 transition-all duration-200 p-4 flex flex-col justify-between shadow-sm cursor-pointer group hover:shadow-xl relative overflow-hidden select-none min-h-[290px] max-h-[360px]"
+                  >
+                    <div className="overflow-hidden flex-1 flex flex-col">
+                      {/* Top Header: Badge & Actions */}
+                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold border flex items-center gap-1 ${statusColor}`}>
+                            <BookOpen className="w-2.5 h-2.5" />
+                            <span>{statusLabel}</span>
+                          </span>
+
+                          {hasPdf && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-purple-950/50 text-purple-300 border border-purple-800/40">
+                              PDF
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDetailObject(obj)}
+                            className="p-1 rounded bg-[#20202e] hover:bg-[#2b2b3e] text-purple-300 transition"
+                            title="Ver Ficha del Libro"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Eliminar libro "${obj.title}"?`)) {
+                                onDeleteObject(obj.id);
+                              }
+                            }}
+                            className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition"
+                            title="Eliminar libro"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Book Cover + Title + Author Layout */}
+                      <div className="flex gap-3 mb-2.5">
+                        <div className="w-16 h-24 rounded-lg overflow-hidden bg-purple-950 border border-white/10 shadow flex-shrink-0 relative group-hover:scale-105 transition-transform duration-200">
+                          {obj.thumbnail_url ? (
+                            <img src={obj.thumbnail_url} alt={obj.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-purple-900 to-[#12121e] flex flex-col justify-between p-1.5 text-center border-l-2 border-l-amber-500/70">
+                              <span className="text-[7px] text-amber-300/80 uppercase font-mono block">Libro</span>
+                              <p className="font-serif font-bold text-[9px] text-white leading-tight line-clamp-3">
+                                {obj.title}
+                              </p>
+                              <span className="text-[7px] text-gray-400 truncate block">
+                                {bookAuthor || '—'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                          <div>
+                            <h3 className="font-bold text-sm text-white group-hover:text-purple-300 transition line-clamp-2 leading-tight font-serif">
+                              {obj.title}
+                            </h3>
+                            {bookAuthor && (
+                              <p className="text-[11px] text-gray-400 truncate mt-1">
+                                {bookAuthor}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Rating Stars */}
+                          {bookRating > 0 && (
+                            <div className="flex items-center gap-0.5 text-amber-400 mt-1">
+                              {[...Array(bookRating)].map((_, i) => (
+                                <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Reading Progress */}
+                      <div className="mt-auto bg-[#14141d] border border-[#242436] rounded-xl p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                          <span>Progreso</span>
+                          <span className="text-purple-300 font-bold">{bookPct}% ({bookCurrent}/{bookTotal || '?'} págs.)</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-[#252536] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-emerald-400 transition-all duration-300"
+                            style={{ width: `${bookPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-2 border-t border-[#232332] flex items-center justify-between text-xs text-gray-400 mt-2 flex-shrink-0">
+                      <span className="text-[10px] text-gray-500 capitalize">{bookFormat}</span>
                       <span className="text-[10px] font-mono text-gray-400">
                         {new Date(obj.created_at).toLocaleDateString()}
                       </span>
@@ -856,7 +1210,32 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                       </td>
 
                       <td className="py-3 px-3 text-gray-400">
-                        {relevantProps.length > 0 ? (
+                        {obj.object_type === 'book' ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {(props.autor || props.author) && (
+                              <span className="text-[11px] bg-[#14141c] px-2 py-0.5 rounded-lg border border-[#232332] text-gray-300">
+                                <span className="text-gray-500 mr-1">Autor:</span>
+                                {props.autor || props.author}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 bg-[#14141c] px-2 py-0.5 rounded-lg border border-[#232332]">
+                              <span className="text-[10px] font-mono text-purple-300">
+                                {props.total_pages ? `${Math.round(((props.current_page || 0) / props.total_pages) * 100)}%` : `${props.current_page || 0} págs.`}
+                              </span>
+                              <div className="w-12 h-1 bg-[#252536] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-purple-500"
+                                  style={{ width: `${props.total_pages ? Math.min(100, Math.round(((props.current_page || 0) / props.total_pages) * 100)) : 0}%` }}
+                                />
+                              </div>
+                            </div>
+                            {Number(props.calificacion || props.rating || 0) > 0 && (
+                              <span className="text-[11px] text-amber-400 font-mono">
+                                {'★'.repeat(Number(props.calificacion || props.rating || 0))}
+                              </span>
+                            )}
+                          </div>
+                        ) : relevantProps.length > 0 ? (
                           <div className="flex items-center gap-1.5 flex-wrap max-w-sm">
                             {relevantProps.map(([k, v]) => (
                               <span key={k} className="text-[11px] bg-[#14141c] px-2 py-0.5 rounded-lg border border-[#232332]">

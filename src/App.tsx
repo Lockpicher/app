@@ -23,6 +23,8 @@ import { ParaAreasView } from './components/ParaAreasView';
 import { ParaArchiveView } from './components/ParaArchiveView';
 import { ParaReviewView } from './components/ParaReviewView';
 import { HabitsView } from './components/HabitsView';
+import { CanvasesView } from './components/CanvasesView';
+import { CanvasEditor } from './components/CanvasEditor';
 import { UploadModal } from './components/UploadModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AuthModal } from './components/AuthModal';
@@ -50,7 +52,8 @@ import {
   TaskCategory,
   ViewMode,
   ObjectTypeDefinition,
-  DEFAULT_OBJECT_TYPES
+  DEFAULT_OBJECT_TYPES,
+  AppCanvas
 } from './lib/types';
 import { 
   Loader2, 
@@ -85,11 +88,14 @@ export function App() {
   const [areas, setAreas] = useState<AppArea[]>([]);
   const [habits, setHabits] = useState<AppHabit[]>([]);
   const [habitLogs, setHabitLogs] = useState<AppHabitLog[]>([]);
+  const [canvases, setCanvases] = useState<AppCanvas[]>([]);
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
+  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
+  const [isEditingCanvas, setIsEditingCanvas] = useState<boolean>(false);
   const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState(false);
 
   // Objects & Entities active filter & custom types
@@ -196,8 +202,9 @@ export function App() {
         db.getCustomObjectTypes().catch(() => []),
         db.getAreas().catch(() => []),
         db.getHabits().catch(() => []),
-        db.getHabitLogs().catch(() => [])
-      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs]) => {
+        db.getHabitLogs().catch(() => []),
+        db.getCanvases().catch(() => [])
+      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs, cvs]) => {
         setReminders(rems);
         setProjects(p);
         setTasks(t);
@@ -210,6 +217,7 @@ export function App() {
         setAreas(ars);
         setHabits(hbs);
         setHabitLogs(hLogs);
+        setCanvases(cvs);
       }).catch(err => {
         console.warn('Background sync error (non-fatal):', err);
       });
@@ -918,6 +926,14 @@ export function App() {
       setIsEditingNote(false);
       setSelectedNotebookId(id);
       setCurrentView('notebooks');
+    } else if (type === 'canvas') {
+      setIsEditingNote(false);
+      const foundCanvas = canvases.find(c => c.id === id);
+      if (foundCanvas) {
+        handleSelectCanvas(foundCanvas);
+      } else {
+        setCurrentView('canvases');
+      }
     } else if (type === 'file') {
       setIsEditingNote(false);
       setCurrentView('files');
@@ -925,7 +941,7 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas') => {
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
     } else if (type === 'voice') {
@@ -988,7 +1004,70 @@ export function App() {
       setUploadAcceptFilter('image/*,video/*');
       setUploadTitleOverride('Subir Foto o Vídeo');
       setIsUploadModalOpen(true);
+    } else if (type === 'canvas') {
+      await handleCreateCanvas();
     }
+  };
+
+  // Canvas Handlers
+  const handleCreateCanvas = async () => {
+    try {
+      const newCanvas = await db.createCanvas({
+        title: 'Nuevo Lienzo',
+        elements: [],
+        app_state: {
+          viewBackgroundColor: theme === 'dark' ? '#121218' : '#ffffff'
+        },
+        files: {}
+      });
+      if (newCanvas) {
+        setCanvases(prev => [newCanvas, ...prev]);
+        setSelectedCanvasId(newCanvas.id);
+        setIsEditingCanvas(true);
+        setIsEditingNote(false);
+        setCurrentView('canvas');
+      }
+    } catch (err: any) {
+      console.error('Error creando lienzo:', err);
+      alert('Error al crear lienzo: ' + (err.message || 'Error desconocido'));
+    }
+  };
+
+  const handleUpdateCanvas = async (id: string, updates: Partial<AppCanvas>): Promise<AppCanvas | null> => {
+    try {
+      const updated = await db.updateCanvas(id, updates);
+      if (updated) {
+        setCanvases(prev => prev.map(c => c.id === id ? updated : c));
+      }
+      return updated;
+    } catch (err) {
+      console.error('Error actualizando lienzo:', err);
+      throw err;
+    }
+  };
+
+  const handleDeleteCanvas = async (id: string) => {
+    try {
+      const success = await db.deleteCanvas(id);
+      if (success) {
+        setCanvases(prev => prev.filter(c => c.id !== id));
+        if (selectedCanvasId === id) {
+          setSelectedCanvasId(null);
+          setIsEditingCanvas(false);
+          setCurrentView('canvases');
+        }
+      }
+    } catch (err) {
+      console.error('Error eliminando lienzo:', err);
+      alert('Error al eliminar lienzo');
+    }
+  };
+
+  const handleSelectCanvas = (canvas: AppCanvas) => {
+    setSelectedCanvasId(canvas.id);
+    setIsEditingCanvas(true);
+    setIsEditingNote(false);
+    setCurrentView('canvas');
   };
 
   // Handler for global voice note creation with R2 and InsForge metadata
@@ -1073,6 +1152,7 @@ export function App() {
 
   const activeNote = notes.find(n => n.id === selectedNoteId);
   const selectedNotebook = notebooks.find(nb => nb.id === selectedNotebookId) || null;
+  const selectedCanvas = canvases.find(c => c.id === selectedCanvasId) || null;
 
   // 1. Verificación inicial de sesión
   if (isAuthChecking) {
@@ -1146,6 +1226,7 @@ export function App() {
         }}
         onNewNote={() => handleNewNote({ note_type: 'text', title: 'Nueva Nota' })}
         onNewVoiceNote={() => setIsGlobalVoiceModalOpen(true)}
+        onNewCanvas={handleCreateCanvas}
         onNewTaskNote={() => {
           const defaultTaskListHtml = `
             <ul data-type="taskList">
@@ -1169,6 +1250,7 @@ export function App() {
         counts={{
           notebooks: notebooks.filter(nb => !nb.is_archived).length,
           notes: notes.length,
+          canvases: canvases.filter(c => !c.is_archived).length,
           favorites: notes.filter(n => n.is_favorite).length,
           reminders: reminders.filter(r => r.status === 'pending').length,
           tasks: tasks.length,
@@ -1222,6 +1304,22 @@ export function App() {
             onDelete={(noteId) => handleDeleteNote(noteId, true)}
             onNavigateToEntity={handleNavigateToEntity}
             onCreateTaskFromNote={handleCreateTaskFromNote}
+          />
+        ) : isEditingCanvas && selectedCanvas ? (
+          <CanvasEditor
+            key={selectedCanvas.id}
+            canvas={selectedCanvas}
+            onClose={() => {
+              setIsEditingCanvas(false);
+              setCurrentView('canvases');
+            }}
+            onUpdate={handleUpdateCanvas}
+            onDelete={handleDeleteCanvas}
+            projects={projects}
+            notebooks={notebooks}
+            areas={areas}
+            attachments={attachments}
+            onAttachmentCreated={(att) => setAttachments(prev => [att, ...prev])}
           />
         ) : (
           <>
@@ -1298,6 +1396,13 @@ export function App() {
                   onMoveNote={handleMoveNote}
                   onToggleFavorite={handleToggleFavorite}
                   onTogglePin={handleTogglePin}
+                  onNewTask={() => {
+                    setGlobalEditingTask(null);
+                    setIsGlobalTaskModalOpen(true);
+                  }}
+                  onNewCanvas={async () => {
+                    await handleCreateCanvas();
+                  }}
                 />
               ) : (
                 <NotebooksView
@@ -1325,6 +1430,13 @@ export function App() {
                 onMoveNote={handleMoveNote}
                 onToggleFavorite={handleToggleFavorite}
                 onTogglePin={handleTogglePin}
+                onNewTask={() => {
+                  setGlobalEditingTask(null);
+                  setIsGlobalTaskModalOpen(true);
+                }}
+                onNewCanvas={async () => {
+                  await handleCreateCanvas();
+                }}
               />
             )}
 
@@ -1332,6 +1444,7 @@ export function App() {
             {currentView === 'favorites' && (
               <NotebookNotesGrid
                 notebook={null}
+                isFavoritesView={true}
                 notes={notes.filter(n => n.is_favorite)}
                 notebooks={notebooks}
                 onBackToNotebooks={() => setCurrentView('notebooks')}
@@ -1342,6 +1455,26 @@ export function App() {
                 onMoveNote={handleMoveNote}
                 onToggleFavorite={handleToggleFavorite}
                 onTogglePin={handleTogglePin}
+                onNewTask={() => {
+                  setGlobalEditingTask(null);
+                  setIsGlobalTaskModalOpen(true);
+                }}
+                onNewCanvas={async () => {
+                  await handleCreateCanvas();
+                }}
+              />
+            )}
+
+            {/* Canvases View (Excalidraw) */}
+            {(currentView === 'canvases' || currentView === 'canvas') && (
+              <CanvasesView
+                canvases={canvases}
+                projects={projects}
+                notebooks={notebooks}
+                areas={areas}
+                onCreateCanvas={handleCreateCanvas}
+                onSelectCanvas={handleSelectCanvas}
+                onDeleteCanvas={handleDeleteCanvas}
               />
             )}
 
@@ -1644,6 +1777,7 @@ export function App() {
         counts={{
           notebooks: notebooks.filter(nb => !nb.is_archived).length,
           notes: notes.length,
+          canvases: canvases.filter(c => !c.is_archived).length,
           favorites: notes.filter(n => n.is_favorite).length,
           reminders: reminders.filter(r => r.status === 'pending').length,
           tasks: tasks.length,
@@ -1712,6 +1846,7 @@ export function App() {
         objects={objects}
         notebooks={notebooks}
         attachments={attachments}
+        canvases={canvases}
         onSelectEntity={handleNavigateToEntity}
       />
 

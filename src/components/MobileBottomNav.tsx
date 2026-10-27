@@ -18,14 +18,15 @@ import {
   MoreHorizontal,
   Paperclip,
   Mic,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Palette
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas') => void;
   onOpenSearch: () => void;
   onOpenMore?: () => void;
   isMoreOpen?: boolean;
@@ -64,14 +65,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const isCalendarActive = currentView === 'calendar';
   const isTasksActive = currentView === 'tasks';
 
-  // Creation options for Capacities-style "+" button (10 items in responsive grid)
+  // Creation options for Capacities-style "+" button (responsive grid)
   const createOptions: {
-    id: 'note' | 'task' | 'voice' | 'file' | 'media' | 'notebook' | 'page' | 'project' | 'person' | 'object';
+    id: 'note' | 'task' | 'voice' | 'file' | 'media' | 'notebook' | 'page' | 'project' | 'person' | 'object' | 'canvas';
     label: string;
     icon: any;
     color: string;
     bg: string;
   }[] = [
+    {
+      id: 'canvas',
+      label: 'Nuevo Lienzo',
+      icon: Palette,
+      color: 'text-pink-400',
+      bg: 'bg-pink-950/40 border-pink-800/40 hover:border-pink-600/50'
+    },
     {
       id: 'note',
       label: 'Nueva Nota',

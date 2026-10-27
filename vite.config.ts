@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { r2Middleware } from './src/lib/r2VitePlugin';
 import { loadEnvFiles, getR2ObjectStream } from './src/lib/r2Server';
+import { webScraperMiddleware } from './src/lib/webScraperServer';
 
 export default defineConfig({
   plugins: [
@@ -10,6 +11,12 @@ export default defineConfig({
       name: 'cloudflare-r2-api-server',
       configureServer(server) {
         server.middlewares.use(r2Middleware);
+      }
+    },
+    {
+      name: 'web-scraper-api-server',
+      configureServer(server) {
+        server.middlewares.use(webScraperMiddleware);
       }
     },
     {
@@ -112,6 +119,9 @@ export default defineConfig({
       }
     }
   ],
+  define: {
+    'process.env.IS_PREACT': JSON.stringify('false')
+  },
   server: {
     port: 3000,
     open: false

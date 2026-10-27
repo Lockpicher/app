@@ -95,6 +95,10 @@ import { r2Storage } from '../lib/r2Client';
 import { hashPassword } from '../lib/security';
 import { AudioRecorderModal } from './AudioRecorderModal';
 import { UniversalLinkSelectorModal, UniversalLinkItem } from './UniversalLinkSelectorModal';
+import { TableGridPicker } from './TableGridPicker';
+import { TableToolbar } from './TableToolbar';
+import { AudioNode } from './tiptap/AudioNode';
+import { AudioInsertModal } from './AudioInsertModal';
 
 interface RichNoteEditorProps {
   note: AppNote;
@@ -191,6 +195,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       TaskList,
       TaskItem.configure({ nested: true }),
       Image.configure({ inline: true, allowBase64: true }),
+      AudioNode,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -211,6 +216,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               handleInsertImage(file);
               return true;
             }
+          } else if (item.type.startsWith('audio/')) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              handleInsertAudioFile(file);
+              return true;
+            }
           }
         }
         return false;
@@ -222,20 +234,26 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             event.preventDefault();
             handleInsertImage(file);
             return true;
+          } else if (file.type.startsWith('audio/')) {
+            event.preventDefault();
+            handleInsertAudioFile(file);
+            return true;
           }
         }
         return false;
       }
     },
     content: (() => {
-      // If content_json exists, check whether note.content (HTML) contains images that might be missing in content_json
+      // If content_json exists, check whether note.content (HTML) contains images or audio that might be missing in content_json
       if (note.content_json && typeof note.content_json === 'object' && Object.keys(note.content_json).length > 0) {
         const jsonStr = JSON.stringify(note.content_json);
         const htmlHasImage = typeof note.content === 'string' && note.content.includes('<img');
         const jsonHasImage = jsonStr.includes('"type":"image"') || jsonStr.includes('"image"');
+        const htmlHasAudio = typeof note.content === 'string' && (note.content.includes('audio-player') || note.content.includes('<audio'));
+        const jsonHasAudio = jsonStr.includes('audioNode');
         
-        // If HTML has image tags but JSON missed them, prefer the HTML version to prevent disappearing images
-        if (htmlHasImage && !jsonHasImage) {
+        // If HTML has images or audio but JSON missed them, prefer the HTML version to prevent disappearing media
+        if ((htmlHasImage && !jsonHasImage) || (htmlHasAudio && !jsonHasAudio)) {
           return note.content;
         }
         return note.content_json;
@@ -567,6 +585,51 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       if (fileUploadInputRef.current) {
         fileUploadInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleInsertAudioFile = async (file: File) => {
+    try {
+      setIsUploadingImage(true);
+      const res = await r2Storage.uploadFile(file, `notes/${note.id}/audio`);
+      let attachmentId = '';
+      try {
+        const createdAtt = await db.recordAttachment({
+          entity_id: note.id,
+          entity_type: 'note',
+          file_name: res.name,
+          display_name: file.name,
+          file_url: res.url,
+          file_path: res.r2Key,
+          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+          storage_provider: res.provider,
+          file_size: res.size,
+          mime_type: res.mime,
+          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+        });
+        if (createdAtt) attachmentId = createdAtt.id;
+        loadAttachments();
+      } catch (attErr) {
+        console.warn('Adjunto de audio registrado en la nota visualmente, error en metadatos:', attErr);
+      }
+
+      if (editor) {
+        editor.chain().focus().setAudioNode({
+          src: res.url,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          fileId: attachmentId,
+          r2Key: res.r2Key,
+          mimeType: res.mime,
+          size: res.size
+        }).run();
+      }
+      setSaveStatus('dirty');
+    } catch (e: any) {
+      console.error('Error insertando audio en nota:', e);
+      alert('Error subiendo audio: ' + (e.message || 'Error de red'));
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -922,17 +985,26 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             {/* Favorite Toggle */}
             <button
               type="button"
-              onClick={() => {
-                setIsFavorite(!isFavorite);
+              onClick={async () => {
+                const nextFav = !isFavorite;
+                setIsFavorite(nextFav);
                 setSaveStatus('dirty');
+                try {
+                  await onSave(note.id, { is_favorite: nextFav });
+                  setSaveStatus('saved');
+                } catch {
+                  // Fallback to auto-save debounce
+                }
               }}
               className={`p-1.5 rounded-lg transition ${
-                isFavorite ? 'text-amber-400 bg-amber-500/10' : 'text-gray-400 hover:text-white hover:bg-[#20202e]'
+                isFavorite 
+                  ? 'text-amber-400 bg-amber-500/15 ring-1 ring-amber-500/30' 
+                  : 'text-gray-400 hover:text-amber-300 hover:bg-[#20202e]'
               }`}
               title={isFavorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
               aria-label="Favorito"
             >
-              <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+              <Star className={`w-4 h-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
             </button>
 
             {/* Manual Save Button - Always visible, never hidden */}
@@ -1297,129 +1369,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
               <span className="w-px h-3.5 bg-[#2b2b3e] mx-0.5" />
 
-              {/* Media & Structures */}
-              <div className="relative inline-flex items-center" ref={tableMenuRef}>
-                <button
-                  onClick={() => {
-                    if (editor.isActive('table')) {
-                      setIsTableMenuOpen(!isTableMenuOpen);
-                    } else {
-                      handleInsertTable();
-                    }
-                  }}
-                  className={`p-1 sm:p-1.5 rounded transition flex items-center gap-0.5 ${
-                    editor.isActive('table')
-                      ? 'bg-blue-600 text-white ring-1 ring-blue-400'
-                      : 'text-gray-400 hover:text-white hover:bg-[#252538]'
-                  }`}
-                  title={editor.isActive('table') ? 'Gestionar tabla activa' : 'Insertar Tabla Editable (3x3)'}
-                >
-                  <Boxes className="w-3.5 h-3.5" />
-                  {editor.isActive('table') && <ChevronDown className="w-3 h-3 text-white/80" />}
-                </button>
-
-                {/* Table Dropdown Menu */}
-                {isTableMenuOpen && editor.isActive('table') && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-1.5 w-56 bg-[#1a1a28] border border-[#2d2d42] rounded-lg shadow-xl z-50 py-1.5 text-xs text-gray-200 divide-y divide-[#28283a]">
-                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                      Fila
-                    </div>
-                    <div className="py-1">
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().addRowBefore().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Añadir fila arriba</span>
-                        <span className="text-[10px] text-gray-400">↑</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().addRowAfter().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Añadir fila abajo</span>
-                        <span className="text-[10px] text-gray-400">↓</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().deleteRow().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-red-600/80 text-red-300 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Eliminar fila</span>
-                        <span className="text-[10px]">✕</span>
-                      </button>
-                    </div>
-
-                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                      Columna
-                    </div>
-                    <div className="py-1">
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().addColumnBefore().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Añadir columna izquierda</span>
-                        <span className="text-[10px] text-gray-400">←</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().addColumnAfter().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Añadir columna derecha</span>
-                        <span className="text-[10px] text-gray-400">→</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().deleteColumn().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-red-600/80 text-red-300 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Eliminar columna</span>
-                        <span className="text-[10px]">✕</span>
-                      </button>
-                    </div>
-
-                    <div className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                      Tabla
-                    </div>
-                    <div className="py-1">
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().toggleHeaderRow().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-blue-600 hover:text-white flex items-center justify-between transition"
-                      >
-                        <span>Alternar fila encabezado</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          editor.chain().focus().deleteTable().run();
-                          setIsTableMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-red-600 text-red-300 hover:text-white font-medium flex items-center justify-between transition"
-                      >
-                        <span>Eliminar tabla completa</span>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Media & Structures: Visual Table Matrix Picker */}
+              <TableGridPicker editor={editor} onTableDeleted={() => setSaveStatus('dirty')} />
 
               <button
                 onClick={handleAddLink}
@@ -1520,94 +1471,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             </div>
           </div>
 
-          {/* Dedicated Contextual Action Bar when Cursor is inside a Table - Centered, wrapping cleanly */}
-          {editor.isActive('table') && (
-            <div className="border-t border-[#222232] bg-[#1a1a29]/95 backdrop-blur-sm px-2 sm:px-4 py-1.5">
-              <div className="max-w-[840px] mx-auto flex flex-wrap items-center justify-center sm:justify-between gap-2 text-xs">
-                <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-400 uppercase tracking-wider pr-1">
-                    <Boxes className="w-3.5 h-3.5 text-blue-400" />
-                    Tabla:
-                  </span>
-
-                  {/* Row operations */}
-                  <div className="flex items-center gap-0.5 sm:gap-1 bg-[#222235] px-1 sm:px-1.5 py-0.5 rounded-md border border-[#2f2f45]">
-                    <span className="text-[10px] text-gray-400 uppercase font-medium mr-1 flex items-center gap-0.5">
-                      <Rows className="w-3 h-3 text-gray-400" /> Fila:
-                    </span>
-                    <button
-                      onClick={() => editor.chain().focus().addRowBefore().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
-                      title="Añadir fila encima de la actual"
-                    >
-                      + Encima
-                    </button>
-                    <button
-                      onClick={() => editor.chain().focus().addRowAfter().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
-                      title="Añadir fila debajo de la actual"
-                    >
-                      + Debajo
-                    </button>
-                    <button
-                      onClick={() => editor.chain().focus().deleteRow().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded text-[11px] transition"
-                      title="Eliminar fila actual"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-
-                  {/* Column operations */}
-                  <div className="flex items-center gap-0.5 sm:gap-1 bg-[#222235] px-1 sm:px-1.5 py-0.5 rounded-md border border-[#2f2f45]">
-                    <span className="text-[10px] text-gray-400 uppercase font-medium mr-1 flex items-center gap-0.5">
-                      <Columns className="w-3 h-3 text-gray-400" /> Columna:
-                    </span>
-                    <button
-                      onClick={() => editor.chain().focus().addColumnBefore().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
-                      title="Añadir columna a la izquierda"
-                    >
-                      + Izq
-                    </button>
-                    <button
-                      onClick={() => editor.chain().focus().addColumnAfter().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-gray-300 hover:text-white hover:bg-[#32324a] rounded text-[11px] transition"
-                      title="Añadir columna a la derecha"
-                    >
-                      + Der
-                    </button>
-                    <button
-                      onClick={() => editor.chain().focus().deleteColumn().run()}
-                      className="px-1.5 sm:px-2 py-0.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded text-[11px] transition"
-                      title="Eliminar columna actual"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-
-                  {/* Table Header Row Toggle */}
-                  <button
-                    onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-                    className="px-2 py-1 text-gray-300 hover:text-white bg-[#222235] hover:bg-[#32324a] border border-[#2f2f45] rounded-md text-[11px] transition"
-                    title="Alternar estilo de fila de encabezado"
-                  >
-                    Encabezado
-                  </button>
-                </div>
-
-                {/* Delete table */}
-                <button
-                  onClick={() => editor.chain().focus().deleteTable().run()}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-red-400 hover:text-red-200 hover:bg-red-950/60 border border-red-900/40 rounded-md text-[11px] transition shrink-0 font-medium"
-                  title="Eliminar tabla completa"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar tabla</span>
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Dedicated Contextual Action Bar when Cursor is inside a Table */}
+          <TableToolbar editor={editor} onTableDeleted={() => setSaveStatus('dirty')} />
         </div>
       )}
 
@@ -1987,22 +1852,23 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         )}
       </div>
 
-      {/* Voice Recorder Modal */}
-      <AudioRecorderModal
+      {/* Audio & Voice Note In-Document Insert Modal */}
+      <AudioInsertModal
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}
-        notebookId={notebookId}
-        onSaveVoiceNote={async (audioData) => {
-          await onSave(note.id, {
-            note_type: 'audio',
-            audio_url: audioData.audioUrl,
-            audio_duration: audioData.durationSeconds,
-            audio_transcription: audioData.transcription,
-            audio_transcription_status: audioData.transcriptionStatus
-          });
-          if (editor && audioData.transcription) {
-            editor.chain().focus().insertContent(`<p><strong>Transcripción de Voz:</strong> ${audioData.transcription}</p>`).run();
+        editor={editor}
+        entityId={note.id}
+        entityType="note"
+        existingAttachments={attachments}
+        onAudioInserted={async (audioData) => {
+          if (!note.audio_url) {
+            await onSave(note.id, {
+              note_type: 'audio',
+              audio_url: audioData.url,
+              audio_duration: audioData.duration
+            });
           }
+          setSaveStatus('dirty');
         }}
       />
 

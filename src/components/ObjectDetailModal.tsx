@@ -58,12 +58,17 @@ import {
   Maximize2,
   Minimize2,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Mic
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { DatePickerInput } from './DatePickerInput';
 import { r2Storage } from '../lib/r2Client';
+import { TableGridPicker } from './TableGridPicker';
+import { TableToolbar } from './TableToolbar';
+import { AudioNode } from './tiptap/AudioNode';
+import { AudioInsertModal } from './AudioInsertModal';
 
 interface ObjectDetailModalProps {
   object: AppObject | null;
@@ -123,6 +128,7 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
   // TipTap image uploading state
   const [isUploadingEditorImage, setIsUploadingEditorImage] = useState(false);
   const editorImageInputRef = useRef<HTMLInputElement>(null);
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
 
   // Quick entity linker state in editor
   const [showEntityLinker, setShowEntityLinker] = useState(false);
@@ -166,6 +172,7 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
       TaskList,
       TaskItem.configure({ nested: true }),
       Image.configure({ inline: false, allowBase64: false }),
+      AudioNode,
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -926,6 +933,9 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
 
+                    {/* Table Matrix Picker */}
+                    <TableGridPicker editor={editor} onTableDeleted={() => setIsEditing(true)} />
+
                     {/* Insert Image via R2 */}
                     <input
                       type="file"
@@ -951,6 +961,16 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
                         <ImageIcon className="w-3 h-3 text-cyan-400" />
                       )}
                       <span>Insertar Imagen</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAudioModalOpen(true)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#2d1e25] hover:bg-[#3d2532] text-red-300 border border-red-500/30 transition text-[11px]"
+                      title="Grabar o insertar nota de voz"
+                    >
+                      <Mic className="w-3 h-3 text-red-400" />
+                      <span>Voz</span>
                     </button>
 
                     {/* Link to Entity */}
@@ -996,6 +1016,9 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Contextual Table Management Toolbar */}
+              <TableToolbar editor={editor} onTableDeleted={() => setIsEditing(true)} className="rounded-xl border border-[#2b2b3d] shadow-lg mb-2" />
 
               {/* Editor Workspace Area */}
               <div 
@@ -1094,6 +1117,19 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Audio & Voice Note In-Document Insert Modal */}
+      {isAudioModalOpen && object && (
+        <AudioInsertModal
+          isOpen={isAudioModalOpen}
+          onClose={() => setIsAudioModalOpen(false)}
+          editor={editor}
+          entityId={object.id}
+          entityType="object"
+          existingAttachments={attachments}
+          onAudioInserted={() => setIsEditing(true)}
+        />
+      )}
     </div>
   );
 };

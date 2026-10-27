@@ -12,6 +12,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",
     "@aws-sdk/s3-request-presigner": "^3.1152.0",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@insforge/sdk": "^1.5.2",
     "@tiptap/extension-color": "^3.32.0",
     "@tiptap/extension-highlight": "^3.32.0",
@@ -32,6 +33,7 @@
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.4.17",
     "lucide-react": "^0.475.0",
+    "pdfjs-dist": "3.11.174",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.3",

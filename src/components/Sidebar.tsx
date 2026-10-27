@@ -30,7 +30,8 @@ import {
   Moon,
   Flame,
   Paperclip,
-  Mic
+  Mic,
+  Palette
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -44,6 +45,7 @@ interface SidebarProps {
   onSelectNote: (id: string) => void;
   onNewNote: () => void;
   onNewVoiceNote?: () => void;
+  onNewCanvas?: () => void;
   onNewTaskNote?: () => void;
   onNewNotebook?: () => void;
   onUploadFile?: () => void;
@@ -55,6 +57,7 @@ interface SidebarProps {
     tasks: number;
     projects: number;
     objects: number;
+    canvases?: number;
     habits?: number;
     inbox?: number;
     areas?: number;
@@ -80,6 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectNote,
   onNewNote,
   onNewVoiceNote,
+  onNewCanvas,
   onNewTaskNote,
   onNewNotebook,
   onUploadFile,
@@ -427,6 +431,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Mic className="w-4 h-4" />
                   </button>
                 )}
+
+                {onNewCanvas && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onNewCanvas();
+                      if (onCloseMobile) onCloseMobile();
+                    }}
+                    className="p-1.5 bg-[#1b1b24] hover:bg-[#252534] border border-[#2e2e42] hover:border-pink-500/50 text-pink-400 hover:text-pink-300 rounded-lg transition active:scale-95 flex items-center justify-center flex-shrink-0"
+                    title="Nuevo Lienzo (Excalidraw)"
+                    aria-label="Nuevo Lienzo"
+                  >
+                    <Palette className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
               {/* Unified Quick Switcher Button */}
@@ -475,6 +494,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   title="Nueva nota de voz"
                 >
                   <Mic className="w-4 h-4" />
+                </button>
+              )}
+              {onNewCanvas && (
+                <button
+                  type="button"
+                  onClick={onNewCanvas}
+                  className="p-2 bg-[#1c1c28] text-pink-400 hover:text-pink-300 rounded-lg hover:bg-[#252538] transition border border-[#2d2d40]"
+                  title="Nuevo Lienzo (Excalidraw)"
+                >
+                  <Palette className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -575,6 +604,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {renderNavItem('all_notes', 'Todas las notas', <FileText className="w-4 h-4 text-purple-400" />, {
                   count: counts.notes,
                   activeCondition: currentView === 'all_notes' || currentView === 'notes'
+                })}
+
+                {/* Lienzos Visuales (Excalidraw) */}
+                {renderNavItem('canvases', 'Lienzos', <Palette className="w-4 h-4 text-pink-400" />, {
+                  count: counts.canvases,
+                  activeCondition: currentView === 'canvases' || currentView === 'canvas'
                 })}
 
                 {/* Favoritos */}

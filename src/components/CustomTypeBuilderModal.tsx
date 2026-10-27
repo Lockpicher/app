@@ -37,7 +37,7 @@ const FIELD_TYPE_OPTIONS: { type: ObjectFieldType; label: string; icon: any }[] 
   { type: 'multiselect', label: 'Selección Múltiple', icon: Layers },
 ];
 
-const PRESET_ICONS = ['user', 'calendar', 'link', 'book', 'lightbulb', 'podcast', 'film', 'building', 'briefcase', 'map-pin', 'award', 'box'];
+const PRESET_ICONS = ['user', 'calendar', 'link', 'book', 'lightbulb', 'podcast', 'film', 'building', 'briefcase', 'map-pin', 'award', 'box', 'atom', 'plane', 'sparkles'];
 const PRESET_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#e11d48'];
 
 export const CustomTypeBuilderModal: React.FC<CustomTypeBuilderModalProps> = ({

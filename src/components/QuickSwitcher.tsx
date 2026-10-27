@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User } from 'lucide-react';
-import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment } from '../lib/types';
+import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User, Palette, Atom, Plane, Sparkles } from 'lucide-react';
+import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment, AppCanvas, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { db } from '../lib/insforge';
 
 interface QuickSwitcherProps {
@@ -12,7 +12,8 @@ interface QuickSwitcherProps {
   objects: AppObject[];
   notebooks?: AppNotebook[];
   attachments?: AppAttachment[];
-  onSelectEntity: (id: string, type: 'note' | 'task' | 'project' | 'object' | 'notebook' | 'file') => void;
+  canvases?: AppCanvas[];
+  onSelectEntity: (id: string, type: 'note' | 'task' | 'project' | 'object' | 'notebook' | 'file' | 'canvas') => void;
 }
 
 export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
@@ -24,6 +25,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   objects,
   notebooks = [],
   attachments = [],
+  canvases = [],
   onSelectEntity
 }) => {
   const [query, setQuery] = useState('');
@@ -39,14 +41,18 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   const allItems = [
     ...notebooks.map(nb => ({ id: nb.id, title: nb.name, type: 'notebook' as const, subtitle: 'Cuaderno de notas' })),
     ...notes.map(n => ({ id: n.id, title: n.title, type: 'note' as const, subtitle: `Nota • ${n.note_type || 'texto'}` })),
+    ...canvases.map(c => ({ id: c.id, title: c.title, type: 'canvas' as const, subtitle: `Lienzo visual${c.elements?.length ? ` • ${c.elements.length} elementos` : ''}` })),
     ...projects.map(p => ({ id: p.id, title: p.title, type: 'project' as const, subtitle: `Proyecto • ${p.status}` })),
     ...tasks.map(t => ({ id: t.id, title: t.title, type: 'task' as const, subtitle: `Tarea • ${t.status}` })),
-    ...objects.map(o => ({ 
-      id: o.id, 
-      title: o.title, 
-      type: 'object' as const, 
-      subtitle: o.object_type === 'page' ? 'Página de conocimiento' : o.object_type === 'person' ? 'Contacto / Persona' : `Objeto • ${o.object_type}` 
-    })),
+    ...objects.map(o => {
+      const typeDef = DEFAULT_OBJECT_TYPES.find(t => t.id === o.object_type);
+      return { 
+        id: o.id, 
+        title: o.title, 
+        type: 'object' as const, 
+        subtitle: typeDef ? `${typeDef.name}${o.description ? ` • ${o.description}` : ''}` : `Objeto • ${o.object_type}` 
+      };
+    }),
     ...attachments.map(a => ({ id: a.id, title: a.display_name || a.file_name, type: 'file' as const, subtitle: `Archivo R2 • ${a.mime_type || 'archivo'}` }))
   ];
 
@@ -74,6 +80,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
     switch (item.type) {
       case 'notebook': return <Book className="w-4 h-4 text-blue-400" />;
       case 'note': return <FileText className="w-4 h-4 text-purple-400" />;
+      case 'canvas': return <Palette className="w-4 h-4 text-emerald-400" />;
       case 'project': return <FolderKanban className="w-4 h-4 text-blue-400" />;
       case 'task': return <CheckSquare className="w-4 h-4 text-amber-400" />;
       case 'file': return <HardDrive className="w-4 h-4 text-cyan-400" />;
@@ -81,6 +88,9 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
         const obj = objects.find(o => o.id === item.id);
         if (obj?.object_type === 'page') return <Layers className="w-4 h-4 text-indigo-400" />;
         if (obj?.object_type === 'person') return <User className="w-4 h-4 text-emerald-400" />;
+        if (obj?.object_type === 'atomic_note') return <Atom className="w-4 h-4 text-cyan-400" />;
+        if (obj?.object_type === 'trip') return <Plane className="w-4 h-4 text-teal-400" />;
+        if (obj?.object_type === 'idea') return <Sparkles className="w-4 h-4 text-amber-400" />;
         return <Boxes className="w-4 h-4 text-pink-400" />;
       }
       default: return <Search className="w-4 h-4 text-gray-400" />;

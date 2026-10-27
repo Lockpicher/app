@@ -21,7 +21,8 @@ import {
   Flame,
   X,
   User,
-  ShieldCheck
+  ShieldCheck,
+  Palette
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
@@ -50,6 +51,7 @@ interface MobileDrawerProps {
     tasks: number;
     projects: number;
     objects: number;
+    canvases?: number;
     habits?: number;
     inbox?: number;
     areas?: number;
@@ -238,6 +240,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
             </span>
             {renderRow('all_notes', 'Todas las notas', <FileText className="w-5 h-5 text-purple-400" />, counts.notes, currentView === 'all_notes' || currentView === 'notes')}
             {renderRow('notebooks', 'Cuadernos', <Book className="w-5 h-5 text-blue-400" />, counts.notebooks)}
+            {renderRow('canvases', 'Lienzos visuales', <Palette className="w-5 h-5 text-pink-400" />, counts.canvases, currentView === 'canvases' || currentView === 'canvas')}
             {renderRow('favorites', 'Favoritos', <Star className="w-5 h-5 text-amber-400" />, counts.favorites)}
             {renderRow('objects', 'Objetos y Entidades', <Boxes className="w-5 h-5 text-emerald-400" />, counts.objects)}
             {renderRow('graph', 'Grafo de Red', <Share2 className="w-5 h-5 text-indigo-400" />)}

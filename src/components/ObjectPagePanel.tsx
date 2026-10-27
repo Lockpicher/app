@@ -7,6 +7,11 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import { cleanPastedHtml, plainTextToHtml, uploadBase64ImagesToR2 } from '../lib/htmlPasteCleaner';
 import { 
   X, 
   Trash2, 
@@ -50,7 +55,10 @@ import {
   Image as ImageIcon,
   Link2,
   Undo2,
-  Redo2
+  Redo2,
+  Atom,
+  Plane,
+  Mic
 } from 'lucide-react';
 import { 
   AppObject, 
@@ -70,6 +78,14 @@ import { DatePickerInput } from './DatePickerInput';
 import { syncPersonBirthdayReminders } from '../lib/birthdays';
 import { db } from '../lib/insforge';
 import { r2Storage } from '../lib/r2Client';
+import { TripManagerView } from './TripManagerView';
+import { PersonProfileView } from './PersonProfileView';
+import { BookProfileView } from './BookProfileView';
+import { PageDocumentView } from './PageDocumentView';
+import { TableGridPicker } from './TableGridPicker';
+import { TableToolbar } from './TableToolbar';
+import { AudioNode } from './tiptap/AudioNode';
+import { AudioInsertModal } from './AudioInsertModal';
 
 interface ObjectPagePanelProps {
   object: AppObject | null;
@@ -132,6 +148,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
   const [isLoadingLinks, setIsLoadingLinks] = useState(false);
   const [isLinkSelectorOpen, setIsLinkSelectorOpen] = useState(false);
   const [linkInitialQuery, setLinkInitialQuery] = useState('');
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
 
   // Interactions (timeline)
   const [interactions, setInteractions] = useState<PersonInteraction[]>([]);
@@ -245,6 +262,10 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Underline,
       Highlight.configure({ multicolor: true }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Image.configure({
         inline: true,
         allowBase64: true,
@@ -254,11 +275,13 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      AudioNode,
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-blue-400 underline cursor-pointer' } })
     ],
     content: object.content || '',
     editorProps: {
       handlePaste: (_view, event) => {
+        // 1. Check for image files in clipboard
         const items = event.clipboardData?.items;
         if (items) {
           for (let i = 0; i < items.length; i++) {
@@ -272,6 +295,34 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
             }
           }
         }
+
+        // 2. Check for HTML content (from Web, Word, Google Docs)
+        const html = event.clipboardData?.getData('text/html');
+        if (html && html.trim()) {
+          event.preventDefault();
+          const cleaned = cleanPastedHtml(html);
+          uploadBase64ImagesToR2(cleaned, `objects/${object.id}/pasted-content`)
+            .then(finalHtml => {
+              editor?.commands.insertContent(finalHtml);
+              setSaveStatus('dirty');
+            })
+            .catch(() => {
+              editor?.commands.insertContent(cleaned);
+              setSaveStatus('dirty');
+            });
+          return true;
+        }
+
+        // 3. Fallback for plain text with line breaks
+        const plainText = event.clipboardData?.getData('text/plain');
+        if (plainText && plainText.includes('\n')) {
+          event.preventDefault();
+          const htmlFromText = plainTextToHtml(plainText);
+          editor?.commands.insertContent(htmlFromText);
+          setSaveStatus('dirty');
+          return true;
+        }
+
         return false;
       },
       handleDrop: (_view, event, _slice, moved) => {
@@ -545,7 +596,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
       type: 'object',
       title: o?.title || 'Objeto',
       subtitle: o?.object_type || 'Objeto',
-      icon: o?.object_type === 'person' ? User : o?.object_type === 'company' ? Building2 : Boxes
+      icon: o?.object_type === 'person' ? User : o?.object_type === 'company' ? Building2 : o?.object_type === 'atomic_note' ? Atom : o?.object_type === 'trip' ? Plane : o?.object_type === 'idea' ? Sparkles : Boxes
     };
   };
 
@@ -694,7 +745,255 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
 
         {/* Scrollable Body: Split Layout (Desktop 2-col, Mobile stacked) */}
         <div className="flex-1 overflow-y-auto no-scrollbar">
-          <div className="grid grid-cols-1 lg:grid-cols-12 min-h-full">
+          {object.object_type === 'trip' ? (
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+              {/* Header: Foto/Icono, Portada opcional, Título y Descripción */}
+              <div className="space-y-4">
+                {/* Portada si existe */}
+                {thumbnailUrl && (
+                  <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-[#2b2b3e] group bg-[#161622]">
+                    <img 
+                      src={thumbnailUrl} 
+                      alt="" 
+                      className="w-full h-full object-cover" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThumbnailUrl('');
+                        setSaveStatus('dirty');
+                      }}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition"
+                      title="Quitar portada"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-4">
+                  {/* Foto de perfil / Icono representativo */}
+                  <div className="relative group flex-shrink-0">
+                    <div 
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md overflow-hidden border border-[#2b2b3e]"
+                      style={{ backgroundColor: `${typeColor}25`, color: typeColor }}
+                    >
+                      {thumbnailUrl && !thumbnailUrl.includes('cover') ? (
+                        <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Plane className="w-8 h-8 text-teal-400" />
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => coverInputRef.current?.click()}
+                      disabled={isUploadingCover}
+                      className="absolute -bottom-1 -right-1 p-1 rounded-lg bg-[#20202e] border border-[#303046] text-gray-300 hover:text-white transition shadow-sm"
+                      title="Cambiar foto o portada"
+                    >
+                      {isUploadingCover ? <Loader2 className="w-3 h-3 animate-spin text-teal-400" /> : <Camera className="w-3 h-3" />}
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={coverInputRef} 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleUploadCover(e.target.files[0]);
+                        }
+                      }} 
+                    />
+                  </div>
+
+                  {/* Title and Short Description */}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        setSaveStatus('dirty');
+                      }}
+                      placeholder="Nombre del viaje (ej. Boyacá, Europa 2026)..."
+                      className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-white outline-none placeholder-gray-600 tracking-tight"
+                    />
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={(e) => {
+                        setDescription(e.target.value);
+                        setSaveStatus('dirty');
+                      }}
+                      placeholder="Descripción breve del viaje..."
+                      className="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Gestor Integral de Viajes (6 Secciones / Pestañas) */}
+              <TripManagerView
+                object={object}
+                properties={properties}
+                onPropertyChange={(key, val) => {
+                  setProperties(prev => ({ ...prev, [key]: val }));
+                  setSaveStatus('dirty');
+                }}
+                editor={editor}
+                editorImageInputRef={editorImageInputRef}
+                onUploadImage={handleUploadImage}
+                allObjects={allObjects}
+                projects={projects}
+                areas={areas}
+                notes={notes}
+                attachments={attachments}
+                onAttachmentCreated={onAttachmentCreated}
+                onAttachmentDeleted={onAttachmentDeleted}
+                outgoingLinks={outgoingLinks}
+                incomingLinks={incomingLinks}
+                onOpenLinkSelector={() => setIsLinkSelectorOpen(true)}
+                onOpenNote={onOpenNote}
+                onNavigateToObject={onNavigateToObject}
+                onNavigateToEntity={onNavigateToEntity}
+                onSaveStatusChange={setSaveStatus}
+                onOpenAudioModal={() => setIsAudioModalOpen(true)}
+              />
+            </div>
+          ) : object.object_type === 'person' ? (
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+              <PersonProfileView
+                object={object}
+                properties={properties}
+                onPropertyChange={(key, val) => {
+                  setProperties(prev => ({ ...prev, [key]: val }));
+                  setSaveStatus('dirty');
+                }}
+                title={title}
+                onTitleChange={(newTitle) => {
+                  setTitle(newTitle);
+                  setSaveStatus('dirty');
+                }}
+                description={description}
+                onDescriptionChange={(newDesc) => {
+                  setDescription(newDesc);
+                  setSaveStatus('dirty');
+                }}
+                thumbnailUrl={thumbnailUrl}
+                onThumbnailUrlChange={(newUrl) => {
+                  setThumbnailUrl(newUrl);
+                  setSaveStatus('dirty');
+                }}
+                editor={editor}
+                editorImageInputRef={editorImageInputRef}
+                onUploadImage={handleUploadImage}
+                allObjects={allObjects}
+                projects={projects}
+                areas={areas}
+                notes={notes}
+                attachments={attachments}
+                onAttachmentCreated={onAttachmentCreated}
+                onAttachmentDeleted={onAttachmentDeleted}
+                outgoingLinks={outgoingLinks}
+                incomingLinks={incomingLinks}
+                onOpenLinkSelector={() => setIsLinkSelectorOpen(true)}
+                onOpenNote={onOpenNote}
+                onNavigateToObject={onNavigateToObject}
+                onNavigateToEntity={onNavigateToEntity}
+                onSaveStatusChange={setSaveStatus}
+                onOpenAudioModal={() => setIsAudioModalOpen(true)}
+              />
+            </div>
+          ) : object.object_type === 'book' ? (
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+              <BookProfileView
+                object={object}
+                properties={properties}
+                onPropertyChange={(key, val) => {
+                  setProperties(prev => ({ ...prev, [key]: val }));
+                  setSaveStatus('dirty');
+                }}
+                title={title}
+                onTitleChange={(newTitle) => {
+                  setTitle(newTitle);
+                  setSaveStatus('dirty');
+                }}
+                description={description}
+                onDescriptionChange={(newDesc) => {
+                  setDescription(newDesc);
+                  setSaveStatus('dirty');
+                }}
+                thumbnailUrl={thumbnailUrl}
+                onThumbnailUrlChange={(newUrl) => {
+                  setThumbnailUrl(newUrl);
+                  setSaveStatus('dirty');
+                }}
+                editor={editor}
+                editorImageInputRef={editorImageInputRef}
+                onUploadImage={handleUploadImage}
+                allObjects={allObjects}
+                projects={projects}
+                areas={areas}
+                notes={notes}
+                attachments={attachments}
+                onAttachmentCreated={onAttachmentCreated}
+                onAttachmentDeleted={onAttachmentDeleted}
+                outgoingLinks={outgoingLinks}
+                incomingLinks={incomingLinks}
+                onOpenLinkSelector={() => setIsLinkSelectorOpen(true)}
+                onOpenNote={onOpenNote}
+                onNavigateToObject={onNavigateToObject}
+                onNavigateToEntity={onNavigateToEntity}
+                onSaveStatusChange={setSaveStatus}
+                onOpenAudioModal={() => setIsAudioModalOpen(true)}
+              />
+            </div>
+          ) : object.object_type === 'page' ? (
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+              <PageDocumentView
+                object={object}
+                properties={properties}
+                onPropertyChange={(key, val) => {
+                  setProperties(prev => ({ ...prev, [key]: val }));
+                  setSaveStatus('dirty');
+                }}
+                title={title}
+                onTitleChange={(newTitle) => {
+                  setTitle(newTitle);
+                  setSaveStatus('dirty');
+                }}
+                description={description}
+                onDescriptionChange={(newDesc) => {
+                  setDescription(newDesc);
+                  setSaveStatus('dirty');
+                }}
+                thumbnailUrl={thumbnailUrl}
+                onThumbnailUrlChange={(newUrl) => {
+                  setThumbnailUrl(newUrl);
+                  setSaveStatus('dirty');
+                }}
+                editor={editor}
+                editorImageInputRef={editorImageInputRef}
+                onUploadImage={handleUploadImage}
+                allObjects={allObjects}
+                projects={projects}
+                areas={areas}
+                notes={notes}
+                attachments={attachments}
+                onAttachmentCreated={onAttachmentCreated}
+                onAttachmentDeleted={onAttachmentDeleted}
+                outgoingLinks={outgoingLinks}
+                incomingLinks={incomingLinks}
+                onOpenLinkSelector={() => setIsLinkSelectorOpen(true)}
+                onOpenNote={onOpenNote}
+                onNavigateToObject={onNavigateToObject}
+                onNavigateToEntity={onNavigateToEntity}
+                onSaveStatusChange={setSaveStatus}
+                onOpenAudioModal={() => setIsAudioModalOpen(true)}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 min-h-full">
             
             {/* LEFT MAIN CONTENT: Header, Title, Rich Notes, Timeline (7 cols) */}
             <div className="lg:col-span-7 p-4 sm:p-6 lg:p-8 space-y-6 lg:border-r border-[#202030]">
@@ -1024,6 +1323,11 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                         </button>
                       </div>
 
+                      {/* Tablas Interactivas */}
+                      <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e]">
+                        <TableGridPicker editor={editor} onTableDeleted={() => setSaveStatus('dirty')} />
+                      </div>
+
                       {/* Deshacer / Rehacer */}
                       <div className="flex items-center gap-0.5 mr-1 pr-1.5 border-r border-[#2a2a3e] hidden md:flex">
                         <button
@@ -1086,9 +1390,21 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                         >
                           <Globe className="w-3.5 h-3.5" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsAudioModalOpen(true)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 transition shadow-sm"
+                          title="Grabar o insertar nota de voz en la posición del cursor"
+                        >
+                          <Mic className="w-3.5 h-3.5 text-red-400" />
+                          <span>Voz</span>
+                        </button>
                       </div>
                     </div>
                   )}
+
+                  {/* Contextual Table Management Toolbar */}
+                  <TableToolbar editor={editor} onTableDeleted={() => setSaveStatus('dirty')} />
 
                   {/* Lienzo del Editor TipTap */}
                   <div 
@@ -1536,6 +1852,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
             </div>
 
           </div>
+          )}
         </div>
 
       </div>
@@ -1555,6 +1872,17 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
         currentEntityId={object.id}
         currentEntityType="object"
         title={`Vincular con ${title || 'este objeto'}`}
+      />
+
+      {/* Audio & Voice Note In-Document Insert Modal */}
+      <AudioInsertModal
+        isOpen={isAudioModalOpen}
+        onClose={() => setIsAudioModalOpen(false)}
+        editor={editor}
+        entityId={object.id}
+        entityType="object"
+        existingAttachments={attachments}
+        onAudioInserted={() => setSaveStatus('dirty')}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -15,7 +15,10 @@ import {
   Layers, 
   Boxes,
   Loader2,
-  Check
+  Check,
+  Atom,
+  Plane,
+  Sparkles
 } from 'lucide-react';
 import { 
   AppObject, 
@@ -93,6 +96,9 @@ export const UniversalLinkSelectorModal: React.FC<UniversalLinkSelectorModalProp
       { id: 'resource', label: 'Recurso', icon: LinkIcon, color: '#10b981', category: 'object' },
       { id: 'book', label: 'Libro', icon: Book, color: '#8b5cf6', category: 'object' },
       { id: 'concept', label: 'Concepto', icon: Lightbulb, color: '#eab308', category: 'object' },
+      { id: 'atomic_note', label: 'Nota Atómica', icon: Atom, color: '#06b6d4', category: 'object' },
+      { id: 'trip', label: 'Viaje', icon: Plane, color: '#14b8a6', category: 'object' },
+      { id: 'idea', label: 'Idea', icon: Sparkles, color: '#f59e0b', category: 'object' },
       { id: 'note', label: 'Nota', icon: FileText, color: '#a855f7', category: 'note' },
       { id: 'task', label: 'Tarea', icon: CheckSquare, color: '#10b981', category: 'task' },
       ...customTypes.map(ct => ({
@@ -325,6 +331,9 @@ export const UniversalLinkSelectorModal: React.FC<UniversalLinkSelectorModalProp
     if (item.objectType === 'meeting') return <Calendar className="w-4 h-4 text-amber-400" />;
     if (item.objectType === 'book') return <Book className="w-4 h-4 text-purple-400" />;
     if (item.objectType === 'concept') return <Lightbulb className="w-4 h-4 text-yellow-400" />;
+    if (item.objectType === 'atomic_note') return <Atom className="w-4 h-4 text-cyan-400" />;
+    if (item.objectType === 'trip') return <Plane className="w-4 h-4 text-teal-400" />;
+    if (item.objectType === 'idea') return <Sparkles className="w-4 h-4 text-amber-400" />;
     if (item.objectType === 'resource') return <LinkIcon className="w-4 h-4 text-emerald-400" />;
 
     return <Boxes className="w-4 h-4 text-gray-400" />;

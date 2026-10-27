@@ -315,6 +315,8 @@ export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
   ]},
   { id: 'page', name: 'Páginas', icon: 'file-text', color: '#6366f1', category: 'General', fields: [
     { key: 'subtitle', label: 'Subtítulo / Bajada', type: 'text' },
+    { key: 'source_url', label: 'URL de Origen', type: 'url' },
+    { key: 'site_name', label: 'Sitio Web / Fuente', type: 'text' },
     { key: 'cover_url', label: 'URL de Portada', type: 'url' },
     { key: 'summary', label: 'Resumen Breve', type: 'textarea' },
     { key: 'is_pinned', label: 'Fijar en barra lateral', type: 'checkbox' }
@@ -331,12 +333,45 @@ export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
   ]},
   { id: 'book', name: 'Libros', icon: 'book', color: '#8b5cf6', category: 'Conocimiento', fields: [
     { key: 'autor', label: 'Autor', type: 'text' },
+    { key: 'subtitulo', label: 'Subtítulo', type: 'text' },
+    { key: 'editorial', label: 'Editorial', type: 'text' },
     { key: 'año', label: 'Año de Publicación', type: 'number' },
-    { key: 'calificacion', label: 'Calificación (1-5)', type: 'number' }
+    { key: 'isbn', label: 'ISBN', type: 'text' },
+    { key: 'idioma', label: 'Idioma', type: 'text' },
+    { key: 'genero', label: 'Género / Categoría', type: 'text' },
+    { key: 'formato', label: 'Formato', type: 'select', options: ['Físico', 'PDF', 'EPUB', 'Audiolibro', 'Otro'] },
+    { key: 'reading_status', label: 'Estado de Lectura', type: 'select', options: ['Por Leer', 'Leyendo', 'Pausado', 'Terminado', 'Abandonado'] },
+    { key: 'total_pages', label: 'Total de Páginas', type: 'number' },
+    { key: 'current_page', label: 'Página Actual', type: 'number' },
+    { key: 'calificacion', label: 'Calificación (1-5)', type: 'number' },
+    { key: 'started_at', label: 'Fecha de Inicio', type: 'date' },
+    { key: 'finished_at', label: 'Fecha de Finalización', type: 'date' }
   ]},
   { id: 'concept', name: 'Conceptos', icon: 'lightbulb', color: '#eab308', category: 'Conocimiento', fields: [
     { key: 'disciplina', label: 'Disciplina / Área', type: 'text' },
     { key: 'fuente', label: 'Fuente de Origen', type: 'text' }
+  ]},
+  { id: 'atomic_note', name: 'Notas Atómicas', icon: 'atom', color: '#06b6d4', category: 'Conocimiento', fields: [
+    { key: 'resumen', label: 'Tesis / Idea Central', type: 'textarea' },
+    { key: 'fuente', label: 'Fuente o Referencia', type: 'text' },
+    { key: 'palabras_clave', label: 'Palabras Clave', type: 'text' },
+    { key: 'disciplina', label: 'Disciplina / Área', type: 'text' }
+  ]},
+  { id: 'trip', name: 'Viajes', icon: 'plane', color: '#14b8a6', category: 'Personal', fields: [
+    { key: 'destino', label: 'Destino / Ciudad', type: 'text' },
+    { key: 'fecha_inicio', label: 'Fecha de Salida', type: 'date' },
+    { key: 'fecha_fin', label: 'Fecha de Regreso', type: 'date' },
+    { key: 'estado', label: 'Estado del Viaje', type: 'select', options: ['Por Planificar', 'En Curso', 'Completado'] },
+    { key: 'presupuesto', label: 'Presupuesto Estimado', type: 'number' },
+    { key: 'alojamiento', label: 'Alojamiento / Hospedaje', type: 'text' },
+    { key: 'itinerario', label: 'Itinerario / Resumen', type: 'textarea' }
+  ]},
+  { id: 'idea', name: 'Ideas', icon: 'sparkles', color: '#f59e0b', category: 'Conocimiento', fields: [
+    { key: 'descripcion', label: 'Descripción de la Idea', type: 'textarea' },
+    { key: 'estado', label: 'Fase / Estado', type: 'select', options: ['Capturada', 'En Análisis', 'En Desarrollo', 'Descartada', 'Archivada'] },
+    { key: 'impacto', label: 'Impacto Estimado (1-5)', type: 'number' },
+    { key: 'viabilidad', label: 'Viabilidad (1-5)', type: 'number' },
+    { key: 'proyecto_id', label: 'Proyecto Asociado', type: 'relation', target_type: 'project' }
   ]}
 ];
 
@@ -364,6 +399,140 @@ export interface PersonCustomField {
   value: any;
   order?: number;
   visible?: boolean;
+}
+
+// ==========================================
+// BOOK & KNOWLEDGE LIBRARY TYPES
+// ==========================================
+
+export type BookReadingStatus = 'want_to_read' | 'reading' | 'paused' | 'finished' | 'abandoned';
+export type BookFormat = 'physical' | 'pdf' | 'epub' | 'audiobook' | 'other';
+
+export interface BookIdea {
+  id: string;
+  book_id: string;
+  title: string;
+  content: string;
+  page?: number | null;
+  chapter?: string;
+  tags?: string[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface BookQuote {
+  id: string;
+  book_id: string;
+  quote_text: string;
+  author?: string;
+  page?: number | null;
+  chapter?: string;
+  commentary?: string;
+  tags?: string[];
+  created_at: string;
+  updated_at?: string;
+}
+
+// ==========================================
+// TRIP MANAGER TYPES (Gestor Integral de Viajes)
+// ==========================================
+
+export type TripTransportType = 
+  | 'moto' 
+  | 'carro' 
+  | 'bicicleta' 
+  | 'transporte_publico' 
+  | 'avion' 
+  | 'barco' 
+  | 'caminata' 
+  | 'multidestino' 
+  | 'otro';
+
+export type TripStatus = 'idea' | 'planeado' | 'en_curso' | 'completado' | 'cancelado';
+
+export type TripExpenseCategory = 
+  | 'transporte' 
+  | 'combustible' 
+  | 'peajes' 
+  | 'alojamiento' 
+  | 'alimentacion' 
+  | 'actividades' 
+  | 'parqueadero' 
+  | 'mantenimiento' 
+  | 'compras' 
+  | 'otros';
+
+export interface AppTripLeg {
+  id: string;
+  trip_id: string;
+  transport_type: TripTransportType;
+  transport_custom?: string | null;
+  vehicle_id?: string | null;
+  origin: string;
+  destination: string;
+  departure_time?: string | null;
+  arrival_time?: string | null;
+  distance: number;
+  distance_unit: 'km' | 'mi';
+  distance_source: 'odometer' | 'estimated' | 'manual';
+  odometer_start?: number | null;
+  odometer_end?: number | null;
+  fuel_amount?: number | null;
+  fuel_unit?: string | null;
+  fuel_cost?: number | null;
+  maps_url?: string | null;
+  notes?: string | null;
+  order_index?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AppTripStop {
+  id: string;
+  trip_id: string;
+  name: string;
+  location?: string | null;
+  scheduled_time?: string | null;
+  actual_time?: string | null;
+  duration?: string | null;
+  status: 'pending' | 'completed' | 'skipped';
+  notes?: string | null;
+  maps_url?: string | null;
+  file_urls?: string[];
+  order_index?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AppTripExpense {
+  id: string;
+  trip_id: string;
+  concept: string;
+  category: TripExpenseCategory;
+  amount: number;
+  currency: string;
+  expense_date: string;
+  payment_method?: string | null;
+  vendor?: string | null;
+  leg_id?: string | null;
+  stop_id?: string | null;
+  receipt_url?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AppTripJournal {
+  id: string;
+  trip_id: string;
+  title: string;
+  entry_date: string;
+  content: string;
+  mood?: string | null;
+  location?: string | null;
+  image_urls?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AppObject {
@@ -485,6 +654,25 @@ export interface AppHabitLog {
   updated_at: string;
 }
 
+export interface AppCanvas {
+  id: string;
+  title: string;
+  description?: string;
+  elements: any[];
+  app_state: Record<string, any>;
+  files: Record<string, any>;
+  thumbnail_url?: string | null;
+  notebook_id?: string | null;
+  project_id?: string | null;
+  area_id?: string | null;
+  para_category?: PARACategory;
+  tags?: string[];
+  is_favorite?: boolean;
+  is_archived?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ViewMode = 
   // Core PARA Views
   | 'para_inbox'    // Capturar / Bandeja de Entrada Universal
@@ -497,6 +685,8 @@ export type ViewMode =
   | 'home'         // Vista Principal / Dashboard de Inicio
   | 'habits'       // Módulo de Hábitos y Seguimiento
   | 'notebooks'    // Cuadernos (Zoho Notebook style)
+  | 'canvases'     // Módulo de Lienzos visuales (Excalidraw)
+  | 'canvas'       // Vista/Editor de Lienzo
   | 'notes'        // Alias for compatibility
   | 'all_notes'    // Todas las notas
   | 'favorites'    // Notas favoritas

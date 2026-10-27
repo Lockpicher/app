@@ -23,7 +23,14 @@ import {
   AppArea,
   AppHabit,
   AppHabitLog,
-  HabitLogStatus
+  HabitLogStatus,
+  AppCanvas,
+  AppTripLeg,
+  AppTripStop,
+  AppTripExpense,
+  AppTripJournal,
+  BookIdea,
+  BookQuote
 } from './types';
 import { auth } from './auth';
 
@@ -1214,6 +1221,66 @@ export const db = {
     }
   },
 
+  async updatePersonInteraction(interactionId: string, interaction: Partial<PersonInteraction>): Promise<PersonInteraction | null> {
+    try {
+      const payload: any = {
+        updated_at: new Date().toISOString()
+      };
+      if (interaction.summary !== undefined) payload.title = interaction.summary;
+      if (interaction.notes !== undefined) {
+        payload.description = interaction.notes.slice(0, 200);
+        payload.content = interaction.notes;
+      }
+
+      const { data: currentData } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('id', interactionId)
+        .limit(1);
+
+      const existingProps = currentData?.[0]?.properties || {};
+      payload.properties = {
+        ...existingProps,
+        ...(interaction.person_id !== undefined ? { person_id: interaction.person_id } : {}),
+        ...(interaction.type !== undefined ? { interaction_type: interaction.type } : {}),
+        ...(interaction.date !== undefined ? { interaction_date: interaction.date } : {}),
+        ...(interaction.commitments !== undefined ? { commitments: interaction.commitments } : {}),
+        ...(interaction.next_action !== undefined ? { next_action: interaction.next_action } : {}),
+        ...(interaction.follow_up_date !== undefined ? { follow_up_date: interaction.follow_up_date } : {}),
+        ...(interaction.file_urls !== undefined ? { file_urls: interaction.file_urls } : {})
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .update(payload)
+        .eq('id', interactionId)
+        .select();
+
+      if (error) throw error;
+      const updated = data?.[0];
+      if (!updated) return null;
+
+      const p = updated.properties || {};
+      return {
+        id: updated.id,
+        person_id: p.person_id,
+        type: p.interaction_type || 'meeting',
+        date: p.interaction_date || updated.created_at,
+        summary: updated.title,
+        notes: updated.content,
+        commitments: p.commitments,
+        next_action: p.next_action,
+        follow_up_date: p.follow_up_date,
+        file_urls: Array.isArray(p.file_urls) ? p.file_urls : [],
+        created_at: updated.created_at,
+        updated_at: updated.updated_at
+      };
+    } catch (e) {
+      console.error('Error actualizando interacción:', e);
+      throw e;
+    }
+  },
+
   async deletePersonInteraction(interactionId: string): Promise<boolean> {
     const { error } = await insforge.database
       .from('app_objects')
@@ -1378,6 +1445,276 @@ export const db = {
       return true;
     } catch (e) {
       console.error('Error eliminando relación personal:', e);
+      throw e;
+    }
+  },
+
+  // ==========================================
+  // IDEAS Y NOTAS DE LIBROS
+  // (Persistidas en app_objects con object_type: 'book_idea')
+  // ==========================================
+  async getBookIdeas(bookId: string): Promise<BookIdea[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', 'book_idea')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+      const matches = data.filter((row: any) => row.properties?.book_id === bookId);
+      return matches.map((row: any) => {
+        const p = row.properties || {};
+        return {
+          id: row.id,
+          book_id: p.book_id || bookId,
+          title: row.title || 'Idea de lectura',
+          content: row.content || '',
+          page: p.page !== undefined ? Number(p.page) : null,
+          chapter: p.chapter || '',
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        };
+      });
+    } catch (e) {
+      console.error('Error obteniendo ideas del libro:', e);
+      return [];
+    }
+  },
+
+  async createBookIdea(idea: Omit<BookIdea, 'id' | 'created_at'>): Promise<BookIdea | null> {
+    try {
+      const payload = {
+        object_type: 'book_idea',
+        title: idea.title.trim() || 'Idea sin título',
+        content: idea.content || '',
+        description: idea.content ? idea.content.replace(/<[^>]*>/g, '').slice(0, 200) : '',
+        properties: {
+          book_id: idea.book_id,
+          page: idea.page !== undefined ? idea.page : null,
+          chapter: idea.chapter || '',
+          tags: Array.isArray(idea.tags) ? idea.tags : []
+        }
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      const created = data?.[0];
+      if (!created) return null;
+
+      const p = created.properties || {};
+      return {
+        id: created.id,
+        book_id: p.book_id,
+        title: created.title,
+        content: created.content,
+        page: p.page !== undefined ? Number(p.page) : null,
+        chapter: p.chapter || '',
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        created_at: created.created_at,
+        updated_at: created.updated_at
+      };
+    } catch (e) {
+      console.error('Error creando idea del libro:', e);
+      throw e;
+    }
+  },
+
+  async updateBookIdea(id: string, updates: Partial<BookIdea>): Promise<boolean> {
+    try {
+      const { data: existingData } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('id', id);
+
+      const existing = existingData?.[0];
+      const p = existing?.properties || {};
+
+      const updatedProps = {
+        ...p,
+        ...(updates.page !== undefined ? { page: updates.page } : {}),
+        ...(updates.chapter !== undefined ? { chapter: updates.chapter } : {}),
+        ...(updates.tags !== undefined ? { tags: updates.tags } : {})
+      };
+
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+        properties: updatedProps
+      };
+      if (updates.title !== undefined) payload.title = updates.title.trim();
+      if (updates.content !== undefined) {
+        payload.content = updates.content;
+        payload.description = updates.content.replace(/<[^>]*>/g, '').slice(0, 200);
+      }
+
+      const { error } = await insforge.database
+        .from('app_objects')
+        .update(payload)
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error actualizando idea del libro:', e);
+      throw e;
+    }
+  },
+
+  async deleteBookIdea(id: string): Promise<boolean> {
+    try {
+      const { error } = await insforge.database
+        .from('app_objects')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error eliminando idea del libro:', e);
+      throw e;
+    }
+  },
+
+  // ==========================================
+  // CITAS DESTACADAS DE LIBROS
+  // (Persistidas en app_objects con object_type: 'book_quote')
+  // ==========================================
+  async getBookQuotes(bookId: string): Promise<BookQuote[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('object_type', 'book_quote')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+      const matches = data.filter((row: any) => row.properties?.book_id === bookId);
+      return matches.map((row: any) => {
+        const p = row.properties || {};
+        return {
+          id: row.id,
+          book_id: p.book_id || bookId,
+          quote_text: p.quote_text || row.content || '',
+          author: p.author || '',
+          page: p.page !== undefined ? Number(p.page) : null,
+          chapter: p.chapter || '',
+          commentary: p.commentary || row.description || '',
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        };
+      });
+    } catch (e) {
+      console.error('Error obteniendo citas del libro:', e);
+      return [];
+    }
+  },
+
+  async createBookQuote(quote: Omit<BookQuote, 'id' | 'created_at'>): Promise<BookQuote | null> {
+    try {
+      const payload = {
+        object_type: 'book_quote',
+        title: `Cita${quote.page ? ` (Pág. ${quote.page})` : ''}: "${quote.quote_text.slice(0, 40)}..."`,
+        content: quote.quote_text,
+        description: quote.commentary || '',
+        properties: {
+          book_id: quote.book_id,
+          quote_text: quote.quote_text,
+          author: quote.author || '',
+          page: quote.page !== undefined ? quote.page : null,
+          chapter: quote.chapter || '',
+          commentary: quote.commentary || '',
+          tags: Array.isArray(quote.tags) ? quote.tags : []
+        }
+      };
+
+      const { data, error } = await insforge.database
+        .from('app_objects')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      const created = data?.[0];
+      if (!created) return null;
+
+      const p = created.properties || {};
+      return {
+        id: created.id,
+        book_id: p.book_id,
+        quote_text: p.quote_text || created.content,
+        author: p.author || '',
+        page: p.page !== undefined ? Number(p.page) : null,
+        chapter: p.chapter || '',
+        commentary: p.commentary || created.description,
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        created_at: created.created_at,
+        updated_at: created.updated_at
+      };
+    } catch (e) {
+      console.error('Error creando cita del libro:', e);
+      throw e;
+    }
+  },
+
+  async updateBookQuote(id: string, updates: Partial<BookQuote>): Promise<boolean> {
+    try {
+      const { data: existingData } = await insforge.database
+        .from('app_objects')
+        .select('*')
+        .eq('id', id);
+
+      const existing = existingData?.[0];
+      const p = existing?.properties || {};
+
+      const updatedProps = {
+        ...p,
+        ...(updates.quote_text !== undefined ? { quote_text: updates.quote_text } : {}),
+        ...(updates.author !== undefined ? { author: updates.author } : {}),
+        ...(updates.page !== undefined ? { page: updates.page } : {}),
+        ...(updates.chapter !== undefined ? { chapter: updates.chapter } : {}),
+        ...(updates.commentary !== undefined ? { commentary: updates.commentary } : {}),
+        ...(updates.tags !== undefined ? { tags: updates.tags } : {})
+      };
+
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+        properties: updatedProps
+      };
+      if (updates.quote_text !== undefined) {
+        payload.content = updates.quote_text;
+        payload.title = `Cita${updatedProps.page ? ` (Pág. ${updatedProps.page})` : ''}: "${updates.quote_text.slice(0, 40)}..."`;
+      }
+      if (updates.commentary !== undefined) {
+        payload.description = updates.commentary;
+      }
+
+      const { error } = await insforge.database
+        .from('app_objects')
+        .update(payload)
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error actualizando cita del libro:', e);
+      throw e;
+    }
+  },
+
+  async deleteBookQuote(id: string): Promise<boolean> {
+    try {
+      const { error } = await insforge.database
+        .from('app_objects')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Error eliminando cita del libro:', e);
       throw e;
     }
   },
@@ -2053,6 +2390,370 @@ export const db = {
       if (error) throw error;
       return { status: 'completed', log: (data as any)?.[0] };
     }
+  },
+
+  // === LIENZOS (CANVASES) ===
+  async getCanvases(options?: { notebookId?: string; projectId?: string; isFavorite?: boolean; isArchived?: boolean }): Promise<AppCanvas[]> {
+    let query = insforge.database
+      .from('app_canvases')
+      .select()
+      .order('updated_at', { ascending: false });
+
+    if (options?.notebookId) {
+      query = query.eq('notebook_id', options.notebookId);
+    }
+    if (options?.projectId) {
+      query = query.eq('project_id', options.projectId);
+    }
+    if (options?.isFavorite !== undefined) {
+      query = query.eq('is_favorite', options.isFavorite);
+    }
+    if (options?.isArchived !== undefined) {
+      query = query.eq('is_archived', options.isArchived);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error fetching canvases:', error);
+      return [];
+    }
+    return (data as AppCanvas[]) || [];
+  },
+
+  async getCanvasById(id: string): Promise<AppCanvas | null> {
+    const { data, error } = await insforge.database
+      .from('app_canvases')
+      .select()
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching canvas by id:', error);
+      return null;
+    }
+    return (data as AppCanvas) || null;
+  },
+
+  async createCanvas(canvas: Partial<AppCanvas>): Promise<AppCanvas | null> {
+    const payload = {
+      title: canvas.title || 'Lienzo sin título',
+      description: canvas.description || null,
+      elements: canvas.elements || [],
+      app_state: canvas.app_state || {},
+      files: canvas.files || {},
+      thumbnail_url: canvas.thumbnail_url || null,
+      notebook_id: canvas.notebook_id || null,
+      project_id: canvas.project_id || null,
+      area_id: canvas.area_id || null,
+      para_category: canvas.para_category || null,
+      tags: canvas.tags || [],
+      is_favorite: canvas.is_favorite || false,
+      is_archived: canvas.is_archived || false,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await insforge.database
+      .from('app_canvases')
+      .insert([payload])
+      .select();
+
+    if (error) {
+      console.error('Error creating canvas:', error);
+      throw error;
+    }
+    return (data as unknown as AppCanvas[])?.[0] || null;
+  },
+
+  async updateCanvas(id: string, updates: Partial<AppCanvas>): Promise<AppCanvas | null> {
+    const payload: Record<string, any> = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    delete payload.id;
+    delete payload.created_at;
+
+    const { data, error } = await insforge.database
+      .from('app_canvases')
+      .update(payload)
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error('Error updating canvas:', error);
+      throw error;
+    }
+    return (data as unknown as AppCanvas[])?.[0] || null;
+  },
+
+  async deleteCanvas(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_canvases')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting canvas:', error);
+      return false;
+    }
+    return true;
+  },
+
+  // ==========================================
+  // TRIP MANAGER API (Gestor Integral de Viajes)
+  // ==========================================
+
+  // --- Trayectos (Legs) ---
+  async getTripLegs(tripId: string): Promise<AppTripLeg[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_trip_legs')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('order_index', { ascending: true })
+        .order('departure_time', { ascending: true, nullsFirst: false });
+      if (error) {
+        console.error('Error fetching trip legs:', error);
+        return [];
+      }
+      return (data as AppTripLeg[]) || [];
+    } catch (e) {
+      console.error('Exception fetching trip legs:', e);
+      return [];
+    }
+  },
+
+  async createTripLeg(leg: Partial<AppTripLeg>): Promise<AppTripLeg | null> {
+    const { data, error } = await insforge.database
+      .from('app_trip_legs')
+      .insert([{
+        ...leg,
+        updated_at: new Date().toISOString()
+      }])
+      .select();
+    if (error) {
+      console.error('Error creating trip leg:', error);
+      throw error;
+    }
+    return (data as AppTripLeg[])?.[0] || null;
+  },
+
+  async updateTripLeg(id: string, updates: Partial<AppTripLeg>): Promise<AppTripLeg | null> {
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    delete (payload as any).id;
+    delete (payload as any).created_at;
+
+    const { data, error } = await insforge.database
+      .from('app_trip_legs')
+      .update(payload)
+      .eq('id', id)
+      .select();
+    if (error) {
+      console.error('Error updating trip leg:', error);
+      throw error;
+    }
+    return (data as AppTripLeg[])?.[0] || null;
+  },
+
+  async deleteTripLeg(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_trip_legs')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting trip leg:', error);
+      return false;
+    }
+    return true;
+  },
+
+  // --- Paradas e Itinerario (Stops) ---
+  async getTripStops(tripId: string): Promise<AppTripStop[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_trip_stops')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('order_index', { ascending: true })
+        .order('scheduled_time', { ascending: true, nullsFirst: false });
+      if (error) {
+        console.error('Error fetching trip stops:', error);
+        return [];
+      }
+      return (data as AppTripStop[]) || [];
+    } catch (e) {
+      console.error('Exception fetching trip stops:', e);
+      return [];
+    }
+  },
+
+  async createTripStop(stop: Partial<AppTripStop>): Promise<AppTripStop | null> {
+    const { data, error } = await insforge.database
+      .from('app_trip_stops')
+      .insert([{
+        ...stop,
+        updated_at: new Date().toISOString()
+      }])
+      .select();
+    if (error) {
+      console.error('Error creating trip stop:', error);
+      throw error;
+    }
+    return (data as AppTripStop[])?.[0] || null;
+  },
+
+  async updateTripStop(id: string, updates: Partial<AppTripStop>): Promise<AppTripStop | null> {
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    delete (payload as any).id;
+    delete (payload as any).created_at;
+
+    const { data, error } = await insforge.database
+      .from('app_trip_stops')
+      .update(payload)
+      .eq('id', id)
+      .select();
+    if (error) {
+      console.error('Error updating trip stop:', error);
+      throw error;
+    }
+    return (data as AppTripStop[])?.[0] || null;
+  },
+
+  async deleteTripStop(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_trip_stops')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting trip stop:', error);
+      return false;
+    }
+    return true;
+  },
+
+  // --- Gastos del Viaje (Expenses) ---
+  async getTripExpenses(tripId: string): Promise<AppTripExpense[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_trip_expenses')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('expense_date', { ascending: false });
+      if (error) {
+        console.error('Error fetching trip expenses:', error);
+        return [];
+      }
+      return (data as AppTripExpense[]) || [];
+    } catch (e) {
+      console.error('Exception fetching trip expenses:', e);
+      return [];
+    }
+  },
+
+  async createTripExpense(expense: Partial<AppTripExpense>): Promise<AppTripExpense | null> {
+    const { data, error } = await insforge.database
+      .from('app_trip_expenses')
+      .insert([{
+        ...expense,
+        updated_at: new Date().toISOString()
+      }])
+      .select();
+    if (error) {
+      console.error('Error creating trip expense:', error);
+      throw error;
+    }
+    return (data as AppTripExpense[])?.[0] || null;
+  },
+
+  async updateTripExpense(id: string, updates: Partial<AppTripExpense>): Promise<AppTripExpense | null> {
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    delete (payload as any).id;
+    delete (payload as any).created_at;
+
+    const { data, error } = await insforge.database
+      .from('app_trip_expenses')
+      .update(payload)
+      .eq('id', id)
+      .select();
+    if (error) {
+      console.error('Error updating trip expense:', error);
+      throw error;
+    }
+    return (data as AppTripExpense[])?.[0] || null;
+  },
+
+  async deleteTripExpense(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_trip_expenses')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting trip expense:', error);
+      return false;
+    }
+    return true;
+  },
+
+  // --- Diario de Viaje (Journals) ---
+  async getTripJournals(tripId: string): Promise<AppTripJournal[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_trip_journals')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('entry_date', { ascending: false });
+      if (error) {
+        console.error('Error fetching trip journals:', error);
+        return [];
+      }
+      return (data as AppTripJournal[]) || [];
+    } catch (e) {
+      console.error('Exception fetching trip journals:', e);
+      return [];
+    }
+  },
+
+  async createTripJournal(journal: Partial<AppTripJournal>): Promise<AppTripJournal | null> {
+    const { data, error } = await insforge.database
+      .from('app_trip_journals')
+      .insert([{
+        ...journal,
+        updated_at: new Date().toISOString()
+      }])
+      .select();
+    if (error) {
+      console.error('Error creating trip journal:', error);
+      throw error;
+    }
+    return (data as AppTripJournal[])?.[0] || null;
+  },
+
+  async updateTripJournal(id: string, updates: Partial<AppTripJournal>): Promise<AppTripJournal | null> {
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    delete (payload as any).id;
+    delete (payload as any).created_at;
+
+    const { data, error } = await insforge.database
+      .from('app_trip_journals')
+      .update(payload)
+      .eq('id', id)
+      .select();
+    if (error) {
+      console.error('Error updating trip journal:', error);
+      throw error;
+    }
+    return (data as AppTripJournal[])?.[0] || null;
+  },
+
+  async deleteTripJournal(id: string): Promise<boolean> {
+    const { error } = await insforge.database
+      .from('app_trip_journals')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting trip journal:', error);
+      return false;
+    }
+    return true;
   }
 };
 
