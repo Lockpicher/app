@@ -35,7 +35,8 @@ import {
 import { auth } from './auth';
 
 export const INSFORGE_BASE_URL = 'https://insforge.kora.ovh';
-export const INSFORGE_ANON_KEY = 'anon_6e45c1e47c7e83e3c5406969f76eb289f5a03eba';
+// TODO(security): rotar la clave una vez confirmado el entorno de despliegue y eliminar el fallback
+export const INSFORGE_ANON_KEY = import.meta.env.VITE_INSFORGE_ANON_KEY || 'anon_6e45c1e47c7e83e3c5406969f76eb289f5a03eba';
 export const STORAGE_BUCKET = 'app-storage';
 
 export const insforge = createClient({
