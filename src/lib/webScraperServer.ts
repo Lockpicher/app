@@ -1,4 +1,5 @@
 import http from 'http';
+import net from 'net';
 
 /**
  * Validador estricto para prevenir vulnerabilidades SSRF (Server-Side Request Forgery)
@@ -20,6 +21,7 @@ export function isAllowedUrl(urlString: string): { allowed: boolean; reason?: st
       hostname === '127.0.0.1' ||
       hostname === '0.0.0.0' ||
       hostname === '::1' ||
+      hostname === '[::1]' ||
       hostname.endsWith('.localhost')
     ) {
       return { allowed: false, reason: 'Acceso a direcciones locales o de bucle invertido bloqueado.' };
@@ -31,7 +33,7 @@ export function isAllowedUrl(urlString: string): { allowed: boolean; reason?: st
       hostname.endsWith('.internal') ||
       hostname.endsWith('.lan') ||
       hostname.endsWith('.arpa') ||
-      !hostname.includes('.')
+      (!hostname.includes('.') && !hostname.startsWith('['))
     ) {
       return { allowed: false, reason: 'Acceso a redes o nombres de host internos bloqueado.' };
     }
@@ -52,6 +54,55 @@ export function isAllowedUrl(urlString: string): { allowed: boolean; reason?: st
     // 169.254.0.0/16 (Link-local & AWS metadata)
     if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
       return { allowed: false, reason: 'Acceso a direcciones link-local de metadatos bloqueado.' };
+    }
+
+    // Bloquear IPv6 privados y link-local
+    const rawHost = hostname.replace(/^\[|\]$/g, '');
+    if (net.isIP(rawHost) === 6 || net.isIP(hostname) === 6) {
+      // Loopback o sin especificar
+      if (rawHost === '::1' || rawHost === '::') {
+        return { allowed: false, reason: 'Acceso a direcciones locales o de bucle invertido bloqueado.' };
+      }
+      // fc00::/7 (Unique Local Address)
+      if (/^f[cd]/i.test(rawHost)) {
+        return { allowed: false, reason: 'Acceso a direcciones IPv6 privadas (fc00::/7) bloqueado.' };
+      }
+      // fe80::/10 (Link-local unicast)
+      if (/^fe[89ab]/i.test(rawHost)) {
+        return { allowed: false, reason: 'Acceso a direcciones IPv6 link-local (fe80::/10) bloqueado.' };
+      }
+      // ::ffff:x.x.x.x (IPv4-mapped IPv6)
+      if (rawHost.startsWith('::ffff:')) {
+        const rest = rawHost.slice(7);
+        let mappedIpv4 = '';
+        if (rest.includes('.')) {
+          mappedIpv4 = rest;
+        } else {
+          const parts = rest.split(':');
+          if (parts.length === 2) {
+            const high = parseInt(parts[0], 16);
+            const low = parseInt(parts[1], 16);
+            const b1 = (high >> 8) & 0xff;
+            const b2 = high & 0xff;
+            const b3 = (low >> 8) & 0xff;
+            const b4 = low & 0xff;
+            mappedIpv4 = `${b1}.${b2}.${b3}.${b4}`;
+          }
+        }
+        if (mappedIpv4) {
+          if (
+            mappedIpv4 === '127.0.0.1' ||
+            mappedIpv4 === '0.0.0.0' ||
+            mappedIpv4.startsWith('127.') ||
+            /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(mappedIpv4) ||
+            /^192\.168\.\d{1,3}\.\d{1,3}$/.test(mappedIpv4) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(mappedIpv4) ||
+            /^169\.254\.\d{1,3}\.\d{1,3}$/.test(mappedIpv4)
+          ) {
+            return { allowed: false, reason: 'Acceso a direcciones IPv4 privadas mapeadas en IPv6 bloqueado.' };
+          }
+        }
+      }
     }
 
     return { allowed: true };

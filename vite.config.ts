@@ -2,7 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { r2Middleware } from './src/lib/r2VitePlugin';
 import { loadEnvFiles, getR2ObjectStream } from './src/lib/r2Server';
-import { webScraperMiddleware } from './src/lib/webScraperServer';
+import { webScraperMiddleware, isAllowedUrl } from './src/lib/webScraperServer';
+import {
+  sendJson,
+  readBodyWithLimit,
+  parseJsonSafe,
+  getClientIp,
+  createRateLimiter,
+  authenticateRequest
+} from './src/lib/apiGuard.mjs';
+
+const transcribeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10 });
 
 export default defineConfig({
   plugins: [
@@ -24,97 +34,108 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use('/api/transcribe', async (req, res) => {
           if (req.method !== 'POST') {
-            res.statusCode = 405;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Method Not Allowed' }));
-            return;
+            return sendJson(res, 405, { error: 'Method Not Allowed' });
+          }
+
+          // 1. Rate limiter: 10 peticiones por minuto por IP
+          const clientIp = getClientIp(req);
+          if (!transcribeLimiter(clientIp)) {
+            const retryAfter = transcribeLimiter.getRetryAfter(clientIp);
+            res.setHeader('Retry-After', retryAfter);
+            return sendJson(res, 429, { error: 'RATE_LIMITED', retryAfter });
+          }
+
+          // 2. Autenticación
+          const auth = await authenticateRequest(req);
+          if (!auth.ok) {
+            return sendJson(res, auth.status, { error: auth.error });
           }
 
           loadEnvFiles();
           const apiKey = process.env.ELEVENLABS_API_KEY;
           if (!apiKey) {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({
+            return sendJson(res, 400, {
               error: 'Clave ELEVENLABS_API_KEY no configurada. Por favor añade ELEVENLABS_API_KEY en tu archivo .env para habilitar la transcripción automática con ElevenLabs Scribe.'
-            }));
-            return;
+            });
           }
 
-          const chunks: any[] = [];
-          req.on('data', chunk => chunks.push(chunk));
-          req.on('end', async () => {
-            try {
-              const bodyBuffer = Buffer.concat(chunks);
-              let audioBuffer: Buffer;
-              let filename = 'audio.webm';
-              let mimeType = 'audio/webm';
-              let languageCode = 'es';
+          // 3. Límite de tamaño: 25 MB
+          const { buffer: bodyBuffer, tooLarge } = await readBodyWithLimit(req, 25 * 1024 * 1024, res);
+          if (tooLarge) return;
 
-              const contentType = req.headers['content-type'] || '';
-              if (contentType.includes('application/json')) {
-                const json = JSON.parse(bodyBuffer.toString());
-                if (!json.audio_url) {
-                  res.statusCode = 400;
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ error: 'audio_url es requerido' }));
-                  return;
-                }
+          try {
+            let audioBuffer: Buffer;
+            let filename = 'audio.webm';
+            let mimeType = 'audio/webm';
+            let languageCode = 'es';
 
-                let fetchTarget = json.audio_url;
-                if (fetchTarget.startsWith('/')) {
-                  const host = req.headers.host || 'localhost:3000';
-                  fetchTarget = `http://${host}${fetchTarget}`;
-                }
+            const contentType = req.headers['content-type'] || '';
+            if (contentType.includes('application/json')) {
+              const json = parseJsonSafe(bodyBuffer);
+              if (!json || typeof json !== 'object') {
+                return sendJson(res, 400, { error: 'JSON inválido' });
+              }
+              if (!json.audio_url) {
+                return sendJson(res, 400, { error: 'audio_url es requerido' });
+              }
 
-                const audioFetch = await fetch(fetchTarget);
-                if (!audioFetch.ok) {
-                  throw new Error(`No se pudo descargar el archivo de audio: ${audioFetch.statusText}`);
-                }
-                const arrayBuf = await audioFetch.arrayBuffer();
-                audioBuffer = Buffer.from(arrayBuf);
-                if (json.language_code) languageCode = json.language_code;
+              let fetchTarget = json.audio_url;
+              if (fetchTarget.startsWith('/')) {
+                // Resolución contra loopback local fijo para prevenir Host header poisoning
+                const devPort = server.config.server.port || 3000;
+                fetchTarget = `http://127.0.0.1:${devPort}${fetchTarget}`;
               } else {
-                audioBuffer = bodyBuffer;
+                // Validación estricta anti-SSRF para URLs absolutas
+                const check = isAllowedUrl(fetchTarget);
+                if (!check.allowed) {
+                  return sendJson(res, 400, { error: check.reason || 'URL no permitida por seguridad' });
+                }
               }
 
-              const formData = new FormData();
-              const audioBlob = new Blob([audioBuffer], { type: mimeType });
-              formData.append('file', audioBlob, filename);
-              formData.append('model_id', 'scribe_v2');
-              if (languageCode) {
-                formData.append('language_code', languageCode);
+              const fetchHeaders: Record<string, string> = {};
+              if (req.headers.cookie) fetchHeaders['cookie'] = req.headers.cookie;
+              if (req.headers.authorization) fetchHeaders['authorization'] = req.headers.authorization;
+
+              const audioFetch = await fetch(fetchTarget, { headers: fetchHeaders });
+              if (!audioFetch.ok) {
+                throw new Error(`No se pudo descargar el archivo de audio: ${audioFetch.statusText}`);
               }
-
-              const sttRes = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-                method: 'POST',
-                headers: {
-                  'xi-api-key': apiKey
-                },
-                body: formData
-              });
-
-              const sttData = await sttRes.json();
-              if (!sttRes.ok) {
-                res.statusCode = sttRes.status;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ error: sttData?.detail?.message || sttData?.message || 'Error en ElevenLabs Scribe API' }));
-                return;
-              }
-
-              res.statusCode = 200;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({
-                text: sttData.text,
-                language_code: sttData.language_code || languageCode,
-                words: sttData.words
-              }));
-            } catch (err: any) {
-              res.statusCode = 500;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: err.message || 'Error interno procesando transcripción' }));
+              const arrayBuf = await audioFetch.arrayBuffer();
+              audioBuffer = Buffer.from(arrayBuf);
+              if (json.language_code) languageCode = json.language_code;
+            } else {
+              audioBuffer = bodyBuffer!;
             }
-          });
+
+            const formData = new FormData();
+            const audioBlob = new Blob([audioBuffer], { type: mimeType });
+            formData.append('file', audioBlob, filename);
+            formData.append('model_id', 'scribe_v2');
+            if (languageCode) {
+              formData.append('language_code', languageCode);
+            }
+
+            const sttRes = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+              method: 'POST',
+              headers: {
+                'xi-api-key': apiKey
+              },
+              body: formData
+            });
+
+            const sttData = await sttRes.json();
+            if (!sttRes.ok) {
+              return sendJson(res, sttRes.status, { error: sttData?.detail?.message || sttData?.message || 'Error en ElevenLabs Scribe API' });
+            }
+
+            return sendJson(res, 200, {
+              text: sttData.text,
+              language_code: sttData.language_code || languageCode,
+              words: sttData.words
+            });
+          } catch (err: any) {
+            return sendJson(res, 500, { error: err.message || 'Error interno procesando transcripción' });
+          }
         });
       }
     }
