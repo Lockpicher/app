@@ -699,3 +699,73 @@ export type ViewMode =
   | 'files'        // Sección central Archivos (Cloudflare R2)
   | 'storage';     // Almacenamiento (compatibilidad)
 
+// ==========================================
+// AI ASSISTANT TYPES (Evernote-style)
+// ==========================================
+export type AIMode = 'ask' | 'edit';
+
+export interface AIProviderStatus {
+  configured: boolean;
+  provider: 'gemini' | 'openrouter' | 'xiaomi_mimo' | null;
+  model: string;
+  availableModels: string[];
+  missingKey?: string;
+  baseUrl?: string;
+}
+
+export interface AIContextData {
+  type: 'note' | 'task' | 'book' | 'trip' | 'object' | 'page' | 'canvas' | 'general';
+  id?: string;
+  title?: string;
+  content?: string;
+  selectedText?: string;
+  notebookTitle?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+  applyEdit?: (proposed: string, mode: 'replace_all' | 'replace_selection' | 'insert_at_cursor' | 'append') => Promise<void> | void;
+}
+
+export interface AIProposedEdit {
+  action: 'replace_all' | 'replace_selection' | 'insert_at_cursor' | 'append';
+  originalSnippet?: string;
+  replacementSnippet: string;
+  summary: string;
+}
+
+export interface AIToolAction {
+  tool: 'create_note' | 'update_note' | 'create_task' | 'mark_favorite' | 'create_idea' | 'link_entities';
+  description: string;
+  parameters: Record<string, any>;
+}
+
+export interface AIReference {
+  id: string;
+  type: 'note' | 'task' | 'book' | 'object' | 'page';
+  title: string;
+  excerpt?: string;
+}
+
+export interface AIConversation {
+  id: string;
+  title: string;
+  context_type?: string;
+  context_id?: string | null;
+  context_title?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIMessage {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  mode?: AIMode;
+  tool_calls?: any;
+  tool_call_id?: string;
+  proposed_diff?: AIProposedEdit | null;
+  references_used?: AIReference[] | null;
+  created_at: string;
+}
+
+

@@ -3,10 +3,17 @@ import react from '@vitejs/plugin-react';
 import { r2Middleware } from './src/lib/r2VitePlugin';
 import { loadEnvFiles, getR2ObjectStream } from './src/lib/r2Server';
 import { webScraperMiddleware } from './src/lib/webScraperServer';
+import { aiMiddleware } from './src/lib/aiServer';
 
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'ai-assistant-api-server',
+      configureServer(server) {
+        server.middlewares.use(aiMiddleware);
+      }
+    },
     {
       name: 'cloudflare-r2-api-server',
       configureServer(server) {

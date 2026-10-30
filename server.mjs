@@ -486,7 +486,222 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ==========================================
-  // 3. STATIC SPA ASSET SERVING
+  // 3. AI ASSISTANT CONTEXTUAL ENDPOINTS
+  // ==========================================
+  if (pathname.startsWith('/api/ai/')) {
+    loadEnvFiles();
+    const preferredProvider = process.env.AI_PROVIDER;
+    const mimoKey = process.env.MIMO_API_KEY || process.env.XIAOMI_MIMO_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+
+    if (pathname === '/api/ai/status' && req.method === 'GET') {
+      if ((preferredProvider === 'xiaomi_mimo' || !geminiKey) && mimoKey) {
+        return sendJson(res, 200, {
+          configured: true,
+          provider: 'xiaomi_mimo',
+          model: process.env.MIMO_MODEL || 'mimo-v2.6-flash',
+          availableModels: ['mimo-v2.6-flash', 'mimo-v2.6-pro', 'mimo-v2.5'],
+          baseUrl: process.env.MIMO_BASE_URL || 'https://api.xiaomimimo.com/v1'
+        });
+      }
+      if (geminiKey) {
+        return sendJson(res, 200, {
+          configured: true,
+          provider: 'gemini',
+          model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+          availableModels: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+        });
+      }
+      if (openRouterKey) {
+        return sendJson(res, 200, {
+          configured: true,
+          provider: 'openrouter',
+          model: process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash',
+          availableModels: ['google/gemini-2.5-flash', 'google/gemini-2.0-flash-001', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-haiku']
+        });
+      }
+      if (mimoKey) {
+        return sendJson(res, 200, {
+          configured: true,
+          provider: 'xiaomi_mimo',
+          model: process.env.MIMO_MODEL || 'mimo-v2.6-flash',
+          availableModels: ['mimo-v2.6-flash', 'mimo-v2.6-pro', 'mimo-v2.5'],
+          baseUrl: process.env.MIMO_BASE_URL || 'https://api.xiaomimimo.com/v1'
+        });
+      }
+      return sendJson(res, 200, {
+        configured: false,
+        provider: null,
+        model: '',
+        availableModels: [],
+        missingKey: 'MIMO_API_KEY, GEMINI_API_KEY o OPENROUTER_API_KEY'
+      });
+    }
+
+    if (pathname === '/api/ai/config' && req.method === 'POST') {
+      parseJsonBody(req).then(async (body) => {
+        try {
+          const { provider, apiKey, model, baseUrl } = body;
+          if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 5) {
+            return sendJson(res, 400, { error: 'Clave de API no válida o vacía.' });
+          }
+          const keyTrimmed = apiKey.trim();
+          if (provider === 'xiaomi_mimo') {
+            process.env.MIMO_API_KEY = keyTrimmed;
+            if (model) process.env.MIMO_MODEL = model;
+            if (baseUrl) process.env.MIMO_BASE_URL = baseUrl;
+            process.env.AI_PROVIDER = 'xiaomi_mimo';
+          } else if (provider === 'gemini') {
+            process.env.GEMINI_API_KEY = keyTrimmed;
+            if (model) process.env.GEMINI_MODEL = model;
+            process.env.AI_PROVIDER = 'gemini';
+          } else {
+            process.env.OPENROUTER_API_KEY = keyTrimmed;
+            if (model) process.env.OPENROUTER_MODEL = model;
+            process.env.AI_PROVIDER = 'openrouter';
+          }
+          return sendJson(res, 200, { success: true, provider, model });
+        } catch (e) {
+          return sendJson(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+
+    if (pathname === '/api/ai/chat' && req.method === 'POST') {
+      const activeProvider = (process.env.AI_PROVIDER === 'xiaomi_mimo' && mimoKey) ? 'xiaomi_mimo' :
+                             (mimoKey && !geminiKey && !openRouterKey) ? 'xiaomi_mimo' :
+                             geminiKey ? 'gemini' :
+                             openRouterKey ? 'openrouter' :
+                             mimoKey ? 'xiaomi_mimo' : null;
+
+      if (!activeProvider) {
+        return sendJson(res, 400, {
+          error: 'NO_API_KEY',
+          message: 'El asistente de IA no está configurado en el servidor.'
+        });
+      }
+
+      parseJsonBody(req).then(async (body) => {
+        try {
+          const { messages = [], mode = 'ask', context = null, relevantKnowledge = [], modelOverride = null } = body;
+          let systemPrompt = `Eres el Asistente de Inteligencia Artificial contextual de "Segundo Cerebro" (app.kubbonet.com).
+Tu propósito es ayudar al usuario a pensar mejor, sintetizar información, redactar con excelencia, organizar tareas y conectar conocimientos.
+Responde siempre en español, con un tono profesional, claro, inspirador y empático. Usa Markdown bien estructurado.`;
+
+          if (context && context.type && context.type !== 'general') {
+            systemPrompt += `\n\n--- CONTEXTO ACTUAL DE LA PANTALLA ---
+Tipo: ${context.type.toUpperCase()}
+${context.title ? `Título: "${context.title}"` : ''}
+${context.selectedText ? `TEXTO SELECCIONADO:\n"""\n${context.selectedText}\n"""` : ''}
+${context.content ? `CONTENIDO ACTUAL:\n"""\n${context.content.slice(0, 4000)}\n"""` : ''}`;
+          }
+
+          if (relevantKnowledge && relevantKnowledge.length > 0) {
+            systemPrompt += `\n\n--- CONOCIMIENTO PERSONAL RECUPERADO ---`;
+            relevantKnowledge.forEach((item, idx) => {
+              systemPrompt += `\n[Fuente ${idx + 1}] (${item.type.toUpperCase()}) "${item.title}":\n${(item.contentSnippet || '').slice(0, 600)}`;
+            });
+          }
+
+          if (mode === 'edit') {
+            systemPrompt += `\n\n--- MODO EDITAR ACTIVO ---
+Incluye al final de tu respuesta el bloque:
+\`\`\`json:proposed_edit
+{
+  "action": "${context?.selectedText ? 'replace_selection' : 'replace_all'}",
+  "replacementSnippet": "texto completo mejorado",
+  "summary": "Resumen de mejoras"
+}
+\`\`\``;
+          }
+
+          let reply = '';
+          if (activeProvider === 'xiaomi_mimo') {
+            const mModel = modelOverride || process.env.MIMO_MODEL || 'mimo-v2.6-flash';
+            const mBase = (process.env.MIMO_BASE_URL || 'https://api.xiaomimimo.com/v1').replace(/\/+$/, '');
+            const mRes = await fetch(`${mBase}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${mimoKey}`
+              },
+              body: JSON.stringify({
+                model: mModel,
+                messages: [{ role: 'system', content: systemPrompt }, ...messages]
+              })
+            });
+            const mData = await mRes.json();
+            reply = mData?.choices?.[0]?.message?.content || '';
+          } else if (activeProvider === 'gemini') {
+            const cleanModel = (modelOverride || process.env.GEMINI_MODEL || 'gemini-2.5-flash').replace(/^google\//, '');
+            const gUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${geminiKey}`;
+            const contents = messages.map(m => ({
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: m.content }]
+            }));
+            const gRes = await fetch(gUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Hola' }] }]
+              })
+            });
+            const gData = await gRes.json();
+            reply = gData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          } else {
+            const oModel = modelOverride || process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash';
+            const oRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${openRouterKey}`
+              },
+              body: JSON.stringify({
+                model: oModel,
+                messages: [{ role: 'system', content: systemPrompt }, ...messages]
+              })
+            });
+            const oData = await oRes.json();
+            reply = oData?.choices?.[0]?.message?.content || '';
+          }
+
+          let proposedEdit = null;
+          let toolAction = null;
+          const editMatch = reply.match(/```json:proposed_edit[\s\S]*?```/i);
+          if (editMatch) {
+            try {
+              proposedEdit = JSON.parse(editMatch[0].replace(/```json(:proposed_edit)?/i, '').replace(/```$/, '').trim());
+              reply = reply.replace(editMatch[0], '').trim();
+            } catch (e) {}
+          }
+          const toolMatch = reply.match(/```json:tool_action[\s\S]*?```/i);
+          if (toolMatch) {
+            try {
+              toolAction = JSON.parse(toolMatch[0].replace(/```json(:tool_action)?/i, '').replace(/```$/, '').trim());
+              reply = reply.replace(toolMatch[0], '').trim();
+            } catch (e) {}
+          }
+
+          return sendJson(res, 200, {
+            success: true,
+            reply,
+            proposedEdit,
+            toolAction,
+            references: relevantKnowledge.map(k => ({ id: k.id, type: k.type, title: k.title }))
+          });
+        } catch (err) {
+          return sendJson(res, 500, { error: err.message });
+        }
+      });
+      return;
+    }
+  }
+
+  // ==========================================
+  // 4. STATIC SPA ASSET SERVING
   // ==========================================
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return sendJson(res, 405, { error: 'Method Not Allowed' });

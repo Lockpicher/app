@@ -29,6 +29,9 @@ import { UploadModal } from './components/UploadModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AuthModal } from './components/AuthModal';
 import { PasswordUnlockModal } from './components/PasswordUnlockModal';
+import { AIContextProvider } from './context/AIContext';
+import { AIAssistantButton } from './components/AIAssistantButton';
+import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { isNoteUnlocked, unlockNoteSession, isNotebookUnlocked, unlockNotebookSession, verifyPassword } from './lib/security';
 import { auth, AuthUser } from './lib/auth';
 import { db, storage } from './lib/insforge';
@@ -1200,7 +1203,28 @@ export function App() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
+    <AIContextProvider
+      currentView={currentView}
+      activeNote={isEditingNote ? activeNote : null}
+      activeNotebook={selectedNotebook}
+      notes={notes}
+      tasks={tasks}
+      objects={objects}
+      projects={projects}
+      notebooks={notebooks}
+      onNavigateToEntity={handleNavigateToEntity}
+      onCreateNote={async (noteData) => { await handleNewNote(noteData); }}
+      onUpdateNote={handleSaveNote}
+      onCreateTask={async (taskData) => {
+        const created = await db.createTask(taskData);
+        if (created) setTasks(prev => [created, ...prev]);
+      }}
+      onToggleFavoriteNote={async (noteId) => {
+        const target = notes.find(n => n.id === noteId);
+        if (target) await handleToggleFavorite(target);
+      }}
+    >
+      <div className="flex flex-col lg:flex-row h-screen h-[100dvh] w-screen overflow-hidden bg-obsidian-bg">
 
 
 
@@ -1908,7 +1932,19 @@ export function App() {
           }}
         />
       )}
+
+      {/* Evernote-style Floating AI Assistant Button */}
+      <AIAssistantButton />
+
+      {/* Contextual AI Assistant Side/Bottom Drawer */}
+      <AIAssistantDrawer
+        notes={notes}
+        tasks={tasks}
+        objects={objects}
+        projects={projects}
+      />
     </div>
+    </AIContextProvider>
   );
 }
 

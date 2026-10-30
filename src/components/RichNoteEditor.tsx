@@ -99,6 +99,7 @@ import { TableGridPicker } from './TableGridPicker';
 import { TableToolbar } from './TableToolbar';
 import { AudioNode } from './tiptap/AudioNode';
 import { AudioInsertModal } from './AudioInsertModal';
+import { useAI } from '../context/AIContext';
 
 interface RichNoteEditorProps {
   note: AppNote;
@@ -320,6 +321,39 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       }
     }
   });
+
+  // AI Assistant Context Connection
+  const { registerEditorBridge, setIsAIDrawerOpen } = useAI();
+
+  useEffect(() => {
+    if (!editor) return;
+    const unregister = registerEditorBridge({
+      getEditorContent: () => editor.getHTML(),
+      getSelectedText: () => {
+        const { from, to } = editor.state.selection;
+        return editor.state.doc.textBetween(from, to, '\n');
+      },
+      applyEdit: (proposed: string, mode: 'replace_all' | 'replace_selection' | 'insert_at_cursor' | 'append') => {
+        if (mode === 'replace_selection') {
+          const { from, to } = editor.state.selection;
+          if (from !== to) {
+            editor.chain().focus().deleteRange({ from, to }).insertContent(proposed).run();
+          } else {
+            editor.chain().focus().insertContent(proposed).run();
+          }
+        } else if (mode === 'insert_at_cursor') {
+          editor.chain().focus().insertContent(proposed).run();
+        } else if (mode === 'append') {
+          editor.commands.focus('end');
+          editor.chain().focus().insertContent(proposed).run();
+        } else {
+          editor.commands.setContent(proposed);
+        }
+        setSaveStatus('dirty');
+      }
+    });
+    return unregister;
+  }, [editor, registerEditorBridge]);
 
   // Load attachments & reminders on mount
   useEffect(() => {
@@ -1425,6 +1459,17 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               >
                 <Mic className="w-3 h-3 text-red-400" />
                 <span className="hidden sm:inline">Voz</span>
+              </button>
+
+              {/* AI Assistant Context Action Button */}
+              <button
+                type="button"
+                onClick={() => setIsAIDrawerOpen(true)}
+                className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded bg-gradient-to-r from-amber-500/20 to-purple-600/20 text-amber-300 hover:text-white hover:bg-amber-500/30 border border-amber-500/30 transition text-[11px] font-semibold shadow-sm"
+                title="Asistente de Inteligencia Artificial para esta nota"
+              >
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                <span className="hidden sm:inline">IA</span>
               </button>
 
               {/* Safe HTML Block */}
