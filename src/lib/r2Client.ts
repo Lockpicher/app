@@ -1,5 +1,16 @@
 import { AppAttachment } from './types';
-import { db, storage } from './insforge';
+import { db, storage, insforge } from './insforge';
+
+function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  try {
+    const token = (insforge as any).tokenManager?.getAccessToken?.();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {}
+  return headers;
+}
 
 export interface R2Status {
   configured: boolean;
@@ -30,11 +41,49 @@ export interface R2MigrationResult {
 
 export const r2Storage = {
   /**
+   * Sincroniza el token activo con la cookie httpOnly sb_session para permitir
+   * que los elementos <img> y <audio> carguen archivos directamente vía /api/r2/stream
+   */
+  async syncSession(token?: string): Promise<boolean> {
+    try {
+      const activeToken = token || (insforge as any).tokenManager?.getAccessToken?.();
+      if (!activeToken) return false;
+      const res = await fetch('/api/r2/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: activeToken }),
+        credentials: 'same-origin'
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Elimina la cookie de sesión httpOnly sb_session
+   */
+  async clearSession(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/r2/session', {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
    * Consulta el estado de configuración de Cloudflare R2 en el backend
    */
   async getStatus(): Promise<R2Status> {
     try {
-      const res = await fetch('/api/r2/status');
+      const res = await fetch('/api/r2/status', {
+        headers: getAuthHeaders(),
+        credentials: 'same-origin'
+      });
       if (!res.ok) {
         return { configured: false, bucket: '', hasPublicUrl: false, publicUrl: null };
       }
@@ -49,7 +98,11 @@ export const r2Storage = {
    */
   async testConnection(): Promise<R2ConnectionTest> {
     try {
-      const res = await fetch('/api/r2/test-connection', { method: 'POST' });
+      const res = await fetch('/api/r2/test-connection', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'same-origin'
+      });
       return await res.json();
     } catch (err: any) {
       return {
@@ -67,7 +120,8 @@ export const r2Storage = {
   async runMigration(dryRun = false): Promise<R2MigrationResult> {
     const res = await fetch('/api/r2/migrate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'same-origin',
       body: JSON.stringify({ dryRun })
     });
     const data = await res.json();
@@ -108,9 +162,10 @@ export const r2Storage = {
         const proxyUrl = `/api/r2/upload-proxy?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(rawName)}`;
         const proxyRes = await fetch(proxyUrl, {
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': mime
-          },
+          }),
+          credentials: 'same-origin',
           body: file
         });
 
@@ -129,7 +184,8 @@ export const r2Storage = {
         // Si el proxy falla, intentar vía URL firmada de PUT directo como fallback
         const presignRes = await fetch('/api/r2/presign-upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'same-origin',
           body: JSON.stringify({
             originalName: rawName,
             folder,
@@ -167,7 +223,10 @@ export const r2Storage = {
 
     // 2. Si no respondió o configured es false, diagnosticar la causa exacta
     try {
-      const res = await fetch('/api/r2/status');
+      const res = await fetch('/api/r2/status', {
+        headers: getAuthHeaders(),
+        credentials: 'same-origin'
+      });
       if (res.status === 404) {
         throw new Error('El backend de la aplicación no tiene desplegados los endpoints de Cloudflare R2 (/api/r2/*). Asegúrate de reconstruir y desplegar el contenedor Docker actualizado en EasyPanel.');
       }
@@ -204,7 +263,8 @@ export const r2Storage = {
       try {
         const res = await fetch('/api/r2/presign-download', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'same-origin',
           body: JSON.stringify({
             key: attachment.r2_key,
             disposition: 'attachment',
@@ -231,7 +291,8 @@ export const r2Storage = {
       try {
         await fetch('/api/r2/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'same-origin',
           body: JSON.stringify({ key: attachment.r2_key })
         });
       } catch (e) {

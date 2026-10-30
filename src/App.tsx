@@ -36,6 +36,7 @@ import { isNoteUnlocked, unlockNoteSession, isNotebookUnlocked, unlockNotebookSe
 import { auth, AuthUser } from './lib/auth';
 import { db, storage } from './lib/insforge';
 import { reminderService } from './lib/reminders';
+import { r2Storage } from './lib/r2Client';
 import { registerServiceWorker, syncPersonBirthdayReminders } from './lib/birthdays';
 import { 
   AppNotebook,
@@ -127,14 +128,35 @@ export function App() {
   // Subscribe to auth state
   useEffect(() => {
     let isInitial = true;
+    let sessionSyncTimer: number | null = null;
+    const stopSessionSync = () => {
+      if (sessionSyncTimer !== null) {
+        window.clearInterval(sessionSyncTimer);
+        sessionSyncTimer = null;
+      }
+    };
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setCurrentUser(u);
+      stopSessionSync();
+      if (u) {
+        // La cookie httpOnly sb_session es la única forma en que <img>/<audio>
+        // pueden autenticarse contra /api/r2/stream (no pueden enviar headers).
+        r2Storage.syncSession().catch(() => {});
+        sessionSyncTimer = window.setInterval(() => {
+          r2Storage.syncSession().catch(() => {});
+        }, 10 * 60 * 1000);
+      } else {
+        r2Storage.clearSession().catch(() => {});
+      }
       if (isInitial) {
         isInitial = false;
         setIsAuthChecking(false);
       }
     });
-    return unsubscribe;
+    return () => {
+      stopSessionSync();
+      unsubscribe();
+    };
   }, []);
 
   // Responsive Sidebar States (Segundo Cerebro collapse & mobile drawer)
@@ -161,6 +183,10 @@ export function App() {
   const loadData = async () => {
     try {
       setLoading(true);
+
+      // Establece la cookie de sesión ANTES de cargar datos: los adjuntos
+      // se renderizan como <img src="/api/r2/stream?..."> y fallarían con 401.
+      try { await r2Storage.syncSession(); } catch {}
 
       // Phase 1: Critical data for first screen (Notebooks and Notes)
       const [nbs, n] = await Promise.all([
