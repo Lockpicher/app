@@ -405,10 +405,10 @@ export const AudioPlayerNodeView: React.FC<NodeViewProps> = ({
             type="button"
             onClick={togglePlay}
             disabled={!src || isReplacing}
-            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 shadow-lg transition transform active:scale-95 ${
+            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 shadow-md transition transform active:scale-95 ${
               isPlaying
-                ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 ring-2 ring-amber-400/50'
-                : 'bg-gradient-to-tr from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-600/30'
+                ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-black/20 ring-2 ring-amber-400/40'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-black/20'
             } disabled:opacity-50`}
             title={isPlaying ? 'Pausar audio' : 'Reproducir audio'}
           >
@@ -505,7 +505,7 @@ export const AudioPlayerNodeView: React.FC<NodeViewProps> = ({
                       style={animStyle}
                       className={`w-[2.5px] rounded-full ${
                         isPlaying
-                          ? 'bg-gradient-to-t from-indigo-500 to-cyan-400'
+                          ? 'bg-emerald-400'
                           : 'bg-[#3b3b55]'
                       }`}
                     />
@@ -515,7 +515,7 @@ export const AudioPlayerNodeView: React.FC<NodeViewProps> = ({
 
               {/* Time display: current / total */}
               <div className="text-[11px] sm:text-xs font-mono text-gray-400 shrink-0">
-                <span className={isPlaying ? 'text-indigo-300 font-semibold' : 'text-gray-300'}>
+                <span className={isPlaying ? 'text-emerald-300 font-semibold' : 'text-gray-300'}>
                   {formatAudioTime(currentTime)}
                 </span>
                 <span className="text-gray-600 mx-1">/</span>
@@ -533,11 +533,11 @@ export const AudioPlayerNodeView: React.FC<NodeViewProps> = ({
             >
               {/* Progress track */}
               <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 transition-[width] duration-75 relative"
+                className="h-full rounded-full bg-emerald-500 transition-[width] duration-75 relative"
                 style={{ width: `${progressPercent}%` }}
               >
                 {/* Scrubber thumb circle */}
-                <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md border-2 border-indigo-600 scale-0 group-hover/bar:scale-100 transition-transform" />
+                <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md border-2 border-emerald-600 scale-0 group-hover/bar:scale-100 transition-transform" />
               </div>
             </div>
           </div>

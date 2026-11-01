@@ -123,8 +123,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }}
     >
       <div className="relative w-full max-w-md bg-[#161622] border border-[#2a2a3c] rounded-2xl shadow-2xl overflow-hidden transition-all">
-        {/* Glow decorative top bar */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500" />
+        {/* Subtle accent line */}
+        <div className="h-0.5 w-full bg-blue-600" />
 
         {/* Close Button (only if not mandatory login) */}
         {!isMandatory && (
@@ -141,11 +141,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="p-6 sm:p-7">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600/30 to-purple-600/30 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-inner">
-              <Sparkles className="w-6 h-6 text-purple-400" />
+            <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-sm">
+              <Sparkles className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white tracking-wide">
+              <h3 className="text-lg font-bold text-white tracking-tight">
                 Segundo Cerebro
               </h3>
               <p className="text-xs text-gray-400">
@@ -161,7 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="space-y-5">
               <div className="p-4 rounded-xl bg-[#1b1b2a] border border-[#2d2d42] space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-400">
                     Cuenta Activa
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -242,7 +242,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 text-xs font-semibold rounded-lg transition ${
                     mode === 'signin'
-                      ? 'bg-blue-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -257,7 +257,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className={`py-2 text-xs font-semibold rounded-lg transition ${
                     mode === 'signup'
-                      ? 'bg-purple-600 text-white shadow-md'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
@@ -279,7 +279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Ej. Juan Pérez"
-                        className="w-full pl-9 pr-3 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition"
+                        className="w-full pl-9 pr-3 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
                       />
                     </div>
                   </div>
@@ -297,7 +297,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder={mode === 'signin' ? 'ej. johna o tu@correo.com' : 'ej. johna o tu@correo.com'}
-                      className="w-full pl-9 pr-3 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-sans"
+                      className="w-full pl-9 pr-3 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-sans"
                     />
                   </div>
                   {mode === 'signup' && (
@@ -319,7 +319,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full pl-9 pr-9 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+                      className="w-full pl-9 pr-9 py-2 bg-[#1b1b28] border border-[#2e2e42] rounded-xl text-white text-xs placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
                     />
                     <button
                       type="button"
@@ -353,11 +353,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-white shadow-lg transition ${
-                    mode === 'signin'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-900/30'
-                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-900/30'
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 shadow-sm transition active:scale-[0.99]"
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

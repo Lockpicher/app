@@ -233,7 +233,7 @@ export const PlaceMapView: React.FC<PlaceMapViewProps> = ({
 
       {/* Assignment Prompt Overlay */}
       {isAssigningPlace && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1000] bg-emerald-950/90 border border-emerald-500/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 text-xs text-emerald-200 animate-bounce">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1000] bg-emerald-950/90 border border-emerald-500/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl flex items-center gap-3 text-xs text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-200">
           <Crosshair className="w-4 h-4 text-emerald-400 animate-spin" />
           <span>Haz clic en el mapa para ubicar: <strong>{isAssigningPlace.title}</strong></span>
           <button

@@ -1025,7 +1025,7 @@ export const BookProfileView: React.FC<BookProfileViewProps> = ({
               <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block">
                 Páginas Leídas
               </span>
-              <span className="text-xl sm:text-2xl font-extrabold text-purple-400 font-mono mt-1 block">
+              <span className="text-xl sm:text-2xl font-extrabold text-blue-400 font-mono mt-1 block">
                 {currentPage}
               </span>
               <span className="text-[11px] text-gray-500">
@@ -1049,7 +1049,7 @@ export const BookProfileView: React.FC<BookProfileViewProps> = ({
               <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block">
                 Citas Destacadas
               </span>
-              <span className="text-xl sm:text-2xl font-extrabold text-indigo-400 font-mono mt-1 block">
+              <span className="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono mt-1 block">
                 {quotes.length}
               </span>
               <span className="text-[11px] text-gray-500">
@@ -1151,7 +1151,7 @@ export const BookProfileView: React.FC<BookProfileViewProps> = ({
                     {quotes.slice(0, 2).map(quote => (
                       <div
                         key={quote.id}
-                        className="p-3.5 bg-[#13131c] border-l-4 border-l-purple-500 border border-[#262638] rounded-r-xl space-y-1.5"
+                        className="p-3.5 bg-[#13131c] border border-[#262638] rounded-xl space-y-1.5"
                       >
                         <p className="text-xs sm:text-sm font-serif italic text-gray-200 leading-relaxed">
                           "{quote.quote_text}"

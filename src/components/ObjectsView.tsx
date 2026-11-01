@@ -874,20 +874,20 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                   <div
                     key={book.id}
                     onClick={() => setSelectedDetailObject(book)}
-                    className="p-3 bg-[#13131e] border border-[#28283e] hover:border-purple-500/60 rounded-xl transition cursor-pointer flex items-center gap-3 group"
+                    className="p-3 bg-[#13131e] border border-[#28283e] hover:border-amber-500/60 rounded-xl transition cursor-pointer flex items-center gap-3 group"
                   >
-                    <div className="w-12 h-16 rounded-md overflow-hidden bg-purple-950 flex-shrink-0 border border-white/10 shadow">
+                    <div className="w-12 h-16 rounded-md overflow-hidden bg-slate-900 flex-shrink-0 border border-white/10 shadow">
                       {book.thumbnail_url ? (
                         <img src={book.thumbnail_url} alt={book.title} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-purple-950 flex items-center justify-center text-[10px] font-bold text-white p-1 text-center font-serif">
+                        <div className="w-full h-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-white p-1 text-center font-serif">
                           {book.title.slice(0, 3)}
                         </div>
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate group-hover:text-purple-300 transition">
+                      <h4 className="text-xs font-bold text-white truncate group-hover:text-amber-300 transition">
                         {book.title}
                       </h4>
                       {bAuthor && (
@@ -1165,7 +1165,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
 
                         <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                           <div>
-                            <h3 className="font-bold text-sm text-white group-hover:text-purple-300 transition line-clamp-2 leading-tight font-serif">
+                            <h3 className="font-bold text-sm text-white group-hover:text-amber-300 transition line-clamp-2 leading-tight font-serif">
                               {obj.title}
                             </h3>
                             {bookAuthor && (

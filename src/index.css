@@ -256,7 +256,7 @@ html.light .markdown-body h3 {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid #8b5cf6;
+  border-left: 1.5px solid #475569;
   padding-left: 1rem;
   color: #94a3b8;
   font-style: italic;
@@ -450,7 +450,7 @@ html.light .markdown-body h3 {
 }
 
 .ProseMirror blockquote {
-  border-left: 3px solid #3b82f6;
+  border-left: 1.5px solid #475569;
   padding-left: 1rem;
   color: #94a3b8;
   font-style: italic;

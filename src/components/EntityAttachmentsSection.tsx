@@ -11,7 +11,8 @@ import {
   Music, 
   Check, 
   Sparkles,
-  Link2
+  Link2,
+  Loader2
 } from 'lucide-react';
 import { AppAttachment } from '../lib/types';
 import { r2Storage } from '../lib/r2Client';
@@ -117,7 +118,11 @@ export const EntityAttachmentsSection: React.FC<EntityAttachmentsSectionProps> =
             disabled={isUploading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#1e1e2c] hover:bg-[#272738] text-blue-300 border border-[#2d2d42] transition shadow-sm max-w-full truncate"
           >
-            <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isUploading ? 'animate-bounce' : ''}`} />
+            {isUploading ? (
+              <Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5 flex-shrink-0" />
+            )}
             <span className="truncate">{isUploading ? 'Subiendo a R2...' : 'Adjuntar archivo'}</span>
           </button>
         </div>

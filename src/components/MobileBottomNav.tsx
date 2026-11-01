@@ -169,7 +169,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           >
             <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
                   <Sparkles className="w-3.5 h-3.5" />
                 </div>
                 <div>

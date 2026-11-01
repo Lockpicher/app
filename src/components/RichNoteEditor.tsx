@@ -880,8 +880,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     >
       {/* Desktop Drag-and-Drop Overlay */}
       {isDraggingFile && (
-        <div className="absolute inset-0 z-50 bg-blue-600/20 backdrop-blur-sm border-2 border-dashed border-blue-400 flex flex-col items-center justify-center pointer-events-none animate-fadeIn">
-          <Upload className="w-12 h-12 text-blue-400 animate-bounce mb-2" />
+        <div className="absolute inset-0 z-50 bg-blue-600/15 backdrop-blur-sm border-2 border-dashed border-blue-400 flex flex-col items-center justify-center pointer-events-none animate-fadeIn">
+          <Upload className="w-10 h-10 text-blue-400 animate-pulse mb-2" />
           <p className="text-sm font-bold text-white">Suelta tus archivos aquí para adjuntarlos a InsForge</p>
           <p className="text-xs text-blue-200">Imágenes, documentos, audios o PDFs</p>
         </div>

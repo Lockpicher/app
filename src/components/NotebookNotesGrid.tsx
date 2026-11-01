@@ -31,7 +31,8 @@ import {
   File,
   ChevronRight,
   SlidersHorizontal,
-  FolderOpen
+  FolderOpen,
+  Loader2
 } from 'lucide-react';
 import { AppNote, AppNotebook, NoteType, AppTask } from '../lib/types';
 import { getCoverById } from '../lib/covers';
@@ -382,8 +383,8 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
 
       {/* Drag & Drop Visual Indicator */}
       {isDraggingOver && (
-        <div className="absolute inset-0 z-50 bg-blue-600/20 backdrop-blur-sm border-2 border-dashed border-blue-400 flex flex-col items-center justify-center pointer-events-none animate-fadeIn">
-          <Upload className="w-12 h-12 text-blue-400 animate-bounce mb-2" />
+        <div className="absolute inset-0 z-50 bg-blue-600/15 backdrop-blur-sm border-2 border-dashed border-blue-400 flex flex-col items-center justify-center pointer-events-none animate-fadeIn">
+          <Upload className="w-10 h-10 text-blue-400 animate-pulse mb-2" />
           <p className="text-sm font-bold text-white">Suelta tus archivos para crear notas automáticamente</p>
           <p className="text-xs text-blue-200">En el cuaderno: {notebook?.name || 'General'}</p>
         </div>
@@ -645,7 +646,11 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
               title="Adjuntar Archivo o Documento a este cuaderno"
               aria-label="Adjuntar Archivo"
             >
-              <Paperclip className={`w-4 h-4 ${isUploadingFileNote ? 'animate-bounce' : ''}`} />
+              {isUploadingFileNote ? (
+                <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+              ) : (
+                <Paperclip className="w-4 h-4" />
+              )}
             </button>
 
             {/* New Drawing / Canvas */}
