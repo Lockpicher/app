@@ -86,26 +86,33 @@ export function searchKnowledgeBase(
     }
   }
 
-  // 3. Search Objects (Books, Pages, Persons, Trips, Ideas)
+  // 3. Search Objects (Books, Pages, Persons, Trips, Ideas, Places)
   for (const obj of data.objects) {
     const titleLower = (obj.title || '').toLowerCase();
     const descLower = (obj.description || '').toLowerCase();
     const contentText = cleanHtmlToPlainText(obj.content || '');
     const contentLower = contentText.toLowerCase();
+    const propsText = JSON.stringify(obj.properties || {}).toLowerCase();
 
     let score = 0;
     for (const term of effectiveTerms) {
       if (titleLower.includes(term)) score += 10;
       if (descLower.includes(term)) score += 5;
       if (contentLower.includes(term)) score += 3;
+      if (propsText.includes(term)) score += 4;
     }
 
     if (score > 0) {
-      const snippet = obj.description || extractSnippet(contentText, effectiveTerms);
+      let snippet = obj.description || extractSnippet(contentText, effectiveTerms);
+      if (obj.object_type === 'place' && obj.properties) {
+        const p = obj.properties;
+        const loc = [p.direccion, p.barrio, p.ciudad, p.departamento, p.pais].filter(Boolean).join(', ');
+        snippet = `Lugar (${p.place_type || 'General'}): ${loc ? `${loc} • ` : ''}${snippet}`;
+      }
       results.push({
         id: obj.id,
         type: 'object',
-        title: `${obj.title} (${obj.object_type})`,
+        title: `${obj.title} (${obj.object_type === 'place' ? 'Lugar' : obj.object_type})`,
         contentSnippet: snippet,
         score
       });

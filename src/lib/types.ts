@@ -372,8 +372,74 @@ export const DEFAULT_OBJECT_TYPES: ObjectTypeDefinition[] = [
     { key: 'impacto', label: 'Impacto Estimado (1-5)', type: 'number' },
     { key: 'viabilidad', label: 'Viabilidad (1-5)', type: 'number' },
     { key: 'proyecto_id', label: 'Proyecto Asociado', type: 'relation', target_type: 'project' }
+  ]},
+  { id: 'place', name: 'Lugares', icon: 'map-pin', color: '#10b981', category: 'General', fields: [
+    { key: 'place_type', label: 'Tipo de Lugar', type: 'select', options: [
+      'Residencia',
+      'Oficina',
+      'Lugar de trabajo',
+      'Lugar comercial',
+      'Restaurante',
+      'Hotel',
+      'Lugar turístico',
+      'Zona rural',
+      'Centro cultural',
+      'Salud / Médico',
+      'Educativo',
+      'Deportivo',
+      'Otro'
+    ]},
+    { key: 'pais', label: 'País', type: 'text' },
+    { key: 'departamento', label: 'Departamento / Estado', type: 'text' },
+    { key: 'ciudad', label: 'Ciudad / Municipio', type: 'text' },
+    { key: 'barrio', label: 'Barrio / Sector', type: 'text' },
+    { key: 'direccion', label: 'Dirección específica', type: 'text' },
+    { key: 'codigo_postal', label: 'Código Postal', type: 'text' },
+    { key: 'latitud', label: 'Latitud', type: 'number' },
+    { key: 'longitud', label: 'Longitud', type: 'number' },
+    { key: 'telefono', label: 'Teléfono', type: 'phone' },
+    { key: 'email', label: 'Correo Electrónico', type: 'email' },
+    { key: 'website', label: 'Sitio Web', type: 'url' },
+    { key: 'horario', label: 'Horarios de atención', type: 'text' },
+    { key: 'persona_contacto', label: 'Persona de contacto', type: 'text' },
+    { key: 'fecha_ultima_visita', label: 'Fecha de última visita', type: 'date' }
   ]}
 ];
+
+// ==========================================
+// PLACE (LUGARES) TYPES
+// ==========================================
+
+export interface PlaceVisitLog {
+  id: string;
+  fecha: string;
+  motivo?: string;
+  notas?: string;
+  acompanantes?: string;
+}
+
+export interface PlaceProperties {
+  place_type?: string;
+  subtipo?: string;
+  pais?: string;
+  departamento?: string;
+  ciudad?: string;
+  barrio?: string;
+  direccion?: string;
+  codigo_postal?: string;
+  latitud?: number | null;
+  longitud?: number | null;
+  google_maps_url?: string;
+  telefono?: string;
+  email?: string;
+  website?: string;
+  horario?: string;
+  persona_contacto?: string;
+  fecha_ultima_visita?: string;
+  fotos_adicionales?: string[];
+  visitas_historial?: PlaceVisitLog[];
+  [key: string]: any;
+}
 
 export type InteractionType = 'meeting' | 'call' | 'message' | 'email' | 'event' | 'note' | 'other';
 
@@ -714,7 +780,7 @@ export interface AIProviderStatus {
 }
 
 export interface AIContextData {
-  type: 'note' | 'task' | 'book' | 'trip' | 'object' | 'page' | 'canvas' | 'general';
+  type: 'note' | 'task' | 'book' | 'trip' | 'place' | 'object' | 'page' | 'canvas' | 'general';
   id?: string;
   title?: string;
   content?: string;
@@ -740,7 +806,7 @@ export interface AIToolAction {
 
 export interface AIReference {
   id: string;
-  type: 'note' | 'task' | 'book' | 'object' | 'page';
+  type: 'note' | 'task' | 'book' | 'place' | 'object' | 'page';
   title: string;
   excerpt?: string;
 }

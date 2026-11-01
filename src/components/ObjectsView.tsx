@@ -34,12 +34,17 @@ import {
   Cake,
   Star,
   Bookmark,
-  Glasses
+  Glasses,
+  MapPin,
+  Navigation,
+  Globe,
+  Compass
 } from 'lucide-react';
 import { AppObject, AppProject, AppAttachment, ObjectTypeDefinition, AppNote, AppTask, AppArea, AppLink, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { EntityAttachmentsSection } from './EntityAttachmentsSection';
 import { CustomTypeBuilderModal } from './CustomTypeBuilderModal';
 import { ObjectPagePanel } from './ObjectPagePanel';
+import { PlaceMapView } from './PlaceMapView';
 import { DatePickerInput } from './DatePickerInput';
 import { syncPersonBirthdayReminders } from '../lib/birthdays';
 import { db } from '../lib/insforge';
@@ -94,7 +99,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   };
 
   // Default to compact table ('list') as requested in Phase 5
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'gallery'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'gallery' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLinkId, setFilterLinkId] = useState<string>('all'); // Filter by related entity (e.g. company, project)
 
@@ -103,6 +108,13 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
   const [bookGenreFilter, setBookGenreFilter] = useState<string>('all');
   const [bookRatingFilter, setBookRatingFilter] = useState<number>(0);
   const [bookSortBy, setBookSortBy] = useState<'date' | 'title' | 'author' | 'progress' | 'rating'>('date');
+
+  // Place-specific filters
+  const [placeTypeFilter, setPlaceTypeFilter] = useState<string>('all');
+  const [placeCountryFilter, setPlaceCountryFilter] = useState<string>('all');
+  const [placeDepartmentFilter, setPlaceDepartmentFilter] = useState<string>('all');
+  const [placeCityFilter, setPlaceCityFilter] = useState<string>('all');
+  const [placeTagFilter, setPlaceTagFilter] = useState<string>('all');
 
   // Modals state
   const [isCreatingObject, setIsCreatingObject] = useState(false);
@@ -297,6 +309,61 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     return Array.from(genres);
   }, [objects]);
 
+  // Available place filter values
+  const availablePlaceTypes = useMemo(() => {
+    const types = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'place') {
+        const pt = o.properties?.place_type;
+        if (pt && typeof pt === 'string' && pt.trim()) types.add(pt.trim());
+      }
+    });
+    return Array.from(types);
+  }, [objects]);
+
+  const availablePlaceCountries = useMemo(() => {
+    const countries = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'place') {
+        const c = o.properties?.pais;
+        if (c && typeof c === 'string' && c.trim()) countries.add(c.trim());
+      }
+    });
+    return Array.from(countries);
+  }, [objects]);
+
+  const availablePlaceDepartments = useMemo(() => {
+    const depts = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'place') {
+        const d = o.properties?.departamento;
+        if (d && typeof d === 'string' && d.trim()) depts.add(d.trim());
+      }
+    });
+    return Array.from(depts);
+  }, [objects]);
+
+  const availablePlaceCities = useMemo(() => {
+    const cities = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'place') {
+        const ci = o.properties?.ciudad;
+        if (ci && typeof ci === 'string' && ci.trim()) cities.add(ci.trim());
+      }
+    });
+    return Array.from(cities);
+  }, [objects]);
+
+  const availablePlaceTags = useMemo(() => {
+    const tags = new Set<string>();
+    objects.forEach(o => {
+      if (o.object_type === 'place' && Array.isArray(o.tags)) {
+        o.tags.forEach(t => tags.add(t));
+      }
+    });
+    return Array.from(tags);
+  }, [objects]);
+
   // Currently reading books for quick access banner
   const currentlyReadingBooks = useMemo(() => {
     return objects.filter(o => 
@@ -359,6 +426,35 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
         }
       }
 
+      // 5. Place-specific filters when viewing places
+      if (selectedType === 'place') {
+        const props = obj.properties || {};
+        if (placeTypeFilter !== 'all') {
+          const pt = props.place_type || 'Otro';
+          if (pt.toLowerCase() !== placeTypeFilter.toLowerCase()) return false;
+        }
+
+        if (placeCountryFilter !== 'all') {
+          const c = props.pais || '';
+          if (c.toLowerCase() !== placeCountryFilter.toLowerCase()) return false;
+        }
+
+        if (placeDepartmentFilter !== 'all') {
+          const d = props.departamento || '';
+          if (d.toLowerCase() !== placeDepartmentFilter.toLowerCase()) return false;
+        }
+
+        if (placeCityFilter !== 'all') {
+          const ci = props.ciudad || '';
+          if (ci.toLowerCase() !== placeCityFilter.toLowerCase()) return false;
+        }
+
+        if (placeTagFilter !== 'all') {
+          const tags = obj.tags || [];
+          if (!tags.includes(placeTagFilter)) return false;
+        }
+      }
+
       return true;
     });
 
@@ -395,7 +491,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
     }
 
     return result;
-  }, [objects, selectedType, filterLinkId, searchQuery, links, projects, bookStatusFilter, bookGenreFilter, bookRatingFilter, bookSortBy]);
+  }, [objects, selectedType, filterLinkId, searchQuery, links, projects, bookStatusFilter, bookGenreFilter, bookRatingFilter, bookSortBy, placeTypeFilter, placeCountryFilter, placeDepartmentFilter, placeCityFilter, placeTagFilter]);
 
   const getTypeMeta = (typeId: string) => {
     const def = allTypeDefinitions.find(t => t.id === typeId);
@@ -553,9 +649,131 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
             >
               <ImageIcon className="w-3.5 h-3.5" />
             </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`p-1.5 rounded-lg transition ${
+                viewMode === 'map'
+                  ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                  : 'text-gray-400 hover:text-emerald-400'
+              }`}
+              title="Vista de Mapa con lugares georreferenciados"
+            >
+              <MapPin className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Place-Specific Filter Toolbar */}
+      {selectedType === 'place' && (
+        <div className="px-4 sm:px-6 md:px-8 py-2.5 bg-[#101015] border-b border-[#20202c] flex items-center justify-between gap-3 flex-wrap animate-fadeIn text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Filtros de Lugares:</span>
+            </span>
+
+            {/* Place Type Filter */}
+            <select
+              value={placeTypeFilter}
+              onChange={e => setPlaceTypeFilter(e.target.value)}
+              className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-emerald-300 outline-none cursor-pointer"
+            >
+              <option value="all">Todos los tipos</option>
+              {availablePlaceTypes.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+
+            {/* Country Filter */}
+            {availablePlaceCountries.length > 0 && (
+              <select
+                value={placeCountryFilter}
+                onChange={e => setPlaceCountryFilter(e.target.value)}
+                className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+              >
+                <option value="all">Todos los países</option>
+                {availablePlaceCountries.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Department / State Filter */}
+            {availablePlaceDepartments.length > 0 && (
+              <select
+                value={placeDepartmentFilter}
+                onChange={e => setPlaceDepartmentFilter(e.target.value)}
+                className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+              >
+                <option value="all">Todos los departamentos</option>
+                {availablePlaceDepartments.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            )}
+
+            {/* City Filter */}
+            {availablePlaceCities.length > 0 && (
+              <select
+                value={placeCityFilter}
+                onChange={e => setPlaceCityFilter(e.target.value)}
+                className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+              >
+                <option value="all">Todas las ciudades</option>
+                {availablePlaceCities.map(ci => (
+                  <option key={ci} value={ci}>{ci}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Tag Filter */}
+            {availablePlaceTags.length > 0 && (
+              <select
+                value={placeTagFilter}
+                onChange={e => setPlaceTagFilter(e.target.value)}
+                className="bg-[#181824] border border-[#2c2c3d] rounded-lg px-2.5 py-1 text-xs text-gray-300 outline-none cursor-pointer"
+              >
+                <option value="all">Todas las etiquetas</option>
+                {availablePlaceTags.map(tag => (
+                  <option key={tag} value={tag}>#{tag}</option>
+                ))}
+              </select>
+            )}
+
+            {(placeTypeFilter !== 'all' || placeCountryFilter !== 'all' || placeDepartmentFilter !== 'all' || placeCityFilter !== 'all' || placeTagFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlaceTypeFilter('all');
+                  setPlaceCountryFilter('all');
+                  setPlaceDepartmentFilter('all');
+                  setPlaceCityFilter('all');
+                  setPlaceTagFilter('all');
+                }}
+                className="text-[11px] text-gray-400 hover:text-emerald-300 underline ml-1"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                viewMode === 'map'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-[#1e1e2c] text-emerald-300 hover:bg-[#28283a] border border-emerald-500/30'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              <span>{viewMode === 'map' ? 'Ver en Lista' : 'Ver en Mapa'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Book-Specific Library Filter & Sort Toolbar */}
       {selectedType === 'book' && (
@@ -994,6 +1212,112 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 );
               }
 
+              // Special Card Representation for Places (Lugares)
+              if (obj.object_type === 'place') {
+                const placeType = props.place_type || 'Lugar';
+                const placeCity = props.ciudad || '';
+                const placeCountry = props.pais || '';
+                const placeAddress = [props.barrio, placeCity, placeCountry].filter(Boolean).join(', ');
+                const hasGps = !isNaN(Number(props.latitud)) && !isNaN(Number(props.longitud)) && Number(props.latitud) !== 0 && Number(props.longitud) !== 0;
+
+                return (
+                  <div
+                    key={obj.id}
+                    onClick={() => setSelectedDetailObject(obj)}
+                    className="bg-[#191924] rounded-2xl border border-[#28283a] hover:border-emerald-500/50 transition-all duration-200 p-4 sm:p-4.5 flex flex-col justify-between shadow-sm cursor-pointer group hover:shadow-xl relative overflow-hidden select-none min-h-[290px] max-h-[360px]"
+                  >
+                    <div className="overflow-hidden flex-1 flex flex-col">
+                      {/* Top Type Pill & Action Buttons */}
+                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider flex items-center gap-1.5 truncate max-w-[150px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">{placeType}</span>
+                        </span>
+
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDetailObject(obj)}
+                            className="p-1 rounded bg-[#222232] hover:bg-[#2c2c40] text-emerald-400 transition"
+                            title="Ver Ficha de Lugar"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Eliminar lugar "${obj.title}"?`)) {
+                                onDeleteObject(obj.id);
+                              }
+                            }}
+                            className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition"
+                            title="Eliminar lugar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Photo or MapPin Placeholder */}
+                      {obj.thumbnail_url ? (
+                        <div className="mb-2.5 rounded-xl overflow-hidden aspect-[16/9] bg-[#121218] border border-[#252535] flex-shrink-0">
+                          <img
+                            src={obj.thumbnail_url}
+                            alt={obj.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                        </div>
+                      ) : (
+                        <div className="mb-2.5 rounded-xl aspect-[16/9] bg-gradient-to-br from-emerald-950/50 to-[#12121c] border border-emerald-900/30 flex items-center justify-center flex-shrink-0 text-emerald-400/80">
+                          <MapPin className="w-8 h-8 opacity-70" />
+                        </div>
+                      )}
+
+                      {/* Place Title */}
+                      <h3 className="font-bold text-sm text-white group-hover:text-emerald-400 transition truncate leading-tight mb-1" title={obj.title}>
+                        {obj.title}
+                      </h3>
+
+                      {/* Address / Location */}
+                      <p className="text-[11px] text-gray-400 truncate mb-2">
+                        {placeAddress || 'Sin ubicación específica'}
+                      </p>
+
+                      {/* GPS & Contact info pills */}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-auto">
+                        {hasGps ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#12121c] text-emerald-400 border border-emerald-500/20 font-mono flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>GPS activo</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#12121c] text-gray-500 border border-[#252535]">
+                            Sin GPS
+                          </span>
+                        )}
+
+                        {props.telefono && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#12121c] text-blue-300 border border-blue-500/20 flex items-center gap-1 truncate max-w-[110px]">
+                            <Phone className="w-2.5 h-2.5" />
+                            <span className="truncate">{props.telefono}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-2 border-t border-[#232332] flex items-center justify-between text-xs text-gray-400 mt-2 flex-shrink-0">
+                      <span className="text-[10px] text-gray-500">
+                        {props.fecha_ultima_visita ? `Visita: ${props.fecha_ultima_visita}` : 'Sin visitas'}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">
+                        {new Date(obj.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={obj.id}
@@ -1274,7 +1598,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : viewMode === 'gallery' ? (
           /* Gallery View: Visual Cover Focus */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {filteredObjects.map(obj => {
@@ -1318,7 +1642,27 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
               );
             })}
           </div>
-        )}
+        ) : viewMode === 'map' ? (
+          /* Map View: Georeferenced Places */
+          <div className="w-full h-[calc(100vh-210px)] min-h-[500px] rounded-2xl overflow-hidden border border-[#28283a] shadow-xl">
+            <PlaceMapView
+              places={filteredObjects.length > 0 ? filteredObjects : objects.filter(o => o.object_type === 'place')}
+              onSelectPlace={(place) => setSelectedDetailObject(place)}
+              onUpdateCoordinates={async (placeId, newLat, newLng) => {
+                const targetObj = objects.find(o => o.id === placeId);
+                if (targetObj) {
+                  await onUpdateObject(placeId, {
+                    properties: {
+                      ...(targetObj.properties || {}),
+                      latitud: newLat,
+                      longitud: newLng
+                    }
+                  });
+                }
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Modal Creación Rápida de Objeto (Estilo Capacities/Obsidian) */}
@@ -1387,7 +1731,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 required
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
-                placeholder="Ej. Carlos Mendoza, Reunión de Sprint, Clean Code..."
+                placeholder={newType === 'place' ? 'Ej. Casa Campestre, Oficina Central, Hotel Hilton...' : 'Ej. Carlos Mendoza, Reunión de Sprint, Clean Code...'}
                 className="w-full px-3.5 py-2.5 bg-[#121218] border border-[#2a2a3c] rounded-xl text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
               />
             </div>
@@ -1401,10 +1745,58 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                 type="text"
                 value={newDescription}
                 onChange={e => setNewDescription(e.target.value)}
-                placeholder="Breve contexto..."
+                placeholder={newType === 'place' ? 'Breve contexto del lugar o referencia...' : 'Breve contexto...'}
                 className="w-full px-3.5 py-2 bg-[#121218] border border-[#2a2a3c] rounded-xl text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
               />
             </div>
+
+            {/* Campos rápidos para Lugares */}
+            {newType === 'place' && (
+              <div className="space-y-3 p-3 rounded-xl bg-[#14141e] border border-emerald-500/30">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-gray-300 font-medium block mb-1">
+                      Tipo de Lugar:
+                    </label>
+                    <select
+                      value={newFormProperties.place_type || 'Residencia'}
+                      onChange={e => setNewFormProperties(prev => ({ ...prev, place_type: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 bg-[#111118] border border-[#2a2a3e] rounded-lg text-xs text-white outline-none cursor-pointer"
+                    >
+                      {['Residencia', 'Oficina', 'Lugar de trabajo', 'Lugar comercial', 'Restaurante', 'Hotel', 'Lugar turístico', 'Zona rural', 'Centro cultural', 'Salud / Médico', 'Otro'].map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-gray-300 font-medium block mb-1">
+                      Ciudad / Municipio:
+                    </label>
+                    <input
+                      type="text"
+                      value={newFormProperties.ciudad || ''}
+                      onChange={e => setNewFormProperties(prev => ({ ...prev, ciudad: e.target.value }))}
+                      placeholder="Ej. Bogotá, Medellín..."
+                      className="w-full px-2.5 py-1.5 bg-[#111118] border border-[#2a2a3e] rounded-lg text-xs text-white outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-300 font-medium block mb-1">
+                    Dirección específica <span className="text-gray-500 font-normal">(opcional)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    value={newFormProperties.direccion || ''}
+                    onChange={e => setNewFormProperties(prev => ({ ...prev, direccion: e.target.value }))}
+                    placeholder="Ej. Carrera 7 # 71-21..."
+                    className="w-full px-2.5 py-1.5 bg-[#111118] border border-[#2a2a3e] rounded-lg text-xs text-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Selector de Cumpleaños interactivo para Personas */}
             {newType === 'person' && (

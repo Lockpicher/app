@@ -189,7 +189,7 @@ export const AIContextProvider: React.FC<AIProviderProps> = ({
       return {
         type: 'object',
         title: 'Objetos y Entidades',
-        content: `Biblioteca de Objetos (${objects.length} elementos registrados entre Personas, Libros, Páginas, Viajes e Ideas).`
+        content: `Biblioteca de Objetos (${objects.length} elementos registrados entre Personas, Lugares, Libros, Páginas, Viajes e Ideas).`
       };
     }
 

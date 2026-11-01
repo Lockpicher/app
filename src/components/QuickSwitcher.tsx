@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User, Palette, Atom, Plane, Sparkles } from 'lucide-react';
+import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User, Palette, Atom, Plane, Sparkles, MapPin } from 'lucide-react';
 import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment, AppCanvas, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { db } from '../lib/insforge';
 
@@ -91,6 +91,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
         if (obj?.object_type === 'atomic_note') return <Atom className="w-4 h-4 text-cyan-400" />;
         if (obj?.object_type === 'trip') return <Plane className="w-4 h-4 text-teal-400" />;
         if (obj?.object_type === 'idea') return <Sparkles className="w-4 h-4 text-amber-400" />;
+        if (obj?.object_type === 'place') return <MapPin className="w-4 h-4 text-emerald-400" />;
         return <Boxes className="w-4 h-4 text-pink-400" />;
       }
       default: return <Search className="w-4 h-4 text-gray-400" />;

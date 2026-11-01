@@ -82,6 +82,7 @@ import { TripManagerView } from './TripManagerView';
 import { PersonProfileView } from './PersonProfileView';
 import { BookProfileView } from './BookProfileView';
 import { PageDocumentView } from './PageDocumentView';
+import { PlaceProfileView } from './PlaceProfileView';
 import { TableGridPicker } from './TableGridPicker';
 import { TableToolbar } from './TableToolbar';
 import { AudioNode } from './tiptap/AudioNode';
@@ -979,6 +980,51 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                 projects={projects}
                 areas={areas}
                 notes={notes}
+                attachments={attachments}
+                onAttachmentCreated={onAttachmentCreated}
+                onAttachmentDeleted={onAttachmentDeleted}
+                outgoingLinks={outgoingLinks}
+                incomingLinks={incomingLinks}
+                onOpenLinkSelector={() => setIsLinkSelectorOpen(true)}
+                onOpenNote={onOpenNote}
+                onNavigateToObject={onNavigateToObject}
+                onNavigateToEntity={onNavigateToEntity}
+                onSaveStatusChange={setSaveStatus}
+                onOpenAudioModal={() => setIsAudioModalOpen(true)}
+              />
+            </div>
+          ) : object.object_type === 'place' ? (
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+              <PlaceProfileView
+                object={object}
+                properties={properties}
+                onPropertyChange={(key, val) => {
+                  setProperties(prev => ({ ...prev, [key]: val }));
+                  setSaveStatus('dirty');
+                }}
+                title={title}
+                onTitleChange={(newTitle) => {
+                  setTitle(newTitle);
+                  setSaveStatus('dirty');
+                }}
+                description={description}
+                onDescriptionChange={(newDesc) => {
+                  setDescription(newDesc);
+                  setSaveStatus('dirty');
+                }}
+                thumbnailUrl={thumbnailUrl}
+                onThumbnailUrlChange={(newUrl) => {
+                  setThumbnailUrl(newUrl);
+                  setSaveStatus('dirty');
+                }}
+                editor={editor}
+                editorImageInputRef={editorImageInputRef}
+                onUploadImage={handleUploadImage}
+                allObjects={allObjects}
+                projects={projects}
+                areas={areas}
+                notes={notes}
+                tasks={tasks}
                 attachments={attachments}
                 onAttachmentCreated={onAttachmentCreated}
                 onAttachmentDeleted={onAttachmentDeleted}

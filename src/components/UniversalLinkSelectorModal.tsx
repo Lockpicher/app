@@ -18,7 +18,8 @@ import {
   Check,
   Atom,
   Plane,
-  Sparkles
+  Sparkles,
+  MapPin
 } from 'lucide-react';
 import { 
   AppObject, 
@@ -99,6 +100,7 @@ export const UniversalLinkSelectorModal: React.FC<UniversalLinkSelectorModalProp
       { id: 'atomic_note', label: 'Nota Atómica', icon: Atom, color: '#06b6d4', category: 'object' },
       { id: 'trip', label: 'Viaje', icon: Plane, color: '#14b8a6', category: 'object' },
       { id: 'idea', label: 'Idea', icon: Sparkles, color: '#f59e0b', category: 'object' },
+      { id: 'place', label: 'Lugar', icon: MapPin, color: '#10b981', category: 'object' },
       { id: 'note', label: 'Nota', icon: FileText, color: '#a855f7', category: 'note' },
       { id: 'task', label: 'Tarea', icon: CheckSquare, color: '#10b981', category: 'task' },
       ...customTypes.map(ct => ({
