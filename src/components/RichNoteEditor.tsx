@@ -279,7 +279,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           .join('');
       }
       if (note.thumbnail_url) {
-        return `<p><img src="${note.thumbnail_url}" alt="${note.title || 'Imagen'}" /></p><p></p>`;
+        return `<p><img loading="lazy" decoding="async" src="${note.thumbnail_url}" alt="${note.title || 'Imagen'}" /></p><p></p>`;
       }
       return '<p></p>';
     })(),
@@ -547,7 +547,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         editor
           .chain()
           .focus()
-          .insertContent(`<p><img src="${imageUrl}" alt="${altText || 'Imagen adjunta'}" /></p><p></p>`)
+          .insertContent(`<p><img loading="lazy" decoding="async" src="${imageUrl}" alt="${altText || 'Imagen adjunta'}" /></p><p></p>`)
           .run();
       }
 
@@ -1809,8 +1809,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 overflow-hidden pr-2">
                               {isImg ? (
-                                <img
-                                  src={att.file_url}
+                                <img loading="lazy" decoding="async" src={att.file_url}
                                   alt=""
                                   onClick={() => setLightboxImgUrl(att.file_url)}
                                   className="w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 border border-[#2b2b3e] flex-shrink-0"
@@ -1930,8 +1929,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             >
               ✕ Cerrar
             </button>
-            <img 
-              src={lightboxImgUrl} 
+            <img loading="lazy" decoding="async" src={lightboxImgUrl} 
               alt="Vista previa" 
               className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10"
               onClick={(e) => e.stopPropagation()} 

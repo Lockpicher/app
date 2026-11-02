@@ -153,5 +153,23 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false
+  },
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 1500,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules/@excalidraw')) return 'vendor-excalidraw';
+          if (id.includes('node_modules/pdfjs-dist')) return 'vendor-pdf';
+          if (id.includes('node_modules/leaflet')) return 'vendor-leaflet';
+          if (id.includes('node_modules/@tiptap') || id.includes('node_modules/prosemirror')) return 'vendor-tiptap';
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'vendor-react';
+          if (id.includes('node_modules/lucide-react')) return 'vendor-lucide';
+          if (id.includes('node_modules/@aws-sdk')) return 'vendor-aws';
+        }
+      }
+    }
   }
 });

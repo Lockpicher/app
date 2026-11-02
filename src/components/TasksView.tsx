@@ -1004,7 +1004,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                       }}
                                       className="w-7 h-7 rounded-md overflow-hidden border border-[#2d2d40] bg-[#101016] flex-shrink-0 cursor-pointer"
                                     >
-                                      <img src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                                      <img loading="lazy" decoding="async" src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
                                     </div>
                                   )}
 

@@ -431,8 +431,7 @@ export const PageDocumentView: React.FC<PageDocumentViewProps> = ({
         {/* Cover Image (if present or trigger to add) */}
         {thumbnailUrl ? (
           <div className="relative w-full h-48 sm:h-64 rounded-2xl overflow-hidden border border-[#2b2b3e] group bg-[#12121c] shadow-inner">
-            <img
-              src={thumbnailUrl}
+            <img loading="lazy" decoding="async" src={thumbnailUrl}
               alt={title}
               className="w-full h-full object-cover"
             />
@@ -1205,8 +1204,7 @@ export const PageDocumentView: React.FC<PageDocumentViewProps> = ({
                 <div className="bg-[#12121b] border border-[#2a2a3e] rounded-2xl p-4 space-y-3">
                   <div className="flex items-start gap-4">
                     {importResult.ogImage && (
-                      <img
-                        src={importResult.ogImage}
+                      <img loading="lazy" decoding="async" src={importResult.ogImage}
                         alt=""
                         className="w-24 h-20 rounded-xl object-cover border border-[#303046] flex-shrink-0"
                       />

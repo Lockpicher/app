@@ -753,8 +753,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                 {/* Portada si existe */}
                 {thumbnailUrl && (
                   <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-[#2b2b3e] group bg-[#161622]">
-                    <img 
-                      src={thumbnailUrl} 
+                    <img loading="lazy" decoding="async" src={thumbnailUrl} 
                       alt="" 
                       className="w-full h-full object-cover" 
                     />
@@ -780,7 +779,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                       style={{ backgroundColor: `${typeColor}25`, color: typeColor }}
                     >
                       {thumbnailUrl && !thumbnailUrl.includes('cover') ? (
-                        <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                        <img loading="lazy" decoding="async" src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <Plane className="w-8 h-8 text-teal-400" />
                       )}
@@ -1049,8 +1048,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                 {/* Portada si existe */}
                 {thumbnailUrl && (
                   <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-[#2b2b3e] group bg-[#161622]">
-                    <img 
-                      src={thumbnailUrl} 
+                    <img loading="lazy" decoding="async" src={thumbnailUrl} 
                       alt="" 
                       className="w-full h-full object-cover" 
                     />
@@ -1076,7 +1074,7 @@ export const ObjectPagePanel: React.FC<ObjectPagePanelProps> = ({
                       style={{ backgroundColor: `${typeColor}25`, color: typeColor }}
                     >
                       {thumbnailUrl && !thumbnailUrl.includes('cover') ? (
-                        <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                        <img loading="lazy" decoding="async" src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <span>{title.charAt(0).toUpperCase() || 'O'}</span>
                       )}

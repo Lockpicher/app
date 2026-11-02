@@ -202,8 +202,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
               </span>
               <div className="w-36 h-48 rounded-xl shadow-xl overflow-hidden border border-[#3b3b52] relative flex flex-col justify-between p-3 transition transform hover:scale-102">
                 {coverType === 'custom' && customCoverUrl ? (
-                  <img
-                    src={customCoverUrl}
+                  <img loading="lazy" decoding="async" src={customCoverUrl}
                     alt="Portada personalizada"
                     className="absolute inset-0 w-full h-full object-cover"
                   />

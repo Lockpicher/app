@@ -370,8 +370,7 @@ export const ObjectDetailModal: React.FC<ObjectDetailModalProps> = ({
         <div className="relative bg-[#13131c] border-b border-[#262638] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 overflow-hidden">
             {thumbnailUrl || object.thumbnail_url ? (
-              <img 
-                src={thumbnailUrl || object.thumbnail_url!} 
+              <img loading="lazy" decoding="async" src={thumbnailUrl || object.thumbnail_url!} 
                 alt={object.title} 
                 className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-[#35354a] shadow flex-shrink-0"
               />

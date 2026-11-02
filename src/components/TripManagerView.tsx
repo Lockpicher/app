@@ -1704,7 +1704,7 @@ export const TripManagerView: React.FC<TripManagerViewProps> = ({
                             rel="noopener noreferrer"
                             className="relative aspect-video rounded-lg overflow-hidden border border-[#2f2f45] group bg-black/40"
                           >
-                            <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <img loading="lazy" decoding="async" src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
                           </a>
                         ))}
                       </div>
@@ -2696,7 +2696,7 @@ export const TripManagerView: React.FC<TripManagerViewProps> = ({
                   <div className="grid grid-cols-3 gap-2">
                     {editingJournal.image_urls.map((img, i) => (
                       <div key={i} className="relative aspect-video rounded-lg overflow-hidden border border-[#2d2d42] group">
-                        <img src={img} alt="" className="w-full h-full object-cover" />
+                        <img loading="lazy" decoding="async" src={img} alt="" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => {

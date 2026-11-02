@@ -654,8 +654,7 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                 {/* Avatar Display */}
                 <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#36364d] shadow-lg relative bg-[#181824] flex items-center justify-center">
                   {(person.thumbnail_url || photoUrl) && !imageError ? (
-                    <img
-                      src={person.thumbnail_url || photoUrl}
+                    <img loading="lazy" decoding="async" src={person.thumbnail_url || photoUrl}
                       alt={person.title}
                       onError={() => setImageError(true)}
                       className="w-full h-full object-cover"
@@ -1333,8 +1332,7 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                             <div className="flex items-start gap-2.5">
                               {/* Avatar / Initials */}
                               {relatedPerson?.thumbnail_url ? (
-                                <img
-                                  src={relatedPerson.thumbnail_url}
+                                <img loading="lazy" decoding="async" src={relatedPerson.thumbnail_url}
                                   alt={relatedPerson.title}
                                   className="w-10 h-10 rounded-xl object-cover border border-[#303042] flex-shrink-0"
                                 />
@@ -1477,7 +1475,7 @@ export const PersonDetailModal: React.FC<PersonDetailModalProps> = ({
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               {item.person?.thumbnail_url ? (
-                                <img src={item.person.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                                <img loading="lazy" decoding="async" src={item.person.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
                               ) : (
                                 <div className="w-8 h-8 rounded-lg bg-rose-900/40 text-rose-300 flex items-center justify-center font-bold text-xs">
                                   {(item.person?.title || 'F').slice(0, 2).toUpperCase()}

@@ -33,6 +33,7 @@ import {
   BookQuote
 } from './types';
 import { auth } from './auth';
+import { apiCache } from './apiCache';
 
 export const INSFORGE_BASE_URL = 'https://insforge.kora.ovh';
 // TODO(security): rotar la clave una vez confirmado el entorno de despliegue y eliminar el fallback
@@ -106,6 +107,7 @@ export const db = {
   },
 
   async createNotebook(notebook: Partial<AppNotebook>): Promise<AppNotebook | null> {
+    apiCache.invalidate('notebooks');
     const { is_locked, password_hash, description, ...directFields } = notebook;
     const finalDesc = encodeNotebookDescription(description, is_locked, password_hash);
 
@@ -127,6 +129,7 @@ export const db = {
   },
 
   async updateNotebook(id: string, updates: Partial<AppNotebook>): Promise<AppNotebook | null> {
+    apiCache.invalidate('notebooks');
     const { id: _ignored, is_locked, password_hash, description, ...directFields } = updates;
     
     // Si se pasa is_locked o password_hash o description, calculamos el description final
@@ -215,6 +218,7 @@ export const db = {
   },
 
   async createNote(note: Partial<AppNote>): Promise<AppNote | null> {
+    apiCache.invalidate('notes');
     const { area_id, para_category, is_locked, password_hash, ...directFields } = note as any;
     const finalProperties = {
       ...(note.properties || {}),
@@ -251,6 +255,7 @@ export const db = {
   },
 
   async updateNote(id: string, updates: Partial<AppNote>): Promise<AppNote | null> {
+    apiCache.invalidate('notes');
     const { id: _ignored, area_id, para_category, is_locked, password_hash, ...directFields } = updates as any;
     
     let finalProperties = updates.properties;
@@ -325,6 +330,7 @@ export const db = {
   },
 
   async deleteNote(id: string): Promise<boolean> {
+    apiCache.invalidate('notes');
     const { error } = await insforge.database
       .from('app_notes')
       .delete()
@@ -573,6 +579,7 @@ export const db = {
   },
 
   async createProject(project: Partial<AppProject>): Promise<AppProject | null> {
+    apiCache.invalidate('projects');
     const { area_id, para_category, next_action, ...directFields } = project as any;
     const finalProperties = {
       ...(project.properties || {}),
@@ -607,6 +614,7 @@ export const db = {
   },
 
   async updateProject(id: string, updates: Partial<AppProject>): Promise<AppProject | null> {
+    apiCache.invalidate('projects');
     const { id: _ignored, area_id, para_category, next_action, ...directFields } = updates as any;
     
     let finalProperties = updates.properties;
@@ -649,6 +657,7 @@ export const db = {
   },
 
   async deleteProject(id: string): Promise<boolean> {
+    apiCache.invalidate('projects');
     const { error } = await insforge.database
       .from('app_projects')
       .delete()
@@ -681,6 +690,7 @@ export const db = {
   },
 
   async createTask(task: Partial<AppTask>): Promise<AppTask | null> {
+    apiCache.invalidate('tasks');
     const { area_id, para_category, ...directFields } = task as any;
     const finalProperties = {
       ...(task.properties || {}),
@@ -713,6 +723,7 @@ export const db = {
   },
 
   async updateTask(id: string, updates: Partial<AppTask>): Promise<AppTask | null> {
+    apiCache.invalidate('tasks');
     const { id: _ignored, area_id, para_category, ...directFields } = updates as any;
     
     let finalProperties = updates.properties;
@@ -771,6 +782,7 @@ export const db = {
   },
 
   async deleteTask(id: string): Promise<boolean> {
+    apiCache.invalidate('tasks');
     const { error } = await insforge.database
       .from('app_tasks')
       .delete()
@@ -1050,6 +1062,7 @@ export const db = {
   },
 
   async createObject(obj: Partial<AppObject>): Promise<AppObject | null> {
+    apiCache.invalidate('objects');
     const { thumbnail_url, area_id, para_category, ...directFields } = obj as any;
     const finalProperties = {
       ...(obj.properties || {}),
@@ -1084,6 +1097,7 @@ export const db = {
   },
 
   async updateObject(id: string, updates: Partial<AppObject>): Promise<AppObject | null> {
+    apiCache.invalidate('objects');
     const { thumbnail_url, area_id, para_category, ...directFields } = updates as any;
     
     // Merge properties if provided
@@ -1127,6 +1141,7 @@ export const db = {
   },
 
   async deleteObject(id: string): Promise<boolean> {
+    apiCache.invalidate('objects');
     const { error } = await insforge.database
       .from('app_objects')
       .delete()

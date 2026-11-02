@@ -582,8 +582,7 @@ export const BookProfileView: React.FC<BookProfileViewProps> = ({
           <div className="relative group mx-auto sm:mx-0 flex-shrink-0">
             <div className="w-36 h-52 sm:w-44 sm:h-64 rounded-xl overflow-hidden shadow-2xl border border-white/10 relative transition-transform duration-300 group-hover:scale-[1.02]">
               {thumbnailUrl ? (
-                <img
-                  src={thumbnailUrl}
+                <img loading="lazy" decoding="async" src={thumbnailUrl}
                   alt={title}
                   className="w-full h-full object-cover"
                 />

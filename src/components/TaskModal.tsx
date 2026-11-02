@@ -886,7 +886,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <div className="flex items-center gap-2">
                     {thumbnailUrl ? (
                       <div className="relative w-12 h-10 rounded-lg overflow-hidden border border-[#2d2d3f] flex-shrink-0 bg-[#0d0d12]">
-                        <img src={thumbnailUrl} alt="Miniatura" className="w-full h-full object-cover" />
+                        <img loading="lazy" decoding="async" src={thumbnailUrl} alt="Miniatura" className="w-full h-full object-cover" />
                       </div>
                     ) : null}
 
@@ -1441,7 +1441,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         <div className="flex items-center gap-3 overflow-hidden">
                           <div className="w-10 h-10 rounded-lg bg-[#111116] border border-[#242435] flex items-center justify-center flex-shrink-0 overflow-hidden">
                             {isImg ? (
-                              <img src={att.file_url} alt="" className="w-full h-full object-cover" />
+                              <img loading="lazy" decoding="async" src={att.file_url} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <Paperclip className="w-4 h-4 text-cyan-400" />
                             )}

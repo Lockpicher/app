@@ -493,8 +493,7 @@ export const PlaceProfileView: React.FC<PlaceProfileViewProps> = ({
           {/* Fotografía principal / Avatar del Lugar */}
           <div className="relative group shrink-0">
             {thumbnailUrl ? (
-              <img
-                src={thumbnailUrl}
+              <img loading="lazy" decoding="async" src={thumbnailUrl}
                 alt={title}
                 className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-lg"
               />
@@ -1125,7 +1124,7 @@ export const PlaceProfileView: React.FC<PlaceProfileViewProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {galleryPhotos.map((url, idx) => (
                   <div key={idx} className="relative group rounded-xl overflow-hidden aspect-video bg-[#101018] border border-[#2b2b3e]">
-                    <img src={url} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                    <img loading="lazy" decoding="async" src={url} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
                       <a
                         href={url}

@@ -1235,8 +1235,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
             {/* Lightbox Image View */}
             <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/40">
-              <img
-                src={lightboxImage.file_url}
+              <img loading="lazy" decoding="async" src={lightboxImage.file_url}
                 alt={lightboxImage.file_name}
                 className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-lg"
               />

@@ -255,8 +255,7 @@ export const PlaceMapView: React.FC<PlaceMapViewProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {activePlace.thumbnail_url ? (
-                <img
-                  src={activePlace.thumbnail_url}
+                <img loading="lazy" decoding="async" src={activePlace.thumbnail_url}
                   alt={activePlace.title}
                   className="w-12 h-12 rounded-xl object-cover border border-[#2e2e42] shrink-0"
                 />

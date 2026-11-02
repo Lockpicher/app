@@ -1,30 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+import { AppSkeletonScreen, EditorSkeleton } from './components/SkeletonLoader';
+
+const RemindersView = lazy(() => import('./components/RemindersView').then(m => ({ default: m.RemindersView })));
+const TasksView = lazy(() => import('./components/TasksView').then(m => ({ default: m.TasksView })));
+const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({ default: m.ProjectsView })));
+const ObjectsView = lazy(() => import('./components/ObjectsView').then(m => ({ default: m.ObjectsView })));
+const GraphView = lazy(() => import('./components/GraphView').then(m => ({ default: m.GraphView })));
+const StorageView = lazy(() => import('./components/StorageView').then(m => ({ default: m.StorageView })));
+const FilesManagerView = lazy(() => import('./components/FilesManagerView').then(m => ({ default: m.FilesManagerView })));
+const CalendarView = lazy(() => import('./components/CalendarView').then(m => ({ default: m.CalendarView })));
+const ParaInboxView = lazy(() => import('./components/ParaInboxView').then(m => ({ default: m.ParaInboxView })));
+const ParaAreasView = lazy(() => import('./components/ParaAreasView').then(m => ({ default: m.ParaAreasView })));
+const ParaArchiveView = lazy(() => import('./components/ParaArchiveView').then(m => ({ default: m.ParaArchiveView })));
+const ParaReviewView = lazy(() => import('./components/ParaReviewView').then(m => ({ default: m.ParaReviewView })));
+const HabitsView = lazy(() => import('./components/HabitsView').then(m => ({ default: m.HabitsView })));
+const CanvasesView = lazy(() => import('./components/CanvasesView').then(m => ({ default: m.CanvasesView })));
+const CanvasEditor = lazy(() => import('./components/CanvasEditor').then(m => ({ default: m.CanvasEditor })));
+
 import { Sidebar } from './components/Sidebar';
 import { NotebooksView } from './components/NotebooksView';
 import { NotebookNotesGrid } from './components/NotebookNotesGrid';
 import { RichNoteEditor } from './components/RichNoteEditor';
 import { HomeView } from './components/HomeView';
-import { RemindersView } from './components/RemindersView';
+
 import { NotebookModal } from './components/NotebookModal';
-import { TasksView } from './components/TasksView';
+
 import { TaskModal } from './components/TaskModal';
-import { ProjectsView } from './components/ProjectsView';
-import { ObjectsView } from './components/ObjectsView';
-import { GraphView } from './components/GraphView';
-import { StorageView } from './components/StorageView';
-import { FilesManagerView } from './components/FilesManagerView';
-import { CalendarView } from './components/CalendarView';
+
+
+
+
+
+
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileDrawer } from './components/MobileDrawer';
 import { useTheme } from './lib/themeContext';
-import { ParaInboxView } from './components/ParaInboxView';
-import { ParaAreasView } from './components/ParaAreasView';
-import { ParaArchiveView } from './components/ParaArchiveView';
-import { ParaReviewView } from './components/ParaReviewView';
-import { HabitsView } from './components/HabitsView';
-import { CanvasesView } from './components/CanvasesView';
-import { CanvasEditor } from './components/CanvasEditor';
+
+
+
+
+
+
+
 import { UploadModal } from './components/UploadModal';
 import { AudioRecorderModal } from './components/AudioRecorderModal';
 import { AuthModal } from './components/AuthModal';
@@ -185,7 +203,7 @@ export function App() {
       setLoading(true);
 
       // Establece la cookie de sesión ANTES de cargar datos: los adjuntos
-      // se renderizan como <img src="/api/r2/stream?..."> y fallarían con 401.
+      // se renderizan como <img loading="lazy" decoding="async" src="/api/r2/stream?..."> y fallarían con 401.
       try { await r2Storage.syncSession(); } catch {}
 
       // Phase 1: Critical data for first screen (Notebooks and Notes)
@@ -1339,6 +1357,7 @@ export function App() {
         }}
       >
         {/* If user is editing a note, display the RichNoteEditor */}
+        <Suspense fallback={<EditorSkeleton />}>
         {isEditingNote && activeNote ? (
           <RichNoteEditor
             key={activeNote.id}
@@ -1770,6 +1789,8 @@ export function App() {
             )}
           </>
         )}
+
+        </Suspense>
 
         {/* Capacities-inspired Mobile Bottom Navigation Bar (5 touch points + New element sheet) */}
         <MobileBottomNav

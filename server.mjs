@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
+import zlib from 'zlib';
+import { redisCache } from './src/lib/redisCache.mjs';
 import {
   sendJson,
   readBodyWithLimit,
@@ -710,6 +712,7 @@ Incluye al final de tu respuesta el bloque:
             const mModel = modelOverride || process.env.MIMO_MODEL || 'mimo-v2.6-flash';
             const mBase = (process.env.MIMO_BASE_URL || 'https://api.xiaomimimo.com/v1').replace(/\/+$/, '');
             const mRes = await fetch(`${mBase}/chat/completions`, {
+              signal: AbortSignal.timeout(15000),
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -730,6 +733,7 @@ Incluye al final de tu respuesta el bloque:
               parts: [{ text: m.content }]
             }));
             const gRes = await fetch(gUrl, {
+              signal: AbortSignal.timeout(15000),
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -742,6 +746,7 @@ Incluye al final de tu respuesta el bloque:
           } else {
             const oModel = modelOverride || process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash';
             const oRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              signal: AbortSignal.timeout(15000),
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

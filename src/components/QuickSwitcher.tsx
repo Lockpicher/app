@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../lib/useDebounce';
 import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User, Palette, Atom, Plane, Sparkles, MapPin } from 'lucide-react';
 import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment, AppCanvas, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { db } from '../lib/insforge';
@@ -29,6 +30,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   onSelectEntity
 }) => {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 150);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
 
   if (!isOpen) return null;
 
-  const allItems = [
+  const allItems = useMemo(() => [
     ...notebooks.map(nb => ({ id: nb.id, title: nb.name, type: 'notebook' as const, subtitle: 'Cuaderno de notas' })),
     ...notes.map(n => ({ id: n.id, title: n.title, type: 'note' as const, subtitle: `Nota • ${n.note_type || 'texto'}` })),
     ...canvases.map(c => ({ id: c.id, title: c.title, type: 'canvas' as const, subtitle: `Lienzo visual${c.elements?.length ? ` • ${c.elements.length} elementos` : ''}` })),
@@ -54,11 +56,15 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
       };
     }),
     ...attachments.map(a => ({ id: a.id, title: a.display_name || a.file_name, type: 'file' as const, subtitle: `Archivo R2 • ${a.mime_type || 'archivo'}` }))
-  ];
+  ], [notebooks, notes, canvases, projects, tasks, objects, attachments]);
 
-  const filtered = allItems.filter(item => 
-    item.title.toLowerCase().includes(query.toLowerCase()) || item.subtitle.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 10);
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.toLowerCase().trim();
+    if (!q) return allItems.slice(0, 10);
+    return allItems.filter(item => 
+      item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [allItems, debouncedQuery]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

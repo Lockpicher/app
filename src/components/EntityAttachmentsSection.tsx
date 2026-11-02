@@ -147,7 +147,7 @@ export const EntityAttachmentsSection: React.FC<EntityAttachmentsSectionProps> =
                 <div className="flex items-center gap-2.5 overflow-hidden">
                   <div className="w-9 h-9 rounded-lg bg-[#111118] border border-[#232332] flex-shrink-0 flex items-center justify-center overflow-hidden">
                     {isImg ? (
-                      <img src={file.file_url} alt="" className="w-full h-full object-cover" />
+                      <img loading="lazy" decoding="async" src={file.file_url} alt="" className="w-full h-full object-cover" />
                     ) : isVideo ? (
                       <Film className="w-4 h-4 text-purple-400" />
                     ) : isAudio ? (

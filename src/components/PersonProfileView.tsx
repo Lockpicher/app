@@ -458,8 +458,7 @@ export const PersonProfileView: React.FC<PersonProfileViewProps> = ({
               className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-blue-500/50 shadow-2xl bg-[#1c1c28] flex items-center justify-center text-white"
             >
               {activePhoto ? (
-                <img 
-                  src={activePhoto} 
+                <img loading="lazy" decoding="async" src={activePhoto} 
                   alt={title} 
                   className="w-full h-full object-cover" 
                 />

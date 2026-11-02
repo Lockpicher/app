@@ -878,7 +878,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                   >
                     <div className="w-12 h-16 rounded-md overflow-hidden bg-slate-900 flex-shrink-0 border border-white/10 shadow">
                       {book.thumbnail_url ? (
-                        <img src={book.thumbnail_url} alt={book.title} className="w-full h-full object-cover" />
+                        <img loading="lazy" decoding="async" src={book.thumbnail_url} alt={book.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-white p-1 text-center font-serif">
                           {book.title.slice(0, 3)}
@@ -994,8 +994,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                       {/* Contact Identity Header: Avatar + Name + Org/Role */}
                       <div className="flex items-center gap-3 mb-2.5">
                         {obj.thumbnail_url ? (
-                          <img
-                            src={obj.thumbnail_url}
+                          <img loading="lazy" decoding="async" src={obj.thumbnail_url}
                             alt={obj.title}
                             className="w-12 h-12 rounded-xl object-cover border border-[#35354a] shadow flex-shrink-0"
                           />
@@ -1149,7 +1148,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                       <div className="flex gap-3 mb-2.5">
                         <div className="w-16 h-24 rounded-lg overflow-hidden bg-purple-950 border border-white/10 shadow flex-shrink-0 relative group-hover:scale-105 transition-transform duration-200">
                           {obj.thumbnail_url ? (
-                            <img src={obj.thumbnail_url} alt={obj.title} className="w-full h-full object-cover" />
+                            <img loading="lazy" decoding="async" src={obj.thumbnail_url} alt={obj.title} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-purple-900 to-[#12121e] flex flex-col justify-between p-1.5 text-center border-l-2 border-l-amber-500/70">
                               <span className="text-[7px] text-amber-300/80 uppercase font-mono block">Libro</span>
@@ -1261,8 +1260,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                       {/* Photo or MapPin Placeholder */}
                       {obj.thumbnail_url ? (
                         <div className="mb-2.5 rounded-xl overflow-hidden aspect-[16/9] bg-[#121218] border border-[#252535] flex-shrink-0">
-                          <img
-                            src={obj.thumbnail_url}
+                          <img loading="lazy" decoding="async" src={obj.thumbnail_url}
                             alt={obj.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           />
@@ -1362,8 +1360,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                     {/* Image Thumbnail Preview (if any) */}
                     {obj.thumbnail_url && (
                       <div className="mb-2.5 rounded-xl overflow-hidden aspect-[16/9] bg-[#121218] border border-[#252535] flex-shrink-0">
-                        <img 
-                          src={obj.thumbnail_url} 
+                        <img loading="lazy" decoding="async" src={obj.thumbnail_url} 
                           alt={obj.title} 
                           className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                         />
@@ -1462,8 +1459,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                       <td className="py-3 px-4 min-h-[56px]">
                         <div className="flex items-center gap-3">
                           {obj.thumbnail_url ? (
-                            <img 
-                              src={obj.thumbnail_url} 
+                            <img loading="lazy" decoding="async" src={obj.thumbnail_url} 
                               alt="" 
                               className="w-9 h-9 rounded-xl object-cover border border-[#2a2a3e] flex-shrink-0" 
                             />
@@ -1611,8 +1607,7 @@ export const ObjectsView: React.FC<ObjectsViewProps> = ({
                   className="group relative bg-[#181822] rounded-2xl border border-[#28283a] hover:border-emerald-500/50 overflow-hidden cursor-pointer transition shadow-sm hover:shadow-xl flex flex-col aspect-[3/4]"
                 >
                   {obj.thumbnail_url ? (
-                    <img
-                      src={obj.thumbnail_url}
+                    <img loading="lazy" decoding="async" src={obj.thumbnail_url}
                       alt={obj.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     />

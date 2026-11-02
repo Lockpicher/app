@@ -257,7 +257,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       setIsUploadingImageNote(true);
       const res = await r2Storage.uploadFile(file, 'notes/images');
       const cleanTitle = file.name.replace(/\.[^/.]+$/, '').trim() || 'Imagen';
-      const imgHtml = `<p><img src="${res.url}" alt="${cleanTitle}" /></p><p></p>`;
+      const imgHtml = `<p><img loading="lazy" decoding="async" src="${res.url}" alt="${cleanTitle}" /></p><p></p>`;
 
       await onCreateNote({
         title: cleanTitle,
@@ -337,7 +337,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
           title: cleanTitle,
           note_type: isImg ? 'image' : 'file',
           thumbnail_url: isImg ? res.url : undefined,
-          content: isImg ? `<p><img src="${res.url}" alt="${cleanTitle}" /></p><p></p>` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
+          content: isImg ? `<p><img loading="lazy" decoding="async" src="${res.url}" alt="${cleanTitle}" /></p><p></p>` : `<p>📎 <a href="${res.url}">${file.name}</a></p>`,
           plain_text: '',
           notebook_id: notebook?.id || null
         });
@@ -413,7 +413,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
                 }}
               >
                 {notebook.cover_type === 'custom' && notebook.cover_url && (
-                  <img src={notebook.cover_url} alt="" className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={notebook.cover_url} alt="" className="w-full h-full object-cover" />
                 )}
               </div>
             ) : isFavoritesView ? (
@@ -1273,7 +1273,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
                         style={{ backgroundColor: nb.color || '#3b82f6', backgroundImage: preset?.patternSvg }}
                       >
                         {nb.cover_type === 'custom' && nb.cover_url && (
-                          <img src={nb.cover_url} alt="" className="w-full h-full object-cover" />
+                          <img loading="lazy" decoding="async" src={nb.cover_url} alt="" className="w-full h-full object-cover" />
                         )}
                       </div>
                       <span className="truncate">{nb.name}</span>

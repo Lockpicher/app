@@ -1019,7 +1019,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                               {t.thumbnail_url && (
                                 <div className="w-6 h-6 rounded overflow-hidden border border-[#2d2d40] bg-[#101016] flex-shrink-0">
-                                  <img src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                                  <img loading="lazy" decoding="async" src={t.thumbnail_url} alt="" className="w-full h-full object-cover" />
                                 </div>
                               )}
 

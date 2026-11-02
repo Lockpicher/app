@@ -166,8 +166,7 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
         {/* Media render */}
         <div className="max-w-full max-h-full flex items-center justify-center overflow-auto p-2">
           {isImage && (
-            <img 
-              src={r2Storage.getDisplayUrl(currentFile)} 
+            <img loading="lazy" decoding="async" src={r2Storage.getDisplayUrl(currentFile)} 
               alt={currentFile.file_name}
               style={{ transform: `scale(${zoom})`, transition: 'transform 0.15s ease-out' }}
               className="max-h-[75vh] max-w-[85vw] object-contain rounded-lg shadow-2xl select-none"
