@@ -1,5 +1,6 @@
 import http from 'http';
 import net from 'net';
+import { logSecurityEvent, AuditEventType, AuditSeverity } from './auditLoggerServer';
 
 /**
  * Validador estricto para prevenir vulnerabilidades SSRF (Server-Side Request Forgery)

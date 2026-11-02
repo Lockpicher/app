@@ -28,7 +28,53 @@ function hashToken(token) {
 /**
  * Envía una respuesta JSON con cabeceras CORS compatibles con el servidor actual
  */
+
+/**
+ * Aplica cabeceras de seguridad estrictas (SOC 2 & ISO/IEC 27001)
+ */
+export function applySecurityHeaders(res, req = null) {
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https: http:",
+    "media-src 'self' data: blob: https: http:",
+    "connect-src 'self' https://insforge.kora.ovh https://generativelanguage.googleapis.com https://openrouter.ai https://api.xiaomimimo.com https://api.elevenlabs.io https://*.tile.openstreetmap.org https://nominatim.openstreetmap.org",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'"
+  ].join('; ');
+
+  res.setHeader('Content-Security-Policy', csp);
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=(self), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  try {
+    res.removeHeader('X-Powered-By');
+  } catch {}
+}
+
+/**
+ * Envía una respuesta de error sanitizada previniendo fuga de información técnica
+ */
+export function sendSafeError(res, status, clientMessage, internalError = null) {
+  if (internalError) {
+    console.error(`[Security Guard] Error interno (${status}):`, internalError.message || internalError);
+  }
+  return sendJson(res, status, {
+    error: clientMessage || 'Ha ocurrido un error en la solicitud',
+    code: `ERR_SEC_${status}`
+  });
+}
+
 export function sendJson(res, status, data, extraHeaders = {}) {
+  applySecurityHeaders(res);
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');

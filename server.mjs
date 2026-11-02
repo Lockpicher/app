@@ -16,6 +16,8 @@ import {
   authenticateRequest
 } from './src/lib/apiGuard.mjs';
 import { isAllowedUrl } from './src/lib/webScraperServer.ts';
+import { logSecurityEvent, AuditEventType, AuditSeverity } from './src/lib/auditLogger.mjs';
+import { applySecurityHeaders, sendSafeError } from './src/lib/apiGuard.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +26,12 @@ const PORT = process.env.PORT || 3000;
 
 // Rate limiter para /api/transcribe: 10 peticiones por minuto por IP
 const transcribeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10 });
+
+// SOC 2 / ISO 27001 Rate Limiters
+const authLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10 }); // 10 intentos de auth por minuto por IP
+const aiLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30 }); // 30 consultas IA por minuto por IP
+const generalApiLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120 }); // 120 peticiones API por minuto por IP
+
 
 // Load .env variables in local or container environments
 function loadEnvFiles() {
