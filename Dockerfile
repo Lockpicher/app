@@ -19,8 +19,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY server.mjs ./
 # server.mjs importa estos dos módulos en tiempo de ejecución (auth + guardia SSRF)
-COPY src/lib/apiGuard.mjs ./src/lib/apiGuard.mjs
-COPY src/lib/webScraperServer.ts ./src/lib/webScraperServer.ts
+COPY src/lib/ ./src/lib/
 
 EXPOSE 80
 

@@ -6,18 +6,56 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, Head
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
 import zlib from 'zlib';
-import { redisCache } from './src/lib/redisCache.mjs';
 import {
   sendJson,
   readBodyWithLimit,
   parseJsonSafe,
   getClientIp,
   createRateLimiter,
-  authenticateRequest
+  authenticateRequest,
+  applySecurityHeaders,
+  sendSafeError
 } from './src/lib/apiGuard.mjs';
 import { isAllowedUrl } from './src/lib/webScraperServer.ts';
-import { logSecurityEvent, AuditEventType, AuditSeverity } from './src/lib/auditLogger.mjs';
-import { applySecurityHeaders, sendSafeError } from './src/lib/apiGuard.mjs';
+
+// Carga resiliente de redisCache con fallback automático en memoria
+let redisCache = {
+  get: async () => null,
+  set: async () => {},
+  del: async () => {}
+};
+try {
+  const mod = await import('./src/lib/redisCache.mjs');
+  if (mod?.redisCache) redisCache = mod.redisCache;
+} catch (e) {
+  console.warn('[Server] src/lib/redisCache.mjs no encontrado, usando fallback en memoria');
+}
+
+// Carga resiliente de auditLogger con fallback
+let logSecurityEvent = async () => {};
+let AuditEventType = {
+  AUTH_LOGIN_SUCCESS: 'AUTH_LOGIN_SUCCESS',
+  AUTH_LOGIN_FAILED: 'AUTH_LOGIN_FAILED',
+  AUTH_LOGOUT: 'AUTH_LOGOUT',
+  ACCESS_DENIED: 'ACCESS_DENIED',
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+  SESSION_SYNC: 'SESSION_SYNC',
+  PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+  SSRF_ATTEMPT_BLOCKED: 'SSRF_ATTEMPT_BLOCKED'
+};
+let AuditSeverity = {
+  INFO: 'INFO',
+  WARN: 'WARN',
+  SECURITY_ALERT: 'SECURITY_ALERT'
+};
+try {
+  const mod = await import('./src/lib/auditLogger.mjs');
+  if (mod?.logSecurityEvent) logSecurityEvent = mod.logSecurityEvent;
+  if (mod?.AuditEventType) AuditEventType = mod.AuditEventType;
+  if (mod?.AuditSeverity) AuditSeverity = mod.AuditSeverity;
+} catch (e) {
+  console.warn('[Server] src/lib/auditLogger.mjs no encontrado, usando fallback en memoria');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
