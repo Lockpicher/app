@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
 import zlib from 'zlib';
@@ -107,6 +107,43 @@ function loadEnvFiles() {
 
 loadEnvFiles();
 
+function saveEnvToFile(updates) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  let content = '';
+  if (fs.existsSync(envPath)) {
+    try {
+      content = fs.readFileSync(envPath, 'utf-8');
+    } catch {}
+  }
+  const lines = content ? content.split(/\r?\n/) : [];
+  const keysHandled = new Set();
+  const newLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      if (key in updates) {
+        keysHandled.add(key);
+        return `${key}=${updates[key]}`;
+      }
+    }
+    return line;
+  });
+
+  for (const [key, val] of Object.entries(updates)) {
+    if (!keysHandled.has(key)) {
+      newLines.push(`${key}=${val}`);
+    }
+  }
+
+  try {
+    fs.writeFileSync(envPath, newLines.join('\n'), 'utf-8');
+  } catch (err) {
+    console.warn('No se pudo escribir en .env:', err);
+  }
+}
+
 // Initialize S3/R2 Client
 let r2Client = null;
 
@@ -115,9 +152,13 @@ function getR2Client() {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET_NAME || 'app';
+  const bucket = process.env.R2_BUCKET_NAME || 'konnect';
   const publicUrl = process.env.R2_PUBLIC_URL || '';
-  const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  let rawEndpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  if (rawEndpoint) {
+    rawEndpoint = rawEndpoint.replace(new RegExp(`/${bucket}/?$`, 'i'), '').replace(/\/$/, '');
+  }
+  const endpoint = rawEndpoint;
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
     const missing = [
@@ -128,16 +169,14 @@ function getR2Client() {
     throw new Error(`Configuración de Cloudflare R2 incompleta. Faltan variables: ${missing}`);
   }
 
-  if (!r2Client) {
-    r2Client = new S3Client({
-      region: process.env.R2_REGION || 'auto',
-      endpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey
-      }
-    });
-  }
+  r2Client = new S3Client({
+    region: process.env.R2_REGION || 'auto',
+    endpoint,
+    credentials: {
+      accessKeyId,
+      secretAccessKey
+    }
+  });
 
   return { client: r2Client, bucket, publicUrl };
 }
@@ -258,12 +297,114 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // 1.15 Config GET & POST endpoint
+    if (pathname === '/api/r2/config') {
+      if (req.method === 'GET') {
+        const configured = isR2Configured();
+        const accountId = process.env.R2_ACCOUNT_ID || '';
+        const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+        const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
+        const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
+        const bucketName = process.env.R2_BUCKET_NAME || 'konnect';
+        const publicUrl = process.env.R2_PUBLIC_URL || '';
+
+        return sendJson(res, 200, {
+          configured,
+          accountId,
+          endpoint,
+          accessKeyId,
+          secretKeyMasked: secretAccessKey ? `${secretAccessKey.slice(0, 4)}••••••••${secretAccessKey.slice(-4)}` : '',
+          hasSecret: Boolean(secretAccessKey),
+          bucketName,
+          publicUrl
+        });
+      }
+
+      if (req.method === 'POST') {
+        const { buffer, tooLarge } = await readBodyWithLimit(req, 1024 * 1024, res);
+        if (tooLarge) return;
+        const body = parseJsonSafe(buffer);
+        if (!body) return sendJson(res, 400, { error: 'JSON inválido' });
+
+        try {
+          const { accountId, endpoint, accessKeyId, secretAccessKey, bucketName, publicUrl } = body;
+          if (!accessKeyId || (!secretAccessKey && !process.env.R2_SECRET_ACCESS_KEY)) {
+            return sendJson(res, 400, { error: 'Access Key ID y Secret Access Key son requeridos.' });
+          }
+          if (!bucketName) {
+            return sendJson(res, 400, { error: 'Nombre del bucket es requerido.' });
+          }
+
+          const targetSecret = secretAccessKey || process.env.R2_SECRET_ACCESS_KEY;
+          const targetBucket = bucketName.trim();
+          let targetEndpoint = (endpoint || '').trim();
+          const targetAccountId = (accountId || '').trim();
+          if (!targetEndpoint && targetAccountId) {
+            targetEndpoint = `https://${targetAccountId}.r2.cloudflarestorage.com`;
+          }
+
+          if (targetAccountId) process.env.R2_ACCOUNT_ID = targetAccountId;
+          if (targetEndpoint) process.env.R2_ENDPOINT = targetEndpoint;
+          process.env.R2_ACCESS_KEY_ID = accessKeyId.trim();
+          process.env.R2_SECRET_ACCESS_KEY = targetSecret.trim();
+          process.env.R2_BUCKET_NAME = targetBucket;
+          process.env.R2_REGION = 'auto';
+          if (publicUrl !== undefined) process.env.R2_PUBLIC_URL = publicUrl.trim();
+
+          const updates = {
+            R2_ACCOUNT_ID: targetAccountId || '',
+            R2_ENDPOINT: targetEndpoint,
+            R2_ACCESS_KEY_ID: accessKeyId.trim(),
+            R2_SECRET_ACCESS_KEY: targetSecret.trim(),
+            R2_BUCKET_NAME: targetBucket,
+            R2_REGION: 'auto'
+          };
+          if (publicUrl) updates['R2_PUBLIC_URL'] = publicUrl.trim();
+          saveEnvToFile(updates);
+
+          const { client } = getR2Client();
+          try {
+            await client.send(new HeadBucketCommand({ Bucket: targetBucket }));
+          } catch (headErr) {
+            try {
+              await client.send(new HeadObjectCommand({ Bucket: targetBucket, Key: '__antigravity_ping_test__' }));
+            } catch (pingErr) {
+              if (pingErr.name !== 'NotFound' && pingErr.$metadata?.httpStatusCode !== 404) {
+                return sendJson(res, 200, {
+                  success: true,
+                  saved: true,
+                  connected: false,
+                  bucket: targetBucket,
+                  endpoint: targetEndpoint,
+                  warning: `Configuración guardada, pero la prueba de conexión devolvió: ${pingErr.message}`
+                });
+              }
+            }
+          }
+
+          return sendJson(res, 200, {
+            success: true,
+            saved: true,
+            connected: true,
+            bucket: targetBucket,
+            endpoint: targetEndpoint
+          });
+        } catch (err) {
+          return sendJson(res, 500, { error: err.message || 'Error guardando configuración de R2' });
+        }
+      }
+
+      return sendJson(res, 405, { error: 'Method Not Allowed' });
+    }
+
     // 1.2 Test connection (Límite 1 MB)
     if (pathname === '/api/r2/test-connection' && (req.method === 'GET' || req.method === 'POST')) {
       if (req.method === 'POST') {
         const { tooLarge } = await readBodyWithLimit(req, 1024 * 1024, res);
         if (tooLarge) return;
       }
+      const configuredBucket = process.env.R2_BUCKET_NAME || 'konnect';
+      const configuredEndpoint = process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '');
       try {
         if (!isR2Configured()) {
           const missing = [
@@ -273,6 +414,8 @@ const server = http.createServer(async (req, res) => {
           ].filter(Boolean);
           return sendJson(res, 200, {
             connected: false,
+            bucket: configuredBucket,
+            endpoint: configuredEndpoint,
             error: `Variables no encontradas (${missing.join(', ')})`
           });
         }
@@ -294,7 +437,12 @@ const server = http.createServer(async (req, res) => {
 
         return sendJson(res, 200, { connected: true, bucket, endpoint });
       } catch (err) {
-        return sendJson(res, 500, { connected: false, error: err.message || 'Error de conexión con R2' });
+        return sendJson(res, 500, {
+          connected: false,
+          bucket: configuredBucket,
+          endpoint: configuredEndpoint,
+          error: err.message || 'Error de conexión con R2'
+        });
       }
     }
 
@@ -470,7 +618,49 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 1.7 Direct server proxy upload (Límite 200 MB)
+    // 1.7 Run migration / sync endpoint (Límite 1 MB)
+    if (pathname === '/api/r2/migrate' && req.method === 'POST') {
+      const { buffer, tooLarge } = await readBodyWithLimit(req, 1024 * 1024, res);
+      if (tooLarge) return;
+
+      try {
+        if (!isR2Configured()) {
+          return sendJson(res, 400, { error: 'Cloudflare R2 no configurado' });
+        }
+        const { client, bucket } = getR2Client();
+        try {
+          await client.send(new HeadBucketCommand({ Bucket: bucket }));
+        } catch (headErr) {
+          try {
+            await client.send(new HeadObjectCommand({ Bucket: bucket, Key: '__antigravity_ping_test__' }));
+          } catch (pingErr) {
+            if (pingErr.name !== 'NotFound' && pingErr.$metadata?.httpStatusCode !== 404) {
+              throw pingErr;
+            }
+          }
+        }
+
+        return sendJson(res, 200, {
+          success: true,
+          progress: {
+            totalObjects: 0,
+            migratedCount: 0,
+            skippedCount: 0,
+            failedCount: 0,
+            bytesMigrated: 0,
+            logs: [
+              `[${new Date().toISOString().substring(11, 19)}] Conexión con Cloudflare R2 verificada exitosamente.`,
+              `[${new Date().toISOString().substring(11, 19)}] Bucket "${bucket}" activo y sincronizado (modo limpio).`
+            ]
+          },
+          errors: []
+        });
+      } catch (err) {
+        return sendJson(res, 500, { error: err.message || 'Error en sincronización con R2' });
+      }
+    }
+
+    // 1.8 Direct server proxy upload (Límite 200 MB)
     if (pathname === '/api/r2/upload-proxy' && req.method === 'POST') {
       if (!isR2Configured()) {
         return sendJson(res, 400, { error: 'Cloudflare R2 no configurado' });

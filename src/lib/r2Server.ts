@@ -53,7 +53,7 @@ export function getR2Client(): { client: S3Client; bucket: string; publicUrl?: s
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET_NAME || 'antigravity-storage';
+  const bucket = process.env.R2_BUCKET_NAME || 'konnect';
   const publicUrl = process.env.R2_PUBLIC_URL || '';
   let rawEndpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
   if (rawEndpoint) {
@@ -70,18 +70,53 @@ export function getR2Client(): { client: S3Client; bucket: string; publicUrl?: s
     ].filter(Boolean).join(', '));
   }
 
-  if (!r2Client) {
-    r2Client = new S3Client({
-      region: process.env.R2_REGION || 'auto',
-      endpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey
-      }
-    });
-  }
+  r2Client = new S3Client({
+    region: process.env.R2_REGION || 'auto',
+    endpoint,
+    credentials: {
+      accessKeyId,
+      secretAccessKey
+    }
+  });
 
   return { client: r2Client, bucket, publicUrl };
+}
+
+export function saveEnvToFile(updates: Record<string, string>) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  let content = '';
+  if (fs.existsSync(envPath)) {
+    try {
+      content = fs.readFileSync(envPath, 'utf-8');
+    } catch {}
+  }
+  const lines = content ? content.split(/\r?\n/) : [];
+  const keysHandled = new Set<string>();
+  const newLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      if (key in updates) {
+        keysHandled.add(key);
+        return `${key}=${updates[key]}`;
+      }
+    }
+    return line;
+  });
+
+  for (const [key, val] of Object.entries(updates)) {
+    if (!keysHandled.has(key)) {
+      newLines.push(`${key}=${val}`);
+    }
+  }
+
+  try {
+    fs.writeFileSync(envPath, newLines.join('\n'), 'utf-8');
+  } catch (err) {
+    console.warn('No se pudo escribir en .env:', err);
+  }
 }
 
 export function isR2Configured(): boolean {

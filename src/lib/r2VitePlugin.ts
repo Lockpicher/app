@@ -7,6 +7,7 @@ import {
   uploadBufferToR2,
   getR2Client,
   testR2Connection,
+  saveEnvToFile,
   getR2ObjectStream
 } from './r2Server';
 import { Readable } from 'stream';
@@ -98,6 +99,88 @@ export async function r2Middleware(req: IncomingMessage, res: ServerResponse, ne
       hasPublicUrl: Boolean(publicUrl),
       publicUrl: publicUrl ? publicUrl.replace(/\/$/, '') : null
     });
+  }
+
+  // 1.15 Config GET & POST endpoint
+  if (pathname === '/api/r2/config') {
+    if (req.method === 'GET') {
+      const configured = isR2Configured();
+      const accountId = process.env.R2_ACCOUNT_ID || '';
+      const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+      const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
+      const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
+      const bucketName = process.env.R2_BUCKET_NAME || 'konnect';
+      const publicUrl = process.env.R2_PUBLIC_URL || '';
+
+      return sendJson(res, 200, {
+        configured,
+        accountId,
+        endpoint,
+        accessKeyId,
+        secretKeyMasked: secretAccessKey ? `${secretAccessKey.slice(0, 4)}••••••••${secretAccessKey.slice(-4)}` : '',
+        hasSecret: Boolean(secretAccessKey),
+        bucketName,
+        publicUrl
+      });
+    }
+
+    if (req.method === 'POST') {
+      const { buffer, tooLarge } = await readBodyWithLimit(req, 1024 * 1024, res);
+      if (tooLarge) return;
+      const body = parseJsonSafe(buffer);
+      if (!body) return sendJson(res, 400, { error: 'JSON inválido' });
+
+      try {
+        const { accountId, endpoint, accessKeyId, secretAccessKey, bucketName, publicUrl } = body;
+        if (!accessKeyId || (!secretAccessKey && !process.env.R2_SECRET_ACCESS_KEY)) {
+          return sendJson(res, 400, { error: 'Access Key ID y Secret Access Key son requeridos.' });
+        }
+        if (!bucketName) {
+          return sendJson(res, 400, { error: 'Nombre del bucket es requerido.' });
+        }
+
+        const targetSecret = secretAccessKey || process.env.R2_SECRET_ACCESS_KEY;
+        const targetBucket = bucketName.trim();
+        let targetEndpoint = (endpoint || '').trim();
+        const targetAccountId = (accountId || '').trim();
+        if (!targetEndpoint && targetAccountId) {
+          targetEndpoint = `https://${targetAccountId}.r2.cloudflarestorage.com`;
+        }
+
+        if (targetAccountId) process.env.R2_ACCOUNT_ID = targetAccountId;
+        if (targetEndpoint) process.env.R2_ENDPOINT = targetEndpoint;
+        process.env.R2_ACCESS_KEY_ID = accessKeyId.trim();
+        process.env.R2_SECRET_ACCESS_KEY = targetSecret.trim();
+        process.env.R2_BUCKET_NAME = targetBucket;
+        process.env.R2_REGION = 'auto';
+        if (publicUrl !== undefined) process.env.R2_PUBLIC_URL = publicUrl.trim();
+
+        const updates: Record<string, string> = {
+          R2_ACCOUNT_ID: targetAccountId || '',
+          R2_ENDPOINT: targetEndpoint,
+          R2_ACCESS_KEY_ID: accessKeyId.trim(),
+          R2_SECRET_ACCESS_KEY: targetSecret.trim(),
+          R2_BUCKET_NAME: targetBucket,
+          R2_REGION: 'auto'
+        };
+        if (publicUrl) updates['R2_PUBLIC_URL'] = publicUrl.trim();
+        saveEnvToFile(updates);
+
+        const testRes = await testR2Connection();
+        return sendJson(res, 200, {
+          success: true,
+          saved: true,
+          connected: testRes.connected,
+          bucket: targetBucket,
+          endpoint: targetEndpoint,
+          error: testRes.connected ? undefined : testRes.error
+        });
+      } catch (err: any) {
+        return sendJson(res, 500, { error: err.message || 'Error guardando configuración de R2' });
+      }
+    }
+
+    return sendJson(res, 405, { error: 'Method Not Allowed' });
   }
 
   // 1.2 Test connection endpoint (Límite 1 MB)

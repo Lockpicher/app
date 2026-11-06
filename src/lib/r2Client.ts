@@ -19,6 +19,26 @@ export interface R2Status {
   publicUrl: string | null;
 }
 
+export interface R2ConfigInfo {
+  configured: boolean;
+  accountId: string;
+  endpoint: string;
+  accessKeyId: string;
+  secretKeyMasked: string;
+  hasSecret: boolean;
+  bucketName: string;
+  publicUrl: string;
+}
+
+export interface R2ConfigSavePayload {
+  accountId?: string;
+  endpoint?: string;
+  accessKeyId: string;
+  secretAccessKey?: string;
+  bucketName: string;
+  publicUrl?: string;
+}
+
 export interface R2ConnectionTest {
   connected: boolean;
   bucket: string;
@@ -78,6 +98,56 @@ export const r2Storage = {
   /**
    * Consulta el estado de configuración de Cloudflare R2 en el backend
    */
+  /**
+   * Obtiene la configuración actual de Cloudflare R2
+   */
+  async getConfig(): Promise<R2ConfigInfo> {
+    try {
+      const res = await fetch('/api/r2/config', {
+        headers: getAuthHeaders(),
+        credentials: 'same-origin'
+      });
+      if (!res.ok) throw new Error('Error al obtener configuración de R2');
+      return await res.json();
+    } catch {
+      return {
+        configured: false,
+        accountId: '',
+        endpoint: '',
+        accessKeyId: '',
+        secretKeyMasked: '',
+        hasSecret: false,
+        bucketName: 'konnect',
+        publicUrl: ''
+      };
+    }
+  },
+
+  /**
+   * Guarda y aplica la configuración de Cloudflare R2 en el backend
+   */
+  async saveConfig(payload: R2ConfigSavePayload): Promise<{
+    success: boolean;
+    saved: boolean;
+    connected: boolean;
+    bucket: string;
+    endpoint: string;
+    error?: string;
+    warning?: string;
+  }> {
+    const res = await fetch('/api/r2/config', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error guardando configuración de R2');
+    }
+    return data;
+  },
+
   async getStatus(): Promise<R2Status> {
     try {
       const res = await fetch('/api/r2/status', {

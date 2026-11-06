@@ -32,7 +32,11 @@ import {
   Plus,
   AlertCircle,
   CheckCircle2,
-  ShieldAlert
+  ShieldAlert,
+  Settings,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { AppAttachment, AppFolder } from '../lib/types';
 import { db } from '../lib/insforge';
@@ -105,17 +109,106 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
     details?: any;
   }>({ open: false, type: 'connection' });
 
+  // Configuración de R2 dentro de la app
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [configForm, setConfigForm] = useState({
+    accountId: '',
+    endpoint: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    bucketName: 'konnect',
+    publicUrl: ''
+  });
+  const [configMaskedSecret, setConfigMaskedSecret] = useState('');
+  const [configStatusMsg, setConfigStatusMsg] = useState<{
+    type: 'success' | 'error' | 'warning';
+    text: string;
+  } | null>(null);
+
+  const handleOpenConfigModal = async () => {
+    setIsConfigModalOpen(true);
+    setIsLoadingConfig(true);
+    setConfigStatusMsg(null);
+    try {
+      const data = await r2Storage.getConfig();
+      setConfigForm({
+        accountId: data.accountId || '',
+        endpoint: data.endpoint || '',
+        accessKeyId: data.accessKeyId || '',
+        secretAccessKey: '',
+        bucketName: data.bucketName || 'konnect',
+        publicUrl: data.publicUrl || ''
+      });
+      setConfigMaskedSecret(data.secretKeyMasked || '');
+    } catch (e: any) {
+      console.warn('Error loading R2 config:', e);
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  };
+
+  const handleSaveR2Config = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingConfig(true);
+    setConfigStatusMsg(null);
+    try {
+      const res = await r2Storage.saveConfig({
+        accountId: configForm.accountId.trim() || undefined,
+        endpoint: configForm.endpoint.trim() || undefined,
+        accessKeyId: configForm.accessKeyId.trim(),
+        secretAccessKey: configForm.secretAccessKey.trim() || undefined,
+        bucketName: configForm.bucketName.trim(),
+        publicUrl: configForm.publicUrl.trim() || undefined
+      });
+
+      if (res.connected) {
+        setConfigStatusMsg({
+          type: 'success',
+          text: `¡Conexión exitosa! Bucket "${res.bucket}" verificado y activo.`
+        });
+        setTimeout(() => {
+          setIsConfigModalOpen(false);
+        }, 1800);
+      } else if (res.warning) {
+        setConfigStatusMsg({
+          type: 'warning',
+          text: res.warning
+        });
+      } else {
+        setConfigStatusMsg({
+          type: 'error',
+          text: res.error || 'Credenciales guardadas, pero no se pudo verificar la conexión con Cloudflare.'
+        });
+      }
+    } catch (err: any) {
+      setConfigStatusMsg({
+        type: 'error',
+        text: err.message || 'Error guardando configuración.'
+      });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   const handleTestAndSync = async () => {
     setIsSyncing(true);
+    let currentBucket = '';
+    let currentEndpoint = '';
     try {
       // 1. Probar conectividad con Cloudflare R2
       const testRes = await r2Storage.testConnection();
+      currentBucket = testRes.bucket || 'konnect';
+      currentEndpoint = testRes.endpoint || '';
+
       if (!testRes.connected) {
         setSyncResultModal({
           open: true,
           type: 'connection',
           connected: false,
-          bucket: testRes.bucket,
+          bucket: testRes.bucket || 'konnect',
           endpoint: testRes.endpoint,
           error: testRes.error
         });
@@ -139,8 +232,8 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
         open: true,
         type: 'sync',
         connected: false,
-        bucket: prev.bucket || 'app',
-        endpoint: prev.endpoint,
+        bucket: currentBucket || prev.bucket || 'konnect',
+        endpoint: currentEndpoint || prev.endpoint,
         error: err.message || 'Error durante la sincronización'
       }));
     } finally {
@@ -394,6 +487,15 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : 'text-emerald-400'}`} />
             <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar R2'}</span>
+          </button>
+
+          <button
+            onClick={handleOpenConfigModal}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-[#1e1e2d] hover:bg-[#27273c] text-cyan-300 border border-cyan-800/50 hover:border-cyan-600 transition shadow-sm"
+            title="Configurar credenciales y bucket de Cloudflare R2 dentro de la app"
+          >
+            <Settings className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Configurar R2</span>
           </button>
 
           <button
@@ -1171,11 +1273,22 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
             )}
 
             {!syncResultModal.connected && (
-              <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-[11px] text-amber-200 space-y-1">
-                <p className="font-semibold text-amber-300">💡 Instrucciones para solucionar:</p>
-                <p>1. Crea o abre el archivo <code className="bg-black/50 px-1 py-0.5 rounded text-amber-100">.env</code> en <code className="bg-black/50 px-1 py-0.5 rounded text-amber-100">C:\Antigravity</code>.</p>
-                <p>2. Define <code className="text-white">R2_ENDPOINT</code> (o <code className="text-white">R2_ACCOUNT_ID</code>), <code className="text-white">R2_ACCESS_KEY_ID</code>, <code className="text-white">R2_SECRET_ACCESS_KEY</code> y <code className="text-white">R2_BUCKET_NAME</code>.</p>
-                <p>3. Vuelve a hacer clic en <strong>Sincronizar R2</strong>.</p>
+              <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-[11px] text-amber-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-amber-300">💡 Instrucciones para solucionar:</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSyncResultModal(prev => ({ ...prev, open: false }));
+                      handleOpenConfigModal();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-white font-medium text-[11px] shadow transition"
+                  >
+                    <Settings className="w-3 h-3" />
+                    <span>Configurar R2 Ahora</span>
+                  </button>
+                </div>
+                <p>Puedes ingresar o ajustar el Bucket, Account ID y claves directamente sin salir de la app.</p>
               </div>
             )}
 
@@ -1187,6 +1300,195 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                 Entendido
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cloudflare R2 In-App Settings Modal */}
+      {isConfigModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1b1b26] border border-[#2c2c3d] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    Configuración de Cloudflare R2
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Gestiona el bucket y credenciales S3 directamente desde la aplicación
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfigModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isLoadingConfig ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2 text-gray-400">
+                <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+                <span className="text-xs">Cargando configuración actual...</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveR2Config} className="space-y-3.5 text-xs">
+                {configStatusMsg && (
+                  <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                    configStatusMsg.type === 'success'
+                      ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
+                      : configStatusMsg.type === 'warning'
+                      ? 'bg-amber-950/40 border-amber-800/60 text-amber-200'
+                      : 'bg-red-950/40 border-red-800/60 text-red-200'
+                  }`}>
+                    {configStatusMsg.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    )}
+                    <span>{configStatusMsg.text}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-gray-300 font-semibold mb-1">
+                    Nombre del Bucket <span className="text-cyan-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={configForm.bucketName}
+                    onChange={e => setConfigForm(prev => ({ ...prev, bucketName: e.target.value }))}
+                    placeholder="konnect"
+                    className="w-full px-3 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    El bucket de almacenamiento en Cloudflare R2 donde se guardarán los archivos.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-gray-300 font-semibold mb-1">
+                    Account ID de Cloudflare
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.accountId}
+                    onChange={e => setConfigForm(prev => ({ ...prev, accountId: e.target.value }))}
+                    placeholder="1e5d66e01cbd4ce37cd5a2f2ea5e3f65"
+                    className="w-full px-3 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Opcional si especificas el Endpoint completo.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-gray-300 font-semibold mb-1">
+                    Endpoint S3 de R2
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.endpoint}
+                    onChange={e => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
+                    placeholder="https://1e5d66e01cbd4ce37cd5a2f2ea5e3f65.r2.cloudflarestorage.com"
+                    className="w-full px-3 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-gray-300 font-semibold mb-1">
+                    Access Key ID <span className="text-cyan-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={configForm.accessKeyId}
+                    onChange={e => setConfigForm(prev => ({ ...prev, accessKeyId: e.target.value }))}
+                    placeholder="438e5c4e30bbd30422152edeb7c6be8a"
+                    className="w-full px-3 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-gray-300 font-semibold">
+                      Secret Access Key <span className="text-cyan-400">*</span>
+                    </label>
+                    {configMaskedSecret && !configForm.secretAccessKey && (
+                      <span className="text-[10px] text-emerald-400 font-mono">
+                        Configurada: {configMaskedSecret}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showSecretKey ? 'text' : 'password'}
+                      value={configForm.secretAccessKey}
+                      onChange={e => setConfigForm(prev => ({ ...prev, secretAccessKey: e.target.value }))}
+                      placeholder={configMaskedSecret ? 'Dejar en blanco para conservar la actual' : 'c1112b84055f21b4e5bea0a...'}
+                      className="w-full pl-3 pr-9 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSecretKey(prev => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                      title={showSecretKey ? 'Ocultar' : 'Mostrar'}
+                    >
+                      {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-300 font-semibold mb-1">
+                    Public URL / Dominio Personalizado <span className="text-gray-500 font-normal">(Opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.publicUrl}
+                    onChange={e => setConfigForm(prev => ({ ...prev, publicUrl: e.target.value }))}
+                    placeholder="https://pub-xxxx.r2.dev o https://cdn.kubbonet.com"
+                    className="w-full px-3 py-2 bg-[#121218] border border-[#2a2a3c] rounded-lg text-white font-mono outline-none focus:border-cyan-500 transition"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Si está vacío, la app generará enlaces seguros firmados con streaming directo.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#262638]">
+                  <button
+                    type="button"
+                    onClick={() => setIsConfigModalOpen(false)}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:bg-gray-800 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingConfig}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-950/50 transition disabled:opacity-50"
+                  >
+                    {isSavingConfig ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Probando y Guardando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Guardar y Probar Conexión</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
