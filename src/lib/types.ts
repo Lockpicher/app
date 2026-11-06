@@ -681,6 +681,36 @@ export interface AppAttachment {
   created_at: string;
 }
 
+export interface AppBookmarkCollection {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AppBookmark {
+  id: string;
+  collection_id?: string | null;
+  url: string;
+  title: string;
+  description?: string;
+  favicon_url?: string;
+  cover_image_url?: string;
+  site_name?: string;
+  author?: string;
+  tags?: string[];
+  is_favorite?: boolean;
+  is_pinned?: boolean;
+  notes?: string;
+  entity_id?: string;
+  entity_type?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface AppTag {
   id: string;
   name: string;
@@ -763,6 +793,7 @@ export type ViewMode =
   | 'objects'      // Objetos & Entidades
   | 'graph'        // Vista de Red
   | 'files'        // Sección central Archivos (Cloudflare R2)
+  | 'bookmarks'    // Enlaces y Marcadores Web
   | 'storage';     // Almacenamiento (compatibilidad)
 
 // ==========================================

@@ -30,7 +30,9 @@ import {
   AppTripExpense,
   AppTripJournal,
   BookIdea,
-  BookQuote
+  BookQuote,
+  AppBookmark,
+  AppBookmarkCollection
 } from './types';
 import { auth } from './auth';
 import { apiCache } from './apiCache';
@@ -2790,6 +2792,156 @@ export const db = {
       return false;
     }
     return true;
+  },
+
+  // ==========================================
+  // ENLACES & MARCADORES WEB (BOOKMARKS)
+  // ==========================================
+  async getBookmarkCollections(): Promise<AppBookmarkCollection[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmark_collections')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.warn('Error fetching bookmark collections:', error);
+        return [];
+      }
+      return (data as AppBookmarkCollection[]) || [];
+    } catch (err) {
+      console.error('Exception fetching bookmark collections:', err);
+      return [];
+    }
+  },
+
+  async createBookmarkCollection(collection: Partial<AppBookmarkCollection>): Promise<AppBookmarkCollection | null> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmark_collections')
+        .insert([{
+          name: collection.name || 'Sin título',
+          description: collection.description || null,
+          icon: collection.icon || 'Bookmark',
+          color: collection.color || '#3b82f6'
+        }])
+        .select();
+      if (error) throw error;
+      return (data as AppBookmarkCollection[])?.[0] || null;
+    } catch (err) {
+      console.error('Error creating bookmark collection:', err);
+      throw err;
+    }
+  },
+
+  async updateBookmarkCollection(id: string, updates: Partial<AppBookmarkCollection>): Promise<AppBookmarkCollection | null> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmark_collections')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select();
+      if (error) throw error;
+      return (data as AppBookmarkCollection[])?.[0] || null;
+    } catch (err) {
+      console.error('Error updating bookmark collection:', err);
+      throw err;
+    }
+  },
+
+  async deleteBookmarkCollection(id: string): Promise<boolean> {
+    try {
+      // Unlink bookmarks from this collection first
+      await insforge.database
+        .from('app_bookmarks')
+        .update({ collection_id: null })
+        .eq('collection_id', id);
+
+      const { error } = await insforge.database
+        .from('app_bookmark_collections')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error deleting bookmark collection:', err);
+      throw err;
+    }
+  },
+
+  async getBookmarks(): Promise<AppBookmark[]> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmarks')
+        .select('*')
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.warn('Error fetching bookmarks:', error);
+        return [];
+      }
+      return (data as AppBookmark[]) || [];
+    } catch (err) {
+      console.error('Exception fetching bookmarks:', err);
+      return [];
+    }
+  },
+
+  async createBookmark(bookmark: Partial<AppBookmark>): Promise<AppBookmark | null> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmarks')
+        .insert([{
+          collection_id: bookmark.collection_id || null,
+          url: bookmark.url,
+          title: bookmark.title || bookmark.url,
+          description: bookmark.description || null,
+          favicon_url: bookmark.favicon_url || null,
+          cover_image_url: bookmark.cover_image_url || null,
+          site_name: bookmark.site_name || null,
+          author: bookmark.author || null,
+          tags: bookmark.tags || [],
+          is_favorite: Boolean(bookmark.is_favorite),
+          is_pinned: Boolean(bookmark.is_pinned),
+          notes: bookmark.notes || null,
+          entity_id: bookmark.entity_id || null,
+          entity_type: bookmark.entity_type || null
+        }])
+        .select();
+      if (error) throw error;
+      return (data as AppBookmark[])?.[0] || null;
+    } catch (err) {
+      console.error('Error creating bookmark:', err);
+      throw err;
+    }
+  },
+
+  async updateBookmark(id: string, updates: Partial<AppBookmark>): Promise<AppBookmark | null> {
+    try {
+      const { data, error } = await insforge.database
+        .from('app_bookmarks')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select();
+      if (error) throw error;
+      return (data as AppBookmark[])?.[0] || null;
+    } catch (err) {
+      console.error('Error updating bookmark:', err);
+      throw err;
+    }
+  },
+
+  async deleteBookmark(id: string): Promise<boolean> {
+    try {
+      const { error } = await insforge.database
+        .from('app_bookmarks')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error deleting bookmark:', err);
+      throw err;
+    }
   }
 };
 

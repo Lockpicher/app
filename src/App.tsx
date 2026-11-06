@@ -16,6 +16,7 @@ const ParaReviewView = lazy(() => import('./components/ParaReviewView').then(m =
 const HabitsView = lazy(() => import('./components/HabitsView').then(m => ({ default: m.HabitsView })));
 const CanvasesView = lazy(() => import('./components/CanvasesView').then(m => ({ default: m.CanvasesView })));
 const CanvasEditor = lazy(() => import('./components/CanvasEditor').then(m => ({ default: m.CanvasEditor })));
+const BookmarksView = lazy(() => import('./components/BookmarksView').then(m => ({ default: m.BookmarksView })));
 
 import { Sidebar } from './components/Sidebar';
 import { NotebooksView } from './components/NotebooksView';
@@ -75,7 +76,9 @@ import {
   ViewMode,
   ObjectTypeDefinition,
   DEFAULT_OBJECT_TYPES,
-  AppCanvas
+  AppCanvas,
+  AppBookmark,
+  AppBookmarkCollection
 } from './lib/types';
 import { 
   Loader2, 
@@ -130,6 +133,8 @@ export function App() {
   const [habits, setHabits] = useState<AppHabit[]>([]);
   const [habitLogs, setHabitLogs] = useState<AppHabitLog[]>([]);
   const [canvases, setCanvases] = useState<AppCanvas[]>([]);
+  const [bookmarks, setBookmarks] = useState<AppBookmark[]>([]);
+  const [bookmarkCollections, setBookmarkCollections] = useState<AppBookmarkCollection[]>([]);
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
@@ -270,8 +275,10 @@ export function App() {
         db.getAreas().catch(() => []),
         db.getHabits().catch(() => []),
         db.getHabitLogs().catch(() => []),
-        db.getCanvases().catch(() => [])
-      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs, cvs]) => {
+        db.getCanvases().catch(() => []),
+        db.getBookmarks().catch(() => []),
+        db.getBookmarkCollections().catch(() => [])
+      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs, cvs, bms, bCols]) => {
         setReminders(rems);
         setProjects(p);
         setTasks(t);
@@ -285,6 +292,8 @@ export function App() {
         setHabits(hbs);
         setHabitLogs(hLogs);
         setCanvases(cvs);
+        setBookmarks(bms);
+        setBookmarkCollections(bCols);
       }).catch(err => {
         console.warn('Background sync error (non-fatal):', err);
       });
@@ -1455,7 +1464,8 @@ export function App() {
           archives: projects.filter(p => p.is_archived || p.status === 'completed' || p.para_category === 'archive').length +
                     notes.filter(n => n.is_archived || n.para_category === 'archive').length +
                     areas.filter(a => a.is_archived).length +
-                    objects.filter(o => o.para_category === 'archive').length
+                    objects.filter(o => o.para_category === 'archive').length,
+          bookmarks: bookmarks.length
         }}
         onOpenQuickSwitcher={() => setIsQuickSwitcherOpen(true)}
         isCollapsed={isSidebarCollapsed}
@@ -1903,6 +1913,23 @@ export function App() {
               />
             )}
 
+            {/* Bookmarks / Enlaces Web View */}
+            {currentView === 'bookmarks' && (
+              <BookmarksView
+                bookmarks={bookmarks}
+                collections={bookmarkCollections}
+                onBookmarkCreated={(bm) => setBookmarks(prev => [bm, ...prev])}
+                onBookmarkUpdated={(bm) => setBookmarks(prev => prev.map(b => b.id === bm.id ? bm : b))}
+                onBookmarkDeleted={(id) => setBookmarks(prev => prev.filter(b => b.id !== id))}
+                onCollectionCreated={(col) => setBookmarkCollections(prev => [...prev, col])}
+                onCollectionUpdated={(col) => setBookmarkCollections(prev => prev.map(c => c.id === col.id ? col : c))}
+                onCollectionDeleted={(id) => {
+                  setBookmarkCollections(prev => prev.filter(c => c.id !== id));
+                  setBookmarks(prev => prev.map(b => b.collection_id === id ? { ...b, collection_id: null } : b));
+                }}
+              />
+            )}
+
             {/* Storage View (Legacy) */}
             {currentView === 'storage' && (
               <StorageView
@@ -1984,7 +2011,8 @@ export function App() {
           archives: projects.filter(p => p.is_archived || p.status === 'completed' || p.para_category === 'archive').length +
                     notes.filter(n => n.is_archived || n.para_category === 'archive').length +
                     areas.filter(a => a.is_archived).length +
-                    objects.filter(o => o.para_category === 'archive').length
+                    objects.filter(o => o.para_category === 'archive').length,
+          bookmarks: bookmarks.length
         }}
       />
 

@@ -31,7 +31,8 @@ import {
   Flame,
   Paperclip,
   Mic,
-  Palette
+  Palette,
+  Bookmark
 } from 'lucide-react';
 import { ViewMode, AppNote, ObjectTypeDefinition, AppObject } from '../lib/types';
 import { auth, AuthUser } from '../lib/auth';
@@ -62,6 +63,7 @@ interface SidebarProps {
     inbox?: number;
     areas?: number;
     archives?: number;
+    bookmarks?: number;
   };
   onOpenQuickSwitcher: () => void;
   isCollapsed?: boolean;
@@ -610,6 +612,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {renderNavItem('canvases', 'Lienzos', <Palette className="w-4 h-4 text-pink-400" />, {
                   count: counts.canvases,
                   activeCondition: currentView === 'canvases' || currentView === 'canvas'
+                })}
+
+                {/* Enlaces & Marcadores */}
+                {renderNavItem('bookmarks', 'Enlaces & Marcadores', <Bookmark className="w-4 h-4 text-cyan-400" />, {
+                  count: counts.bookmarks
                 })}
 
                 {/* Favoritos */}

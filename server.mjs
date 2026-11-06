@@ -16,7 +16,7 @@ import {
   applySecurityHeaders,
   sendSafeError
 } from './src/lib/apiGuard.mjs';
-import { isAllowedUrl } from './src/lib/webScraperServer.ts';
+import { isAllowedUrl, webScraperMiddleware } from './src/lib/webScraperServer.ts';
 
 // Carga resiliente de redisCache con fallback automático en memoria
 let redisCache = {
@@ -829,6 +829,15 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       return sendJson(res, 500, { error: err.message || 'Error procesando transcripción' });
     }
+  }
+
+  // ==========================================
+  // WEB SCRAPER & METADATA EXTRACTION
+  // ==========================================
+  if (pathname.startsWith('/api/web-scraper/')) {
+    return webScraperMiddleware(req, res, () => {
+      sendJson(res, 404, { error: 'Endpoint no encontrado' });
+    });
   }
 
   // ==========================================
