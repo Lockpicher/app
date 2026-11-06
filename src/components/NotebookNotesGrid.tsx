@@ -356,7 +356,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDropFiles}
-      className="flex-1 flex flex-col h-screen bg-[#14141e] overflow-hidden relative select-none"
+      className="flex-1 flex flex-col h-screen bg-[#14141e] overflow-hidden relative select-none notes-workspace"
     >
       {/* Hidden File Inputs for quick creation */}
       <input
@@ -391,7 +391,7 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
       )}
 
       {/* Top Header */}
-      <div className="px-4 sm:px-8 py-3.5 sm:py-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#12121b] flex items-center justify-between flex-wrap gap-3">
+      <div className="px-4 sm:px-8 py-4 sm:py-6 pt-[max(1rem,env(safe-area-inset-top,0px))] border-b border-[#252538] bg-[#12121b] flex items-center justify-between flex-wrap gap-4 shadow-sm">
         <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
           <button
             onClick={onBackToNotebooks}
@@ -453,8 +453,8 @@ export const NotebookNotesGrid: React.FC<NotebookNotesGridProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar notas..."
-              className="pl-8 pr-3 py-1.5 bg-[#1a1a28] border border-[#2c2c40] rounded-xl text-xs text-white placeholder-gray-500 outline-none w-full sm:w-44 focus:border-blue-500"
+              placeholder="Buscar en este espacio..."
+              className="pl-9 pr-3 py-2.5 bg-[#1a1a28] border border-[#343449] rounded-xl text-sm text-white placeholder-gray-500 outline-none w-full sm:w-64 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition"
             />
           </div>
 
