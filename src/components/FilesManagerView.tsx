@@ -40,7 +40,8 @@ import {
   EyeOff,
   ChevronRight,
   CornerDownLeft,
-  GripVertical
+  GripVertical,
+  Package
 } from 'lucide-react';
 import { AppAttachment, AppFolder } from '../lib/types';
 import { db } from '../lib/insforge';
@@ -68,7 +69,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   onNavigateToEntity
 }) => {
   // Navigation & Sub-views
-  const [activeTab, setActiveTab] = useState<'all' | 'gallery' | 'documents' | 'folders' | 'unlinked'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'images' | 'videos' | 'audios' | 'documents' | 'folders' | 'others' | 'unlinked'>('all');
   const [galleryFilter, setGalleryFilter] = useState<'all_media' | 'images' | 'videos' | 'audios'>('all_media');
   const [docFilter, setDocFilter] = useState<'all' | 'pdf' | 'doc' | 'text'>('all');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | 'root'>(null);
@@ -275,12 +276,13 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   const getFileCategory = (file: AppAttachment) => {
     const mime = file.mime_type || '';
     const name = file.file_name.toLowerCase();
-    if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name)) return 'image';
-    if (mime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/i.test(name)) return 'video';
-    if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|oga)$/i.test(name)) return 'audio';
+    if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|heic|heif)$/i.test(name)) return 'image';
+    if (mime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|wmv|flv|m4v|3gp)$/i.test(name)) return 'video';
+    if (mime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|oga|aac|flac|wma)$/i.test(name)) return 'audio';
     if (mime.includes('pdf') || name.endsWith('.pdf')) return 'pdf';
     if (isTextAttachment(file)) return 'text';
-    return 'doc';
+    if (/\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|epub|pages|numbers|key)$/i.test(name) || mime.includes('word') || mime.includes('document') || mime.includes('sheet') || mime.includes('presentation') || mime.includes('officedocument')) return 'doc';
+    return 'other';
   };
 
   // Upload handler preserving original bytes
@@ -324,10 +326,14 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   };
 
   // Category Counts
+  const imageCount = attachments.filter(a => getFileCategory(a) === 'image').length;
+  const videoCount = attachments.filter(a => getFileCategory(a) === 'video').length;
+  const audioCount = attachments.filter(a => getFileCategory(a) === 'audio').length;
   const pdfCount = attachments.filter(a => getFileCategory(a) === 'pdf').length;
   const officeCount = attachments.filter(a => getFileCategory(a) === 'doc').length;
   const textCount = attachments.filter(a => getFileCategory(a) === 'text').length;
   const documentsCount = pdfCount + officeCount + textCount;
+  const otherCount = attachments.filter(a => getFileCategory(a) === 'other').length;
 
   // Filtering & Sorting
   const filteredAttachments = attachments.filter(a => {
@@ -342,18 +348,24 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       const hasRels = a.relations && a.relations.length > 0;
       const isSystem = a.entity_id === '00000000-0000-0000-0000-000000000000';
       if (!isSystem || hasRels) return false;
-    } else if (activeTab === 'gallery') {
+    } else if (activeTab === 'images') {
       const cat = getFileCategory(a);
-      if (galleryFilter === 'images' && cat !== 'image') return false;
-      if (galleryFilter === 'videos' && cat !== 'video') return false;
-      if (galleryFilter === 'audios' && cat !== 'audio') return false;
-      if (galleryFilter === 'all_media' && cat !== 'image' && cat !== 'video' && cat !== 'audio') return false;
+      if (cat !== 'image') return false;
+    } else if (activeTab === 'videos') {
+      const cat = getFileCategory(a);
+      if (cat !== 'video') return false;
+    } else if (activeTab === 'audios') {
+      const cat = getFileCategory(a);
+      if (cat !== 'audio') return false;
     } else if (activeTab === 'documents') {
       const cat = getFileCategory(a);
       if (cat !== 'pdf' && cat !== 'doc' && cat !== 'text') return false;
       if (docFilter === 'pdf' && cat !== 'pdf') return false;
       if (docFilter === 'doc' && cat !== 'doc') return false;
       if (docFilter === 'text' && cat !== 'text') return false;
+    } else if (activeTab === 'others') {
+      const cat = getFileCategory(a);
+      if (cat !== 'other') return false;
     }
 
     // Type filter
@@ -723,12 +735,12 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
 
       {/* Navigation tabs & Views Bar */}
       <div className="px-6 py-2.5 bg-[#121217] border-b border-[#232330] flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => setActiveTab('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'all'
-                ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-800/50'
+                ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-800/50 shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
             }`}
           >
@@ -736,15 +748,39 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('gallery')}
+            onClick={() => setActiveTab('images')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              activeTab === 'gallery'
-                ? 'bg-purple-950/70 text-purple-300 border border-purple-800/50'
+              activeTab === 'images'
+                ? 'bg-purple-950/70 text-purple-300 border border-purple-800/50 shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
-            <span>Galería Multimedia</span>
+            <span>Imágenes ({imageCount})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'videos'
+                ? 'bg-indigo-950/70 text-indigo-300 border border-indigo-800/50 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Vídeos ({videoCount})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audios')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'audios'
+                ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
+            }`}
+          >
+            <Music className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Audios ({audioCount})</span>
           </button>
 
           <button
@@ -760,10 +796,22 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('others')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'others'
+                ? 'bg-slate-800/90 text-slate-200 border border-slate-600/50 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
+            }`}
+          >
+            <Package className="w-3.5 h-3.5 text-slate-400" />
+            <span>Otros ({otherCount})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('folders')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'folders'
-                ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-800/50'
+                ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-800/50 shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
             }`}
           >
@@ -775,7 +823,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
             onClick={() => setActiveTab('unlinked')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'unlinked'
-                ? 'bg-amber-950/70 text-amber-300 border border-amber-800/50'
+                ? 'bg-amber-950/70 text-amber-300 border border-amber-800/50 shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
             }`}
           >
@@ -824,46 +872,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           </div>
         )}
 
-        {/* Gallery specific sub-filter */}
-        {activeTab === 'gallery' && (
-          <div className="flex items-center gap-1 bg-[#1a1a26] p-1 rounded-lg border border-[#2b2b3d]">
-            <button
-              onClick={() => setGalleryFilter('all_media')}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
-                galleryFilter === 'all_media' ? 'bg-[#272738] text-white' : 'text-gray-400'
-              }`}
-            >
-              Todo
-            </button>
-            <button
-              onClick={() => setGalleryFilter('images')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition ${
-                galleryFilter === 'images' ? 'bg-[#272738] text-white' : 'text-gray-400'
-              }`}
-            >
-              <ImageIcon className="w-3 h-3 text-cyan-400" />
-              Imágenes
-            </button>
-            <button
-              onClick={() => setGalleryFilter('videos')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition ${
-                galleryFilter === 'videos' ? 'bg-[#272738] text-white' : 'text-gray-400'
-              }`}
-            >
-              <Film className="w-3 h-3 text-purple-400" />
-              Vídeos
-            </button>
-            <button
-              onClick={() => setGalleryFilter('audios')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition ${
-                galleryFilter === 'audios' ? 'bg-[#272738] text-white' : 'text-gray-400'
-              }`}
-            >
-              <Music className="w-3 h-3 text-emerald-400" />
-              Audios
-            </button>
-          </div>
-        )}
+
 
         {/* Search, Filter, Sort and View Mode */}
         <div className="flex items-center gap-2">
@@ -1206,13 +1215,22 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                       </div>
                     ) : cat === 'text' ? (
                       <TextFileThumbnail file={file} />
-                    ) : (
+                    ) : cat === 'doc' ? (
                       <div className="flex flex-col items-center gap-2 text-blue-400">
                         <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shadow-inner">
                           <FileText className="w-6 h-6 text-blue-400" />
                         </div>
                         <span className="text-[10px] font-mono font-bold uppercase tracking-wide text-blue-300 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40">
                           {file.file_name.split('.').pop() || 'DOC'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <div className="w-12 h-12 rounded-xl bg-slate-500/10 border border-slate-500/30 flex items-center justify-center shadow-inner">
+                          <Package className="w-6 h-6 text-slate-400" />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wide text-slate-300 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-700/40">
+                          {file.file_name.split('.').pop() || 'OTRO'}
                         </span>
                       </div>
                     )}
@@ -1387,6 +1405,11 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                         {cat === 'doc' && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0 uppercase">
                             {file.file_name.split('.').pop() || 'DOC'}
+                          </span>
+                        )}
+                        {cat === 'other' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-500/15 text-slate-300 border border-slate-500/30 shrink-0 uppercase">
+                            {file.file_name.split('.').pop() || 'OTRO'}
                           </span>
                         )}
                         <div className="flex flex-col min-w-0">
