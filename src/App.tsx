@@ -36,6 +36,7 @@ import { TaskModal } from './components/TaskModal';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileDrawer } from './components/MobileDrawer';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { useTheme } from './lib/themeContext';
 
 
@@ -2134,6 +2135,7 @@ export function App() {
       )}
 
       {/* Evernote-style Floating AI Assistant Button */}
+      <PWAInstallPrompt />
       <AIAssistantButton />
 
       {/* Contextual AI Assistant Side/Bottom Drawer */}
