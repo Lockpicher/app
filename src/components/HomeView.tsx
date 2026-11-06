@@ -419,7 +419,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     <div 
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 flex flex-col h-full bg-[#111116] overflow-y-auto text-gray-100 select-none pb-8"
+      className="flex-1 flex flex-col h-full bg-[#111116] overflow-y-auto text-gray-100 select-none pb-8 home-workspace"
       style={{
         paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))'
       }}
@@ -512,7 +512,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* ==================================================== */}
       {/* 2. MAIN WORKSPACE: BALANCED 2-COLUMN LAYOUT          */}
       {/* ==================================================== */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
+      <main className="max-w-6xl mx-auto w-full px-4 sm:px-7 lg:px-10 py-5 sm:py-8 space-y-6 sm:space-y-8">
 
         {/* ==================================================== */}
         {/* MOBILE IN-CONTENT LARGE HEADER (Greeting & Date only)*/}

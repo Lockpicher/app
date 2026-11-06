@@ -248,7 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className={`w-full flex items-center justify-between rounded-lg transition-all duration-150 relative group ${
           isCollapsed 
             ? 'p-2 justify-center' 
-            : 'px-2.5 py-1.5 text-xs font-medium'
+            : 'px-3 py-2 text-sm font-medium'
         } ${
           isActive
             ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30'
@@ -299,7 +299,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           fixed lg:static top-0 bottom-0 left-0 z-50
           bg-[#141419] border-r border-[#23232b] flex flex-col h-screen select-none transition-all duration-300 ease-in-out
           ${isMobileOpen ? 'translate-x-0 shadow-2xl w-[270px] max-w-[85vw]' : '-translate-x-full lg:translate-x-0'}
-          ${isCollapsed ? 'lg:w-[60px]' : 'lg:w-[250px]'}
+          ${isCollapsed ? 'lg:w-[60px]' : 'lg:w-[264px]'}
         `}
       >
         {/* App Header / Brand bar */}
