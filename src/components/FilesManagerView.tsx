@@ -68,8 +68,9 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   onNavigateToEntity
 }) => {
   // Navigation & Sub-views
-  const [activeTab, setActiveTab] = useState<'all' | 'gallery' | 'folders' | 'unlinked'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'gallery' | 'documents' | 'folders' | 'unlinked'>('all');
   const [galleryFilter, setGalleryFilter] = useState<'all_media' | 'images' | 'videos' | 'audios'>('all_media');
+  const [docFilter, setDocFilter] = useState<'all' | 'pdf' | 'doc' | 'text'>('all');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | 'root'>(null);
   
   // UI Display state
@@ -322,6 +323,12 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
     }
   };
 
+  // Category Counts
+  const pdfCount = attachments.filter(a => getFileCategory(a) === 'pdf').length;
+  const officeCount = attachments.filter(a => getFileCategory(a) === 'doc').length;
+  const textCount = attachments.filter(a => getFileCategory(a) === 'text').length;
+  const documentsCount = pdfCount + officeCount + textCount;
+
   // Filtering & Sorting
   const filteredAttachments = attachments.filter(a => {
     // Tab filter
@@ -341,6 +348,12 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       if (galleryFilter === 'videos' && cat !== 'video') return false;
       if (galleryFilter === 'audios' && cat !== 'audio') return false;
       if (galleryFilter === 'all_media' && cat !== 'image' && cat !== 'video' && cat !== 'audio') return false;
+    } else if (activeTab === 'documents') {
+      const cat = getFileCategory(a);
+      if (cat !== 'pdf' && cat !== 'doc' && cat !== 'text') return false;
+      if (docFilter === 'pdf' && cat !== 'pdf') return false;
+      if (docFilter === 'doc' && cat !== 'doc') return false;
+      if (docFilter === 'text' && cat !== 'text') return false;
     }
 
     // Type filter
@@ -431,24 +444,33 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   };
 
   const handleApplyMove = async () => {
-    if (singleMovingFile) {
-      const updated = await db.updateAttachment(singleMovingFile.id, { folder_id: targetMoveFolderId });
-      if (updated) {
-        onAttachmentUpdated(updated);
-        const folderName = folders.find(f => f.id === targetMoveFolderId)?.name || 'la Raíz';
-        showToast(`"${singleMovingFile.display_name || singleMovingFile.file_name}" movido a ${folderName}`);
-      }
-    } else if (selectedFileIds.size > 0) {
-      for (const id of selectedFileIds) {
-        const updated = await db.updateAttachment(id, { folder_id: targetMoveFolderId });
-        if (updated) onAttachmentUpdated(updated);
-      }
-      const folderName = folders.find(f => f.id === targetMoveFolderId)?.name || 'la Raíz';
-      showToast(`${selectedFileIds.size} archivo(s) movidos a ${folderName}`);
-      setSelectedFileIds(new Set());
-    }
     setIsMoveModalOpen(false);
-    setSingleMovingFile(null);
+    const targetFolderId = targetMoveFolderId;
+    const folderName = folders.find(f => f.id === targetFolderId)?.name || 'la Raíz';
+
+    if (singleMovingFile) {
+      const file = singleMovingFile;
+      setSingleMovingFile(null);
+      // Instant optimistic update
+      onAttachmentUpdated({ ...file, folder_id: targetFolderId });
+      showToast(`"${file.display_name || file.file_name}" movido a ${folderName}`);
+      db.updateAttachment(file.id, { folder_id: targetFolderId }).catch(err => {
+        onAttachmentUpdated(file);
+        showToast(`Error al mover: ${err.message}`, 'error');
+      });
+    } else if (selectedFileIds.size > 0) {
+      const ids = Array.from(selectedFileIds);
+      setSelectedFileIds(new Set());
+      // Instant optimistic update for all files
+      ids.forEach(id => {
+        const file = attachments.find(a => a.id === id);
+        if (file) onAttachmentUpdated({ ...file, folder_id: targetFolderId });
+      });
+      showToast(`${ids.length} archivo(s) movidos a ${folderName}`);
+      Promise.all(ids.map(id => db.updateAttachment(id, { folder_id: targetFolderId }))).catch(err => {
+        showToast(`Error al mover archivos: ${err.message}`, 'error');
+      });
+    }
   };
 
   // Drag & drop handlers
@@ -470,16 +492,25 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       return;
     }
 
-    // 2. Dropping existing file from app
+    // 2. Dropping existing file from app (OPTIMISTIC ZERO-DELAY UPDATE)
     const fileId = e.dataTransfer.getData('text/plain');
     if (fileId) {
       const file = attachments.find(a => a.id === fileId);
       if (file && file.folder_id !== targetFolderId) {
-        const updated = await db.updateAttachment(file.id, { folder_id: targetFolderId });
-        if (updated) {
-          onAttachmentUpdated(updated);
-          showToast(`"${file.display_name || file.file_name}" movido a ${targetFolderName}`);
-        }
+        // Immediate UI update - instant visual movement (0ms latency)
+        const optimisticFile: AppAttachment = {
+          ...file,
+          folder_id: targetFolderId
+        };
+        onAttachmentUpdated(optimisticFile);
+        showToast(`"${file.display_name || file.file_name}" movido a ${targetFolderName}`);
+
+        // Background database sync with error recovery
+        db.updateAttachment(file.id, { folder_id: targetFolderId }).catch(err => {
+          console.error('Error persisting folder move:', err);
+          onAttachmentUpdated(file); // Revert on failure
+          showToast(`Error al mover: ${err.message}`, 'error');
+        });
       }
     }
   };
@@ -717,6 +748,18 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('documents')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'documents'
+                ? 'bg-blue-950/70 text-blue-300 border border-blue-800/50 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-[#1a1a24]'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-400" />
+            <span>Documentos ({documentsCount})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('folders')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'folders'
@@ -739,6 +782,47 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
             Sin vincular
           </button>
         </div>
+
+        {/* Document specific sub-filter (.doc, .docx, .pdf, txt) */}
+        {activeTab === 'documents' && (
+          <div className="flex items-center gap-1 bg-[#1a1a26] p-1 rounded-lg border border-[#2b2b3d]">
+            <button
+              onClick={() => setDocFilter('all')}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                docFilter === 'all' ? 'bg-[#272738] text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Todos ({documentsCount})
+            </button>
+            <button
+              onClick={() => setDocFilter('pdf')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                docFilter === 'pdf' ? 'bg-[#272738] text-rose-300 shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <FileText className="w-3 h-3 text-rose-400" />
+              PDFs ({pdfCount})
+            </button>
+            <button
+              onClick={() => setDocFilter('doc')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                docFilter === 'doc' ? 'bg-[#272738] text-blue-300 shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <FileCode className="w-3 h-3 text-blue-400" />
+              Word / Office ({officeCount})
+            </button>
+            <button
+              onClick={() => setDocFilter('text')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                docFilter === 'text' ? 'bg-[#272738] text-amber-300 shadow-sm' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <FileCode className="w-3 h-3 text-amber-400" />
+              Texto / Código ({textCount})
+            </button>
+          </div>
+        )}
 
         {/* Gallery specific sub-filter */}
         {activeTab === 'gallery' && (
@@ -1114,16 +1198,22 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                         <span className="text-[10px] font-mono uppercase">Audio</span>
                       </div>
                     ) : cat === 'pdf' ? (
-                      <div className="flex flex-col items-center gap-1 text-red-400">
-                        <FileText className="w-8 h-8" />
-                        <span className="text-[10px] font-mono uppercase">PDF</span>
+                      <div className="flex flex-col items-center gap-2 text-rose-400">
+                        <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shadow-inner">
+                          <FileText className="w-6 h-6 text-rose-400" />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wide text-rose-300 bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800/40">PDF</span>
                       </div>
                     ) : cat === 'text' ? (
                       <TextFileThumbnail file={file} />
                     ) : (
-                      <div className="flex flex-col items-center gap-1 text-cyan-400">
-                        <FileCode className="w-8 h-8" />
-                        <span className="text-[10px] font-mono uppercase">{file.file_name.split('.').pop()}</span>
+                      <div className="flex flex-col items-center gap-2 text-blue-400">
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shadow-inner">
+                          <FileText className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-wide text-blue-300 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40">
+                          {file.file_name.split('.').pop() || 'DOC'}
+                        </span>
                       </div>
                     )}
 
@@ -1284,13 +1374,21 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                         {cat === 'image' && <ImageIcon className="w-4 h-4 text-cyan-400 flex-shrink-0" />}
                         {cat === 'video' && <Film className="w-4 h-4 text-purple-400 flex-shrink-0" />}
                         {cat === 'audio' && <Music className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
-                        {cat === 'pdf' && <FileText className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                        {cat === 'pdf' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
+                            PDF
+                          </span>
+                        )}
                         {cat === 'text' && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
                             {getFileExtensionBadge(file.file_name).label}
                           </span>
                         )}
-                        {cat === 'doc' && <FileCode className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                        {cat === 'doc' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0 uppercase">
+                            {file.file_name.split('.').pop() || 'DOC'}
+                          </span>
+                        )}
                         <div className="flex flex-col min-w-0">
                           <span className="truncate max-w-xs">{file.display_name || file.file_name}</span>
                           {file.folder_id && (
