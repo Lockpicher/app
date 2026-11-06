@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   ChevronLeft, 
@@ -10,10 +10,16 @@ import {
   Calendar, 
   HardDrive, 
   Tag, 
-  ExternalLink 
+  ExternalLink,
+  Copy,
+  Check,
+  FileText,
+  AlignLeft,
+  RefreshCw 
 } from 'lucide-react';
 import { AppAttachment } from '../lib/types';
 import { r2Storage } from '../lib/r2Client';
+import { isTextAttachment, getFileExtensionBadge } from './TextFileThumbnail';
 
 interface LightboxModalProps {
   files: AppAttachment[];
@@ -67,6 +73,43 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
   const isVideo = currentFile.mime_type?.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(currentFile.file_name);
   const isAudio = currentFile.mime_type?.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|webm|oga)$/i.test(currentFile.file_name);
   const isImage = currentFile.mime_type?.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(currentFile.file_name);
+  const isText = isTextAttachment(currentFile);
+
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [isLoadingText, setIsLoadingText] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+  const [wrapText, setWrapText] = useState(true);
+
+  useEffect(() => {
+    if (isText && currentFile) {
+      setIsLoadingText(true);
+      setTextContent(null);
+      const url = r2Storage.getDisplayUrl(currentFile);
+      if (!url) {
+        setIsLoadingText(false);
+        return;
+      }
+      fetch(url)
+        .then(async res => {
+          if (!res.ok) throw new Error('Error al leer el archivo');
+          const t = await res.text();
+          setTextContent(t);
+        })
+        .catch(err => {
+          setTextContent(`[No se pudo cargar la vista previa: ${err.message}]`);
+        })
+        .finally(() => {
+          setIsLoadingText(false);
+        });
+    }
+  }, [currentFile?.id, isText]);
+
+  const handleCopyText = () => {
+    if (!textContent) return;
+    navigator.clipboard.writeText(textContent);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
+  };
 
   return (
     <div 
@@ -202,6 +245,94 @@ export const LightboxModal: React.FC<LightboxModalProps> = ({
                 autoPlay
                 className="w-full mt-4" 
               />
+
+            </div>
+          )}
+
+          {isText && (
+            <div className="bg-[#15151f] border border-[#2b2b3d] rounded-2xl max-w-4xl w-full h-[75vh] flex flex-col overflow-hidden shadow-2xl">
+              {/* Text viewer toolbar */}
+              <div className="px-4 py-2.5 bg-[#1a1a27] border-b border-[#29293c] flex items-center justify-between gap-3 text-xs flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const badge = getFileExtensionBadge(currentFile.file_name);
+                    return (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border tracking-wider ${badge.color} ${badge.border} ${badge.bg}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
+                  <span className="font-semibold text-white truncate max-w-sm">
+                    {currentFile.display_name || currentFile.file_name}
+                  </span>
+                  {textContent && (
+                    <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">
+                      ({textContent.split('\n').length} líneas • {formatSize(currentFile.file_size)})
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setWrapText(prev => !prev)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition flex items-center gap-1 ${
+                      wrapText
+                        ? 'bg-cyan-950/70 border-cyan-800/60 text-cyan-300'
+                        : 'bg-[#1e1e2c] border-[#2e2e40] text-gray-400 hover:text-white'
+                    }`}
+                    title="Alternar ajuste de línea"
+                  >
+                    <AlignLeft className="w-3 h-3" />
+                    <span className="hidden sm:inline">Ajuste</span>
+                  </button>
+                  <button
+                    onClick={handleCopyText}
+                    disabled={!textContent}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#1e1e2c] hover:bg-[#28283c] border border-[#2e2e40] text-gray-200 transition flex items-center gap-1 disabled:opacity-40"
+                    title="Copiar contenido"
+                  >
+                    {copiedText ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-300">Copiado</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-gray-400" />
+                        <span>Copiar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Text content area with line numbers */}
+              <div className="flex-1 overflow-auto p-4 font-mono text-xs select-text bg-[#0e0e14]">
+                {isLoadingText ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+                    <RefreshCw className="w-5 h-5 animate-spin text-cyan-400" />
+                    <span>Cargando contenido del documento...</span>
+                  </div>
+                ) : textContent !== null ? (
+                  <div className="flex gap-3 leading-relaxed text-gray-200">
+                    {/* Line numbers */}
+                    <div className="text-gray-600 text-right select-none pr-3 border-r border-[#222233] shrink-0 font-mono text-[11px]">
+                      {textContent.split('\n').map((_, idx) => (
+                        <div key={idx}>{idx + 1}</div>
+                      ))}
+                    </div>
+                    {/* Text code */}
+                    <pre className={`flex-1 font-mono text-gray-200 text-xs ${wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre overflow-x-auto'}`}>
+                      {textContent}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                    <FileText className="w-8 h-8 opacity-40 mb-1" />
+                    <span>No hay contenido de texto disponible.</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
