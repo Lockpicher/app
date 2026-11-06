@@ -96,8 +96,24 @@ import {
 
 export function App() {
   const { theme, toggleTheme } = useTheme();
-  const [currentView, setCurrentView] = useState<ViewMode>('home');
+  const [currentView, setCurrentView] = useState<ViewMode>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sc_current_view');
+        if (saved) return saved as ViewMode;
+      }
+    } catch {}
+    return 'home';
+  });
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sc_current_view', currentView);
+      }
+    } catch {}
+  }, [currentView]);
 
   // Core Data
   const [notebooks, setNotebooks] = useState<AppNotebook[]>([]);

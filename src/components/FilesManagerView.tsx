@@ -1544,14 +1544,16 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       </div>
 
       {/* Lightbox Component */}
-      <LightboxModal
-        files={filteredAttachments}
-        currentIndex={lightboxIndex}
-        isOpen={lightboxOpen}
-        onClose={() => setLightboxOpen(false)}
-        onNavigate={setLightboxIndex}
-        onNavigateToEntity={onNavigateToEntity}
-      />
+      {lightboxOpen && (
+        <LightboxModal
+          files={filteredAttachments}
+          currentIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          onNavigate={setLightboxIndex}
+          onNavigateToEntity={onNavigateToEntity}
+        />
+      )}
 
       {/* Create / Edit Folder Modal */}
       {isFolderModalOpen && (
