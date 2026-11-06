@@ -3,6 +3,7 @@ import {
   Folder, 
   FolderPlus, 
   Upload, 
+  UploadCloud, 
   Search, 
   Filter, 
   Grid, 
@@ -101,6 +102,8 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   // Drag and Drop state
   const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [isDraggingOverView, setIsDraggingOverView] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // Quick feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -481,6 +484,46 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
     }
   };
 
+  // View-level OS Drag & Drop Handlers
+  const handleViewDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedFileId && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      dragCounterRef.current++;
+      setIsDraggingOverView(true);
+    }
+  };
+
+  const handleViewDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedFileId && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy';
+      if (!isDraggingOverView) setIsDraggingOverView(true);
+    }
+  };
+
+  const handleViewDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedFileId && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      dragCounterRef.current--;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDraggingOverView(false);
+      }
+    }
+  };
+
+  const handleViewDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingOverView(false);
+
+    // If OS files dropped directly on the view
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const targetFolder = (selectedFolderId && selectedFolderId !== 'root') ? selectedFolderId : null;
+      await handleUpload(e.dataTransfer.files, targetFolder);
+    }
+  };
+
   const handleSaveTags = async () => {
     if (!editingTagsFile) return;
     const tagsArray = tagInput.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
@@ -513,7 +556,42 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden text-gray-200">
+    <div 
+      className="flex-1 flex flex-col h-screen bg-[#16161d] overflow-hidden text-gray-200 relative"
+      onDragEnter={handleViewDragEnter}
+      onDragOver={handleViewDragOver}
+      onDragLeave={handleViewDragLeave}
+      onDrop={handleViewDrop}
+    >
+      {/* OS Drag & Drop Fullscreen Dropzone Overlay */}
+      {isDraggingOverView && !draggedFileId && (
+        <div className="absolute inset-0 z-50 bg-[#0b0f19]/90 backdrop-blur-md flex flex-col items-center justify-center p-8 border-4 border-dashed border-cyan-400 pointer-events-none transition-all duration-150 animate-in fade-in select-none">
+          <div className="w-24 h-24 rounded-3xl bg-cyan-500/20 border-2 border-cyan-400/60 flex items-center justify-center text-cyan-300 shadow-2xl shadow-cyan-500/30 mb-6 animate-bounce">
+            <UploadCloud className="w-12 h-12" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
+            ¡Suelta tus archivos aquí!
+          </h2>
+          <p className="text-sm text-cyan-200/80 max-w-md text-center mb-6 leading-relaxed">
+            Se subirán automáticamente a tu bucket de <span className="font-semibold text-white">Cloudflare R2</span> sin alterar los bytes originales.
+          </p>
+          <div className="px-4 py-2 rounded-xl bg-cyan-950/90 border border-cyan-500/50 text-xs font-mono text-cyan-300 flex items-center gap-2 shadow-xl">
+            <Folder className="w-4 h-4 text-cyan-400" />
+            <span>
+              Destino: {selectedFolderId && selectedFolderId !== 'root' ? folders.find(f => f.id === selectedFolderId)?.name || 'Carpeta' : 'Raíz (Todos los archivos)'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Uploading Indicator */}
+      {isUploading && (
+        <div className="fixed top-5 right-6 z-50 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#141d2e]/95 border border-cyan-500/50 text-cyan-200 text-xs font-semibold shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+          <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+          <span>Subiendo archivo(s) a Cloudflare R2...</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="px-4 sm:px-6 py-3 sm:py-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] border-b border-[#252532] bg-[#13131a] flex items-center justify-between flex-wrap gap-4">
         <div>

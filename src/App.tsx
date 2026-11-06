@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { AppSkeletonScreen, EditorSkeleton } from './components/SkeletonLoader';
 
 const RemindersView = lazy(() => import('./components/RemindersView').then(m => ({ default: m.RemindersView })));
@@ -88,7 +88,10 @@ import {
   HardDrive,
   Sun,
   Moon,
-  Plus
+  Plus,
+  UploadCloud,
+  Upload,
+  CheckCircle2
 } from 'lucide-react';
 
 export function App() {
@@ -186,6 +189,12 @@ export function App() {
     }
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Global Drag & Drop state
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+  const [isGlobalUploading, setIsGlobalUploading] = useState(false);
+  const [globalUploadToast, setGlobalUploadToast] = useState<string | null>(null);
+  const globalDragCounterRef = useRef(0);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
@@ -297,6 +306,101 @@ export function App() {
       }
     }
   }, [currentUser, isAuthChecking]);
+
+  // Global Drag & Drop listener across the entire app
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (currentView === 'files') return;
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        globalDragCounterRef.current++;
+        setIsGlobalDragging(true);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (currentView === 'files') return;
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        e.dataTransfer.dropEffect = 'copy';
+        if (!isGlobalDragging) setIsGlobalDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      if (currentView === 'files') return;
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        globalDragCounterRef.current--;
+        if (globalDragCounterRef.current <= 0) {
+          globalDragCounterRef.current = 0;
+          setIsGlobalDragging(false);
+        }
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      globalDragCounterRef.current = 0;
+      setIsGlobalDragging(false);
+
+      if (currentView === 'files') return;
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      try {
+        setIsGlobalUploading(true);
+        const entityId = (isEditingNote && selectedNoteId) ? selectedNoteId : '00000000-0000-0000-0000-000000000000';
+        const entityType = (isEditingNote && selectedNoteId) ? 'note' : 'files_manager';
+        const targetPrefix = entityType === 'note' ? 'notes' : 'library';
+
+        let uploadedCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const res = await r2Storage.uploadFile(file, targetPrefix);
+          const created = await db.recordAttachment({
+            entity_id: entityId,
+            entity_type: entityType,
+            file_name: res.name,
+            display_name: file.name,
+            file_url: res.url,
+            file_path: res.r2Key,
+            r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+            bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+            storage_provider: res.provider,
+            file_size: res.size,
+            mime_type: res.mime,
+            migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+          });
+
+          if (created) {
+            handleAttachmentCreated(created);
+            uploadedCount++;
+          }
+        }
+
+        setGlobalUploadToast(`¡${uploadedCount} archivo(s) subido(s) a Cloudflare R2 con éxito!`);
+        setTimeout(() => setGlobalUploadToast(null), 4000);
+      } catch (err: any) {
+        alert('Error subiendo archivo arrastrado: ' + err.message);
+      } finally {
+        setIsGlobalUploading(false);
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [currentView, isEditingNote, selectedNoteId]);
 
   // Reminders scheduler listener
   useEffect(() => {
