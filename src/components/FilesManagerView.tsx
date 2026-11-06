@@ -1234,9 +1234,20 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                         loading="lazy"
                       />
                     ) : cat === 'video' ? (
-                      <div className="relative w-full h-full flex items-center justify-center bg-black/40">
-                        <Film className="w-8 h-8 text-purple-400" />
-                        <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded bg-black/80 font-mono text-purple-200">
+                      <div className="relative w-full h-full flex items-center justify-center bg-black/60 group/video overflow-hidden">
+                        <video
+                          src={r2Storage.getDisplayUrl(file)}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover group-hover/video:scale-105 transition duration-300 pointer-events-none"
+                        />
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover/video:bg-black/15 transition">
+                          <div className="w-9 h-9 rounded-full bg-black/70 backdrop-blur-sm border border-purple-400/40 flex items-center justify-center shadow-lg group-hover/video:scale-110 transition">
+                            <Film className="w-4 h-4 text-purple-300" />
+                          </div>
+                        </div>
+                        <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded bg-black/80 font-mono text-purple-200 border border-purple-500/30">
                           Vídeo
                         </span>
                       </div>

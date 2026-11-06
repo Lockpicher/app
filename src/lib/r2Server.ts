@@ -76,7 +76,8 @@ export function getR2Client(): { client: S3Client; bucket: string; publicUrl?: s
     credentials: {
       accessKeyId,
       secretAccessKey
-    }
+    },
+    forcePathStyle: true
   });
 
   return { client: r2Client, bucket, publicUrl };

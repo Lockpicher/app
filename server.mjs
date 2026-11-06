@@ -175,7 +175,8 @@ function getR2Client() {
     credentials: {
       accessKeyId,
       secretAccessKey
-    }
+    },
+    forcePathStyle: true
   });
 
   return { client: r2Client, bucket, publicUrl };
@@ -206,7 +207,21 @@ const MIME_MAP = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
-  '.wasm': 'application/wasm'
+  '.wasm': 'application/wasm',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 };
 
 const server = http.createServer(async (req, res) => {
@@ -581,7 +596,12 @@ const server = http.createServer(async (req, res) => {
         });
         const s3Res = await client.send(command);
 
-        if (s3Res.ContentType) res.setHeader('Content-Type', s3Res.ContentType);
+        let contentType = s3Res.ContentType;
+        if (!contentType || contentType === 'application/octet-stream') {
+          const ext = path.extname(key).toLowerCase();
+          contentType = MIME_MAP[ext] || 'application/octet-stream';
+        }
+        res.setHeader('Content-Type', contentType);
         if (s3Res.ContentRange) {
           res.setHeader('Content-Range', s3Res.ContentRange);
           if (s3Res.ContentLength !== undefined) res.setHeader('Content-Length', s3Res.ContentLength.toString());

@@ -18,6 +18,27 @@ import {
   authenticateRequest
 } from './apiGuard.mjs';
 
+const MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.json': 'application/json; charset=utf-8'
+};
+
 export async function r2Middleware(req: IncomingMessage, res: ServerResponse, next: () => void) {
   const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
@@ -320,9 +341,13 @@ export async function r2Middleware(req: IncomingMessage, res: ServerResponse, ne
 
     try {
       const s3Res = await getR2ObjectStream(key, rangeHeader);
-      if (s3Res.ContentType) {
-        res.setHeader('Content-Type', s3Res.ContentType);
+      let contentType = s3Res.ContentType;
+      if (!contentType || contentType === 'application/octet-stream') {
+        const dotIdx = key.lastIndexOf('.');
+        const ext = dotIdx >= 0 ? key.slice(dotIdx).toLowerCase() : '';
+        contentType = MIME_MAP[ext] || 'application/octet-stream';
       }
+      res.setHeader('Content-Type', contentType);
       if (s3Res.ContentRange) {
         res.setHeader('Content-Range', s3Res.ContentRange);
         if (s3Res.ContentLength !== undefined) {
