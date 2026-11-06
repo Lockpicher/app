@@ -166,13 +166,8 @@ export function App() {
         sessionSyncTimer = window.setInterval(() => {
           r2Storage.syncSession().catch(() => {});
         }, 10 * 60 * 1000);
-      } else {
-        r2Storage.clearSession().catch(() => {});
       }
-      if (isInitial) {
-        isInitial = false;
-        setIsAuthChecking(false);
-      }
+      setIsAuthChecking(false);
     });
     return () => {
       stopSessionSync();
@@ -355,30 +350,38 @@ export function App() {
         const entityType = (isEditingNote && selectedNoteId) ? 'note' : 'files_manager';
         const targetPrefix = entityType === 'note' ? 'notes' : 'library';
 
-        let uploadedCount = 0;
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const res = await r2Storage.uploadFile(file, targetPrefix);
-          const created = await db.recordAttachment({
-            entity_id: entityId,
-            entity_type: entityType,
-            file_name: res.name,
-            display_name: file.name,
-            file_url: res.url,
-            file_path: res.r2Key,
-            r2_key: res.provider === 'r2' ? res.r2Key : undefined,
-            bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
-            storage_provider: res.provider,
-            file_size: res.size,
-            mime_type: res.mime,
-            migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
-          });
+        const fileList = Array.from(files);
+        const results = await Promise.all(
+          fileList.map(async (file) => {
+            try {
+              const res = await r2Storage.uploadFile(file, targetPrefix);
+              const created = await db.recordAttachment({
+                entity_id: entityId,
+                entity_type: entityType,
+                file_name: res.name,
+                display_name: file.name,
+                file_url: res.url,
+                file_path: res.r2Key,
+                r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+                bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+                storage_provider: res.provider,
+                file_size: res.size,
+                mime_type: res.mime,
+                migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+              });
 
-          if (created) {
-            handleAttachmentCreated(created);
-            uploadedCount++;
-          }
-        }
+              if (created) {
+                handleAttachmentCreated(created);
+                return created;
+              }
+              return null;
+            } catch (err) {
+              console.error('Error subiendo archivo global:', file.name, err);
+              return null;
+            }
+          })
+        );
+        const uploadedCount = results.filter(Boolean).length;
 
         setGlobalUploadToast(`¡${uploadedCount} archivo(s) subido(s) a Cloudflare R2 con éxito!`);
         setTimeout(() => setGlobalUploadToast(null), 4000);
@@ -2061,6 +2064,7 @@ export function App() {
           await loadData();
         }}
         onSignOut={async () => {
+          await r2Storage.clearSession().catch(() => {});
           await loadData();
         }}
       />

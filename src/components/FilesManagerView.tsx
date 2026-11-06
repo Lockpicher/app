@@ -285,39 +285,78 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
     return 'other';
   };
 
-  // Upload handler preserving original bytes
+  // Upload handler with INSTANT optimistic placeholders and PARALLEL execution
   const handleUpload = async (fileList: FileList, folderOverrideId?: string | null) => {
     try {
       setIsUploading(true);
       const targetFolder = folderOverrideId !== undefined ? folderOverrideId : (selectedFolderId && selectedFolderId !== 'root' ? selectedFolderId : null);
-      for (let i = 0; i < fileList.length; i++) {
-        const file = fileList[i];
-        const res = await r2Storage.uploadFile(
-          file, 
-          targetFolder ? `folder_${targetFolder}` : 'library'
-        );
+      const files = Array.from(fileList);
 
-        const created = await db.recordAttachment({
+      // 1. Create instant optimistic placeholders so files appear IMMEDIATELY (0ms delay)
+      const optimisticMap = new Map<string, AppAttachment>();
+      files.forEach((file, index) => {
+        const tempId = 'temp_' + Date.now() + '_' + index + '_' + Math.random().toString(36).slice(2, 7);
+        const isImg = file.type.startsWith('image/');
+        const tempAttachment: AppAttachment = {
+          id: tempId,
           entity_id: '00000000-0000-0000-0000-000000000000',
           entity_type: 'files_manager',
-          file_name: res.name,
+          file_name: file.name,
           display_name: file.name,
-          file_url: res.url,
-          file_path: res.r2Key,
-          r2_key: res.provider === 'r2' ? res.r2Key : undefined,
-          bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
-          storage_provider: res.provider,
+          file_url: isImg ? URL.createObjectURL(file) : '',
+          file_path: 'uploading/' + file.name,
+          storage_provider: 'r2',
+          bucket_name: 'cloudflare-r2',
           folder_id: targetFolder,
-          file_size: res.size,
-          mime_type: res.mime,
-          migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
-        });
+          file_size: file.size,
+          mime_type: file.type || 'application/octet-stream',
+          migration_status: 'pending',
+          created_at: new Date().toISOString()
+        };
+        optimisticMap.set(tempId, tempAttachment);
+        onAttachmentCreated(tempAttachment);
+      });
 
-        if (created) {
-          onAttachmentCreated(created);
+      // 2. Upload in PARALLEL to Cloudflare R2 (ultra fast, eliminates sequential delays)
+      const uploadPromises = files.map(async (file, index) => {
+        const tempId = Array.from(optimisticMap.keys())[index];
+        try {
+          const res = await r2Storage.uploadFile(
+            file, 
+            targetFolder ? `folder_${targetFolder}` : 'library'
+          );
+
+          const created = await db.recordAttachment({
+            entity_id: '00000000-0000-0000-0000-000000000000',
+            entity_type: 'files_manager',
+            file_name: res.name,
+            display_name: file.name,
+            file_url: res.url,
+            file_path: res.r2Key,
+            r2_key: res.provider === 'r2' ? res.r2Key : undefined,
+            bucket_name: res.provider === 'r2' ? 'cloudflare-r2' : 'app-storage',
+            storage_provider: res.provider,
+            folder_id: targetFolder,
+            file_size: res.size,
+            mime_type: res.mime,
+            migration_status: res.provider === 'r2' ? 'migrated' : 'pending'
+          });
+
+          // Replace optimistic placeholder with real persisted attachment
+          if (created) {
+            onAttachmentDeleted(tempId, '');
+            onAttachmentCreated(created);
+          }
+          return true;
+        } catch (uploadErr: any) {
+          console.error('Error en subida individual:', uploadErr);
+          onAttachmentDeleted(tempId, '');
+          throw uploadErr;
         }
-      }
-      showToast(`¡${fileList.length} archivo(s) subido(s) con éxito!`);
+      });
+
+      await Promise.all(uploadPromises);
+      showToast(`¡${files.length} archivo(s) subido(s) a Cloudflare R2!`);
     } catch (err: any) {
       showToast('Error subiendo archivo: ' + err.message, 'error');
     } finally {
@@ -1252,8 +1291,14 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
                     </button>
 
                     {/* Storage provider badge */}
-                    <div className="absolute bottom-2 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/75 font-mono text-gray-300">
-                      {file.storage_provider === 'r2' ? 'R2' : 'InsForge'}
+                    <div className="absolute bottom-2 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/75 font-mono text-gray-300 flex items-center gap-1">
+                      {file.id.startsWith('temp_') ? (
+                        <span className="text-cyan-400 flex items-center gap-1 font-semibold animate-pulse">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Subiendo a R2...
+                        </span>
+                      ) : (
+                        <span>{file.storage_provider === 'r2' ? 'R2' : 'InsForge'}</span>
+                      )}
                     </div>
                   </div>
 

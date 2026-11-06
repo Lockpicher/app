@@ -10,6 +10,7 @@ export interface AuthUser {
 const DEFAULT_WORKSPACE_EMAIL = 'usuario@segundocerebro.com';
 const DEFAULT_WORKSPACE_PASSWORD = 'SegundoCerebro2026!';
 const LOGGED_OUT_KEY = 'sc_user_explicitly_logged_out';
+const CACHED_USER_KEY = 'sc_current_user';
 
 /**
  * Normaliza el identificador ingresado por el usuario:
@@ -28,9 +29,19 @@ export function normalizeUserIdentifier(input: string): string {
 }
 
 class AuthService {
-  private currentUser: AuthUser | null = null;
+  // Synchronously restore user from localStorage on refresh to prevent unexpected logout
+  private currentUser: AuthUser | null = (() => {
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem(LOGGED_OUT_KEY) !== 'true') {
+        const cached = localStorage.getItem(CACHED_USER_KEY);
+        if (cached) return JSON.parse(cached);
+      }
+    } catch {}
+    return null;
+  })();
   private listeners: ((user: AuthUser | null) => void)[] = [];
   private initPromise: Promise<AuthUser | null> | null = null;
+  private isSessionChecked = false;
 
   constructor() {
     this.initSession();
@@ -39,7 +50,10 @@ class AuthService {
   // Subscribe to auth state changes
   public onAuthStateChanged(callback: (user: AuthUser | null) => void) {
     this.listeners.push(callback);
-    callback(this.currentUser);
+    // If user is already cached or session verification has completed, notify callback immediately
+    if (this.currentUser || this.isSessionChecked) {
+      callback(this.currentUser);
+    }
     return () => {
       this.listeners = this.listeners.filter(l => l !== callback);
     };
@@ -61,6 +75,8 @@ class AuthService {
 
         if (isExplicitlyLoggedOut) {
           this.currentUser = null;
+          if (typeof window !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+          this.isSessionChecked = true;
           this.notifyListeners();
           return null;
         }
@@ -73,16 +89,34 @@ class AuthService {
             name: (data.user.profile as any)?.name || data.user.email.split('@')[0],
             createdAt: data.user.createdAt
           };
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
+          }
+          this.isSessionChecked = true;
           this.notifyListeners();
           return this.currentUser;
         }
 
+        // If network error occurred or temporary issue but user was cached, keep session alive!
+        if (this.currentUser) {
+          console.warn('InsForge verify returned no user, retaining cached user session');
+          this.isSessionChecked = true;
+          return this.currentUser;
+        }
+
         this.currentUser = null;
+        if (typeof window !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+        this.isSessionChecked = true;
         this.notifyListeners();
         return null;
       } catch (err) {
         console.error('Error al inicializar sesión de InsForge:', err);
+        if (this.currentUser) {
+          this.isSessionChecked = true;
+          return this.currentUser;
+        }
         this.currentUser = null;
+        this.isSessionChecked = true;
         this.notifyListeners();
       } finally {
         this.initPromise = null;
@@ -154,9 +188,10 @@ class AuthService {
         return { user: null, error: error || new Error('Usuario/contraseña incorrectos') };
       }
 
-      // Eliminar bandera de logout explícito
+      // Eliminar bandera de logout explícito y guardar en cache
       if (typeof window !== 'undefined') {
         localStorage.removeItem(LOGGED_OUT_KEY);
+        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
       }
 
       this.currentUser = {
@@ -203,6 +238,7 @@ class AuthService {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_OUT_KEY, 'true');
+        localStorage.removeItem(CACHED_USER_KEY);
       }
       this.initPromise = null;
       await insforge.auth.signOut();
