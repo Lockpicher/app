@@ -106,10 +106,10 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
   const dragCounterRef = useRef(0);
 
   // Quick feedback toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
   };
 
   // Tags editing
@@ -316,7 +316,7 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       }
       showToast(`¡${fileList.length} archivo(s) subido(s) con éxito!`);
     } catch (err: any) {
-      alert('Error subiendo archivo: ' + err.message);
+      showToast('Error subiendo archivo: ' + err.message, 'error');
     } finally {
       setIsUploading(false);
     }
@@ -534,18 +534,35 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
     }
   };
 
-  // Folder actions
+  // Folder actions (instant modal close + background sync)
   const handleSaveFolder = async () => {
-    if (!newFolderName.trim()) return;
-    if (editingFolder) {
-      await db.updateFileFolder(editingFolder.id, { name: newFolderName.trim() });
-    } else {
-      await db.createFileFolder({ name: newFolderName.trim() });
-    }
-    onFoldersChanged();
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+
+    // Instant modal dismissal - zero delay perceived by user
     setIsFolderModalOpen(false);
     setNewFolderName('');
+    const targetFolder = editingFolder;
     setEditingFolder(null);
+
+    try {
+      if (targetFolder) {
+        showToast(`Actualizando "${trimmed}"...`);
+        const updated = await db.updateFileFolder(targetFolder.id, { name: trimmed });
+        if (updated) {
+          showToast(`Carpeta "${trimmed}" actualizada`);
+        }
+      } else {
+        showToast(`Creando "${trimmed}"...`);
+        const created = await db.createFileFolder({ name: trimmed });
+        if (created) {
+          showToast(`Carpeta "${trimmed}" creada con éxito`);
+        }
+      }
+      onFoldersChanged();
+    } catch (err: any) {
+      showToast(`Error al guardar carpeta: ${err.message}`, 'error');
+    }
   };
 
   const handleDeleteFolder = async (folderId: string) => {
@@ -1837,10 +1854,18 @@ export const FilesManagerView: React.FC<FilesManagerViewProps> = ({
       )}
 
       {/* Quick Action Toast */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-cyan-950/95 border border-cyan-500/50 text-cyan-200 text-xs font-medium shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-          <span>{toastMessage}</span>
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-xs font-medium shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+          toast.type === 'error'
+            ? 'bg-red-950/95 border-red-500/50 text-red-200'
+            : 'bg-cyan-950/95 border-cyan-500/50 text-cyan-200'
+        }`}>
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

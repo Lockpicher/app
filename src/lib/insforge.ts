@@ -2011,28 +2011,44 @@ export const db = {
   },
 
   async createFileFolder(folder: Partial<AppFolder>): Promise<AppFolder | null> {
-    const { data, error } = await insforge.database
-      .from('app_folders')
-      .insert([folder])
-      .select();
-    if (error) {
-      console.error('Error creating file folder:', error);
-      throw error;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { data, error } = await insforge.database
+          .from('app_folders')
+          .insert([folder])
+          .select();
+        if (error) throw error;
+        return (data as unknown as AppFolder[])?.[0] || null;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`createFileFolder attempt ${attempt + 1} failed:`, err);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
     }
-    return (data as unknown as AppFolder[])?.[0] || null;
+    console.error('Error creating file folder after retries:', lastError);
+    throw lastError;
   },
 
   async updateFileFolder(id: string, updates: Partial<AppFolder>): Promise<AppFolder | null> {
-    const { data, error } = await insforge.database
-      .from('app_folders')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select();
-    if (error) {
-      console.error('Error updating file folder:', error);
-      throw error;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { data, error } = await insforge.database
+          .from('app_folders')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select();
+        if (error) throw error;
+        return (data as unknown as AppFolder[])?.[0] || null;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`updateFileFolder attempt ${attempt + 1} failed:`, err);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
     }
-    return (data as unknown as AppFolder[])?.[0] || null;
+    console.error('Error updating file folder after retries:', lastError);
+    throw lastError;
   },
 
   async deleteFileFolder(id: string): Promise<boolean> {
@@ -2167,26 +2183,30 @@ export const db = {
   },
 
   async recordAttachment(attachment: Partial<AppAttachment>): Promise<AppAttachment | null> {
-    const { data, error } = await insforge.database
-      .from('app_attachments')
-      .insert([attachment])
-      .select();
-    if (error) {
-      console.error('Error recording attachment:', error);
-      throw error;
-    }
-    const created = (data as unknown as AppAttachment[])?.[0] || null;
-    
-    // If entity_id is specified and valid, register explicit relation
-    if (created && created.entity_id && created.entity_id !== '00000000-0000-0000-0000-000000000000') {
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await this.addFileRelation(created.id, created.entity_id, created.entity_type);
-      } catch (e) {
-        console.warn('Auto file relation creation failed:', e);
+        const { data, error } = await insforge.database
+          .from('app_attachments')
+          .insert([attachment])
+          .select();
+        if (error) throw error;
+        const created = (data as unknown as AppAttachment[])?.[0] || null;
+        
+        // If entity_id is specified and valid, register explicit relation non-blockingly
+        if (created && created.entity_id && created.entity_id !== '00000000-0000-0000-0000-000000000000') {
+          this.addFileRelation(created.id, created.entity_id, created.entity_type).catch(console.warn);
+        }
+
+        return created;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`recordAttachment attempt ${attempt + 1} failed:`, err);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
       }
     }
-
-    return created;
+    console.error('Error recording attachment after retries:', lastError);
+    throw lastError;
   },
 
   async updateAttachment(id: string, updates: Partial<AppAttachment>): Promise<AppAttachment | null> {

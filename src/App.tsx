@@ -383,7 +383,8 @@ export function App() {
         setGlobalUploadToast(`¡${uploadedCount} archivo(s) subido(s) a Cloudflare R2 con éxito!`);
         setTimeout(() => setGlobalUploadToast(null), 4000);
       } catch (err: any) {
-        alert('Error subiendo archivo arrastrado: ' + err.message);
+        setGlobalUploadToast(`Error al subir: ${err.message}`);
+        setTimeout(() => setGlobalUploadToast(null), 5000);
       } finally {
         setIsGlobalUploading(false);
       }
