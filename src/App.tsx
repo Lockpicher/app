@@ -1501,6 +1501,7 @@ export function App() {
             projects={projects}
             tasks={tasks}
             objects={objects}
+            notes={notes}
             areas={areas}
             customTypes={customObjectTypes}
             onBack={handleCloseEditor}
