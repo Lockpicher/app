@@ -518,7 +518,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
         const q = searchQuery.toLocaleLowerCase('es');
         const title = item.title.toLocaleLowerCase('es');
         const tags = getVisibleTags(item.tags).join(' ').toLocaleLowerCase('es');
-        return (title === q ? 100 : title.includes(q) ? 60 : 0) + (tags.includes(q) ? 35 : 0) + (item.site_name?.toLocaleLowerCase('es').includes(q) ? 20 : 0) + (item.description?.toLocaleLowerCase('es').includes(q) ? 12 : 0) + (item.notes?.toLocaleLowerCase('es').includes(q) ? 10 : 0) + (item.is_pinned ? 5 : 0);
+        const description = (item.description || '').toLocaleLowerCase('es');
+        const personalNotes = (item.notes || '').toLocaleLowerCase('es');
+        const linkedNote = item.entity_type === 'note' ? notes.find(note => note.id === item.entity_id)?.title?.toLocaleLowerCase('es') || '' : '';
+        const termScore = queryTerms.filter(term => term !== q).reduce((total, term) =>
+          total + (title.includes(term) ? 14 : 0) + (tags.includes(term) ? 9 : 0) +
+          (description.includes(term) ? 5 : 0) + (personalNotes.includes(term) ? 4 : 0) +
+          (linkedNote.includes(term) ? 6 : 0), 0);
+        return (title === q ? 100 : title.includes(q) ? 60 : 0) +
+          (tags.includes(q) ? 35 : 0) + (item.site_name?.toLocaleLowerCase('es').includes(q) ? 20 : 0) +
+          (description.includes(q) ? 12 : 0) + (personalNotes.includes(q) ? 10 : 0) +
+          termScore + (item.is_pinned ? 5 : 0);
       };
       return score(b) - score(a);
     });
@@ -1250,7 +1260,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 <p className="text-[10px] text-gray-500 mt-1">El recurso quedará asociado a esta nota y podrás localizarlo desde su contexto.</p>
               </div>
 
-              {/* Cover image preview if present */
+              {/* Cover image preview if present */}
               {formCoverImage && (
                 <div className="flex items-center gap-3 bg-[#101018] border border-[#2a2a3c] p-2 rounded-xl">
                   <img
