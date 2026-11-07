@@ -88,6 +88,7 @@ import {
   AppReminder, 
   AppAttachment,
   AppArea,
+  AppLink,
   ObjectTypeDefinition
 } from '../lib/types';
 import { db, storage } from '../lib/insforge';
@@ -107,6 +108,7 @@ interface RichNoteEditorProps {
   projects: AppProject[];
   tasks: AppTask[];
   objects: AppObject[];
+  notes: AppNote[];
   areas?: AppArea[];
   customTypes?: ObjectTypeDefinition[];
   onBack: () => void;
@@ -122,6 +124,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   projects,
   tasks,
   objects,
+  notes,
   areas = [],
   customTypes = [],
   onBack,
@@ -141,6 +144,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     (note.properties?.knowledge_status as 'inbox' | 'processing' | 'linked') || 'inbox'
   );
   const [knowledgeSource, setKnowledgeSource] = useState(String(note.properties?.knowledge_source || ''));
+  const [noteLinks, setNoteLinks] = useState<{ outgoing: AppLink[]; incoming: AppLink[] }>({ outgoing: [], incoming: [] });
   const [isFavorite, setIsFavorite] = useState(!!note.is_favorite);
   const [isPinned, setIsPinned] = useState(!!note.is_pinned);
   const [isLocked, setIsLocked] = useState(!!note.is_locked);
@@ -386,6 +390,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       console.warn('Error fetching reminders for note:', e);
     }
   };
+
+  // Backlinks are derived from the existing universal links table; no schema migration required.
+  useEffect(() => {
+    let cancelled = false;
+    db.getLinksForEntity(note.id, 'note').then(result => {
+      if (!cancelled) setNoteLinks(result);
+    }).catch(error => console.warn('Error cargando conexiones de la nota:', error));
+    return () => { cancelled = true; };
+  }, [note.id]);
 
   // Perform Save with robust error handling and classification
   const isSavingRef = useRef(false);
@@ -722,12 +735,38 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         .run();
 
       // Record link in database
-      await db.createUniversalLink(note.id, 'note', item.id, item.type, relationLabel);
+      const createdLink = await db.createUniversalLink(note.id, 'note', item.id, item.type, relationLabel);
+      if (createdLink && item.type === 'note') {
+        setNoteLinks(previous => ({
+          ...previous,
+          outgoing: previous.outgoing.some(link => link.id === createdLink.id)
+            ? previous.outgoing
+            : [createdLink, ...previous.outgoing]
+        }));
+      }
 
       setSaveStatus('dirty');
     } catch (err) {
       console.error('Error insertando vínculo universal:', err);
     }
+  };
+
+  // Insert a lightweight Zettelkasten structure without overwriting existing writing.
+  const insertKnowledgeTemplate = () => {
+    if (!editor) return;
+    const templates: Record<'fleeting' | 'literature' | 'permanent' | 'structure', string> = {
+      fleeting: '<h2>Idea</h2><p></p><h2>Contexto</h2><p>¿Qué la provocó?</p><h2>Para procesar</h2><p></p>',
+      literature: '<h2>Referencia</h2><p>Autor, obra, fecha y ubicación:</p><h2>Idea de la fuente</h2><p></p><h2>Cita o extracto</h2><blockquote><p></p></blockquote><h2>Mi interpretación</h2><p></p><h2>Conexiones</h2><p></p>',
+      permanent: '<h2>Idea principal</h2><p>Expresa una sola idea con tus propias palabras.</p><h2>Explicación</h2><p></p><h2>Ejemplo o evidencia</h2><p></p><h2>Conexiones</h2><p></p>',
+      structure: '<h2>Propósito de este índice</h2><p></p><h2>Ideas relacionadas</h2><ul><li><p></p></li></ul><h2>Preguntas abiertas</h2><p></p>'
+    };
+    const template = templates[knowledgeType];
+    if (editor.getText().trim().length === 0) {
+      editor.commands.setContent(template);
+    } else {
+      editor.chain().focus().insertContent(template).run();
+    }
+    setSaveStatus('dirty');
   };
 
   // Insert Table
@@ -1625,6 +1664,47 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               <EditorContent editor={editor} className="outline-none" />
             </div>
 
+            {/* Backlinks and outgoing note references */}
+            <section className="mb-4 rounded-2xl border border-[#2b2b3e] bg-[#14141f] p-3 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold text-white">Conexiones de esta nota</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Los backlinks muestran qué notas apuntan aquí.</p>
+                </div>
+                <span className="text-[10px] text-cyan-300 font-mono">{noteLinks.incoming.length + noteLinks.outgoing.length} vínculos</span>
+              </div>
+              {(noteLinks.incoming.length === 0 && noteLinks.outgoing.length === 0) ? (
+                <p className="text-xs text-gray-500">Esta nota todavía no tiene conexiones con otras notas.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <h4 className="text-[10px] uppercase tracking-wider text-gray-500">Enlazan hacia aquí · Backlinks</h4>
+                    {noteLinks.incoming.map(link => {
+                      const linkedNote = notes.find(item => item.id === link.from_id);
+                      return (
+                        <button key={link.id} type="button" onClick={() => onNavigateToEntity(link.from_id, 'note')} className="w-full text-left rounded-lg bg-[#1b1b29] border border-[#2b2b3e] px-2.5 py-2 text-xs text-purple-200 hover:border-purple-500/50 transition truncate">
+                          {linkedNote?.title || 'Nota vinculada'}
+                        </button>
+                      );
+                    })}
+                    {noteLinks.incoming.length === 0 && <p className="text-[11px] text-gray-600">Ninguna nota enlaza aquí todavía.</p>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-[10px] uppercase tracking-wider text-gray-500">Esta nota enlaza a</h4>
+                    {noteLinks.outgoing.map(link => {
+                      const linkedNote = notes.find(item => item.id === link.to_id);
+                      return (
+                        <button key={link.id} type="button" onClick={() => onNavigateToEntity(link.to_id, 'note')} className="w-full text-left rounded-lg bg-[#1b1b29] border border-[#2b2b3e] px-2.5 py-2 text-xs text-blue-200 hover:border-blue-500/50 transition truncate">
+                          {linkedNote?.title || 'Nota vinculada'}
+                        </button>
+                      );
+                    })}
+                    {noteLinks.outgoing.length === 0 && <p className="text-[11px] text-gray-600">Esta nota no enlaza a otras notas.</p>}
+                  </div>
+                </div>
+              )}
+            </section>
+
             {/* PARA + Zettelkasten metadata: organizational context and knowledge lifecycle */}
             <section className="mb-4 rounded-2xl border border-[#2b2b3e] bg-[#14141f] p-3 sm:p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -1677,6 +1757,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                     <option value="linked">Procesada y conectada</option>
                   </select>
                 </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-gray-500">Plantilla para el tipo de nota seleccionado: <span className="text-cyan-300">{knowledgeType}</span></p>
+                <button type="button" onClick={insertKnowledgeTemplate} className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20 transition">Insertar estructura</button>
               </div>
 
               <label className="block space-y-1">
@@ -2120,7 +2205,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         onClose={() => setIsUniversalLinkModalOpen(false)}
         initialQuery={linkInitialQuery}
         onSelect={handleUniversalLinkSelect}
-        notes={[]}
+        notes={notes}
         tasks={tasks}
         projects={projects}
         objects={objects}
