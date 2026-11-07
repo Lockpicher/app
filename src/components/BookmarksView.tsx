@@ -264,9 +264,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     if (formResourceType === 'other') {
       try {
         const host = new URL(trimmed).hostname.toLowerCase();
-        if (/youtube|youtu\\.be|vimeo|tiktok/.test(host)) setFormResourceType('video');
+        if (/youtube|youtu\.be|vimeo|tiktok/.test(host)) setFormResourceType('video');
         else if (/github|gitlab|bitbucket/.test(host)) setFormResourceType('repository');
-        else if (/docs\\.|developer\\.|readthedocs|devdocs/.test(host)) setFormResourceType('documentation');
+        else if (/docs\.|developer\.|readthedocs|devdocs/.test(host)) setFormResourceType('documentation');
         else if (/coursera|udemy|edx|platzi/.test(host)) setFormResourceType('course');
         else if (/producthunt|alternativeto/.test(host)) setFormResourceType('tool');
         else setFormResourceType('article');
@@ -483,9 +483,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const allTags = useMemo(() => {
     const set = new Set<string>();
     bookmarks.forEach(bm => {
-      if (bm.tags) {
-        bm.tags.forEach(t => set.add(t));
-      }
+      getVisibleTags(bm.tags).forEach(tag => set.add(tag));
     });
     return Array.from(set).sort();
   }, [bookmarks]);
