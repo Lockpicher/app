@@ -28,11 +28,12 @@ import {
   ArrowUpDown,
   MoreVertical
 } from 'lucide-react';
-import { AppBookmark, AppBookmarkCollection } from '../lib/types';
+import { AppBookmark, AppBookmarkCollection, AppNote } from '../lib/types';
 import { db } from '../lib/insforge';
 
 interface BookmarksViewProps {
   bookmarks: AppBookmark[];
+  notes: AppNote[];
   openCreateOnMount?: boolean;
   quickCreateUrl?: string;
   onQuickCreateConsumed?: () => void;
@@ -127,6 +128,7 @@ const PRESET_ICONS = [
 
 export const BookmarksView: React.FC<BookmarksViewProps> = ({
   bookmarks,
+  notes,
   collections,
   onBookmarkCreated,
   onBookmarkUpdated,
@@ -166,6 +168,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const [formIsPinned, setFormIsPinned] = useState(false);
   const [formResourceType, setFormResourceType] = useState<string>('other');
   const [formResourceStatus, setFormResourceStatus] = useState<string>('unread');
+  const [formEntityId, setFormEntityId] = useState<string>('');
   const [activeResourceType, setActiveResourceType] = useState('all');
   const [activeResourceStatus, setActiveResourceStatus] = useState('all');
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
@@ -207,6 +210,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     setFormIsPinned(false);
     setFormResourceType('other');
     setFormResourceStatus('unread');
+    setFormEntityId('');
     setIsBookmarkModalOpen(true);
   };
 
@@ -220,12 +224,13 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     setFormFavicon(bm.favicon_url || '');
     setFormSiteName(bm.site_name || '');
     setFormCollectionId(bm.collection_id || '');
-    setFormTags(bm.tags ? bm.tags.join(', ') : '');
+    setFormTags(getVisibleTags(bm.tags).join(', '));
     setFormNotes(bm.notes || '');
     setFormIsFavorite(Boolean(bm.is_favorite));
     setFormIsPinned(Boolean(bm.is_pinned));
     setFormResourceType(getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other'));
     setFormResourceStatus(getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread'));
+    setFormEntityId(bm.entity_type === 'note' ? bm.entity_id || '' : '');
     setIsBookmarkModalOpen(true);
   };
 
@@ -349,7 +354,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
         tags: tagsArray,
         is_favorite: formIsFavorite,
         is_pinned: formIsPinned,
-        notes: formNotes.trim() || undefined
+        notes: formNotes.trim() || undefined,
+        entity_id: formEntityId || undefined,
+        entity_type: formEntityId ? 'note' : undefined
       };
 
       if (editingBookmark) {
@@ -500,7 +507,8 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
       if (activeResourceType !== 'all' && getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other') !== activeResourceType) return false;
       if (activeResourceStatus !== 'all' && getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread') !== activeResourceStatus) return false;
       if (queryTerms.length) {
-        const corpus = [bm.title, bm.url, bm.description, bm.site_name, bm.notes, ...getVisibleTags(bm.tags)].filter(Boolean).join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const linkedNote = bm.entity_type === 'note' ? notes.find(note => note.id === bm.entity_id)?.title : '';
+        const corpus = [bm.title, bm.url, bm.description, bm.site_name, bm.notes, linkedNote, ...getVisibleTags(bm.tags)].filter(Boolean).join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!queryTerms.some(term => corpus.includes(term))) return false;
       }
       return true;
@@ -514,7 +522,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
       };
       return score(b) - score(a);
     });
-  }, [bookmarks, activeTab, selectedTag, searchQuery, activeResourceType, activeResourceStatus]);
+  }, [bookmarks, notes, activeTab, selectedTag, searchQuery, activeResourceType, activeResourceStatus]);
 
   // Counts
   const counts = useMemo(() => {
@@ -935,6 +943,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                       <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-[#20202e] text-gray-400 border border-[#2a2a3c]">{RESOURCE_STATUSES.find(status => status.value === getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread'))?.label || 'Pendiente'}</span>
                     </div>
 
+                    {bm.entity_type === 'note' && bm.entity_id && notes.find(note => note.id === bm.entity_id) && (
+                      <div className="px-3 pt-2 text-[10px] text-violet-300 truncate">Nota vinculada: {notes.find(note => note.id === bm.entity_id)?.title}</div>
+                    )}
                     {/* Tags & Action Bar */}
                     <div className="pt-2 border-t border-[#1f1f2e] space-y-2">
                       {getVisibleTags(bm.tags).length > 0 && (
@@ -1230,7 +1241,16 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 </div>
               </div>
 
-              {/* Cover image preview if present */}
+              <div>
+                <label className="block text-gray-400 mb-1 font-semibold">Vincular con una nota</label>
+                <select value={formEntityId} onChange={e => setFormEntityId(e.target.value)} className="w-full bg-[#101018] border border-[#2a2a3c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                  <option value="">Sin nota vinculada</option>
+                  {notes.map(note => <option key={note.id} value={note.id}>{note.title || 'Nota sin título'}</option>)}
+                </select>
+                <p className="text-[10px] text-gray-500 mt-1">El recurso quedará asociado a esta nota y podrás localizarlo desde su contexto.</p>
+              </div>
+
+              {/* Cover image preview if present */
               {formCoverImage && (
                 <div className="flex items-center gap-3 bg-[#101018] border border-[#2a2a3c] p-2 rounded-xl">
                   <img
