@@ -72,12 +72,12 @@ const normalizeBookmarkUrl = (value: string) => {
     const url = new URL(value);
     url.hash = '';
     ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'].forEach(key => url.searchParams.delete(key));
-    url.hostname = url.hostname.replace(/^www\\./, '').toLowerCase();
-    return url.toString().replace(/\\/$/, '');
-  } catch { return value.trim().replace(/\\/$/, '').toLowerCase(); }
+    url.hostname = url.hostname.replace(/^www\./, '').toLowerCase();
+    return url.toString().replace(/\/$/, '');
+  } catch { return value.trim().replace(/\/$/, '').toLowerCase(); }
 };
 const expandResourceQuery = (query: string) => {
-  const normalized = query.toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  const normalized = query.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const groups: Record<string, string[]> = {
     r2: ['cloudflare', 'storage', 'almacenamiento', 'bucket', 'archivos'],
     almacenamiento: ['storage', 'r2', 's3', 'cloudflare', 'archivos', 'bucket'],
@@ -89,7 +89,7 @@ const expandResourceQuery = (query: string) => {
     ia: ['inteligencia artificial', 'ai', 'modelo', 'llm', 'gemini'],
     diseno: ['design', 'ux', 'ui', 'interfaz']
   };
-  const terms = new Set([normalized, ...normalized.split(/\\s+/).filter(term => term.length > 2)]);
+  const terms = new Set([normalized, ...normalized.split(/\s+/).filter(term => term.length > 2)]);
   Object.entries(groups).forEach(([key, values]) => {
     if (normalized.includes(key) || values.some(value => normalized.includes(value))) {
       terms.add(key);
@@ -487,7 +487,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
       if (activeResourceType !== 'all' && getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other') !== activeResourceType) return false;
       if (activeResourceStatus !== 'all' && getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread') !== activeResourceStatus) return false;
       if (queryTerms.length) {
-        const corpus = [bm.title, bm.url, bm.description, bm.site_name, bm.notes, ...getVisibleTags(bm.tags)].filter(Boolean).join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+        const corpus = [bm.title, bm.url, bm.description, bm.site_name, bm.notes, ...getVisibleTags(bm.tags)].filter(Boolean).join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!queryTerms.some(term => corpus.includes(term))) return false;
       }
       return true;
@@ -620,6 +620,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
               <List className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+
+        <div className="flex sm:hidden items-center gap-2 -mt-1">
+          <select value={activeResourceType} onChange={e => setActiveResourceType(e.target.value)} aria-label="Filtrar por tipo de recurso" className="min-w-0 flex-1 bg-[#161622] border border-[#272738] rounded-lg px-2 py-2 text-[11px] text-gray-300">
+            <option value="all">Todos los tipos</option>
+            {RESOURCE_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+          </select>
+          <select value={activeResourceStatus} onChange={e => setActiveResourceStatus(e.target.value)} aria-label="Filtrar por estado" className="min-w-0 flex-1 bg-[#161622] border border-[#272738] rounded-lg px-2 py-2 text-[11px] text-gray-300">
+            <option value="all">Todos los estados</option>
+            {RESOURCE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
+          </select>
         </div>
 
         {/* Cuadernos / Collections Tabs Slider */}
@@ -904,6 +915,11 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                           {bm.description}
                         </p>
                       )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1 px-3 pt-2">
+                      <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-cyan-950/50 text-cyan-300 border border-cyan-800/30">{RESOURCE_TYPES.find(type => type.value === getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other'))?.label || 'Otro'}</span>
+                      <span className="px-1.5 py-0.5 rounded-md text-[9px] bg-[#20202e] text-gray-400 border border-[#2a2a3c]">{RESOURCE_STATUSES.find(status => status.value === getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread'))?.label || 'Pendiente'}</span>
                     </div>
 
                     {/* Tags & Action Bar */}
