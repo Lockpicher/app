@@ -34,6 +34,7 @@ import { db } from '../lib/insforge';
 interface BookmarksViewProps {
   bookmarks: AppBookmark[];
   openCreateOnMount?: boolean;
+  quickCreateUrl?: string;
   onQuickCreateConsumed?: () => void;
   collections: AppBookmarkCollection[];
   onBookmarkCreated: (bookmark: AppBookmark) => void;
@@ -89,7 +90,8 @@ const expandResourceQuery = (query: string) => {
     ia: ['inteligencia artificial', 'ai', 'modelo', 'llm', 'gemini'],
     diseno: ['design', 'ux', 'ui', 'interfaz']
   };
-  const terms = new Set([normalized, ...normalized.split(/\s+/).filter(term => term.length > 2)]);
+  const stopWords = new Set(['para', 'como', 'este', 'esta', 'sobre', 'desde', 'donde', 'cuando', 'que', 'con', 'una', 'por']);
+  const terms = new Set([normalized, ...normalized.split(/\s+/).filter(term => term.length > 2 && !stopWords.has(term))]);
   Object.entries(groups).forEach(([key, values]) => {
     if (normalized.includes(key) || values.some(value => normalized.includes(value))) {
       terms.add(key);
@@ -133,6 +135,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onCollectionUpdated,
   onCollectionDeleted,
   openCreateOnMount = false,
+  quickCreateUrl = '',
   onQuickCreateConsumed
 }) => {
   // State
@@ -229,6 +232,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   useEffect(() => {
     if (openCreateOnMount) {
       handleOpenNewBookmarkModal();
+      if (quickCreateUrl) setFormUrl(quickCreateUrl);
       onQuickCreateConsumed?.();
     }
   }, [openCreateOnMount]);
@@ -257,6 +261,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const handleUrlBlur = async () => {
     const trimmed = formUrl.trim();
     if (!trimmed || !trimmed.startsWith('http')) return;
+    if (formResourceType === 'other') {
+      try {
+        const host = new URL(trimmed).hostname.toLowerCase();
+        if (/youtube|youtu\\.be|vimeo|tiktok/.test(host)) setFormResourceType('video');
+        else if (/github|gitlab|bitbucket/.test(host)) setFormResourceType('repository');
+        else if (/docs\\.|developer\\.|readthedocs|devdocs/.test(host)) setFormResourceType('documentation');
+        else if (/coursera|udemy|edx|platzi/.test(host)) setFormResourceType('course');
+        else if (/producthunt|alternativeto/.test(host)) setFormResourceType('tool');
+        else setFormResourceType('article');
+      } catch {}
+    }
     if (formTitle && !editingBookmark) return; // Ya tiene título
 
     try {
