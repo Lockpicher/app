@@ -3,6 +3,7 @@ import { useDebounce } from '../lib/useDebounce';
 import { Search, FileText, CheckSquare, FolderKanban, Boxes, ArrowRight, Book, HardDrive, Layers, User, Palette, Atom, Plane, Sparkles, MapPin } from 'lucide-react';
 import { AppNote, AppTask, AppProject, AppObject, AppNotebook, AppAttachment, AppCanvas, DEFAULT_OBJECT_TYPES } from '../lib/types';
 import { db } from '../lib/insforge';
+import { searchKnowledgeBase } from '../lib/aiKnowledgeService';
 
 interface QuickSwitcherProps {
   isOpen: boolean;
@@ -32,10 +33,12 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 150);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [searchMode, setSearchMode] = useState<'exact' | 'contextual'>('exact');
 
   useEffect(() => {
     setQuery('');
     setSelectedIndex(0);
+    setSearchMode('exact');
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -58,13 +61,18 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
     ...attachments.map(a => ({ id: a.id, title: a.display_name || a.file_name, type: 'file' as const, subtitle: `Archivo R2 • ${a.mime_type || 'archivo'}` }))
   ], [notebooks, notes, canvases, projects, tasks, objects, attachments]);
 
+  const contextualMatches = useMemo(() => searchKnowledgeBase(debouncedQuery, { notes, tasks, objects, projects }, 10), [debouncedQuery, notes, tasks, objects, projects]);
+  const contextualSnippets = useMemo(() => Object.fromEntries(contextualMatches.map(match => [match.id, match.contentSnippet])), [contextualMatches]);
+
   const filtered = useMemo(() => {
     const q = debouncedQuery.toLowerCase().trim();
     if (!q) return allItems.slice(0, 10);
-    return allItems.filter(item => 
-      item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [allItems, debouncedQuery]);
+    if (searchMode === 'contextual') {
+      return contextualMatches.map(match => allItems.find(item => item.id === match.id))
+        .filter((item): item is (typeof allItems)[number] => Boolean(item));
+    }
+    return allItems.filter(item => item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)).slice(0, 10);
+  }, [allItems, debouncedQuery, searchMode, contextualMatches]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -128,16 +136,18 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
             placeholder="Buscar notas, tareas, proyectos y objetos... (Enter para abrir)"
             className="w-full bg-transparent text-white placeholder-gray-500 text-sm outline-none"
           />
-          <kbd className="text-[10px] bg-[#121217] px-2 py-0.5 rounded border border-[#343442] text-gray-400">
-            ESC
-          </kbd>
+          <div className="flex items-center gap-1 shrink-0">
+            <button type="button" onClick={() => setSearchMode('exact')} className={`text-[10px] px-2 py-1 rounded-md border transition ${searchMode === 'exact' ? 'bg-blue-950/60 border-blue-700/50 text-blue-200' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>Exacta</button>
+            <button type="button" onClick={() => setSearchMode('contextual')} className={`text-[10px] px-2 py-1 rounded-md border transition ${searchMode === 'contextual' ? 'bg-purple-950/60 border-purple-700/50 text-purple-200' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>Contextual</button>
+            <kbd className="text-[10px] bg-[#121217] px-2 py-0.5 rounded border border-[#343442] text-gray-400">ESC</kbd>
+          </div>
         </div>
 
         {/* Results List */}
         <div className="max-h-80 overflow-y-auto p-2 divide-y divide-[#232332]">
           {filtered.length === 0 ? (
             <div className="py-6 text-center text-xs text-gray-400">
-              No se encontraron coincidencias para "{query}".
+              {searchMode === 'contextual' ? 'No se encontraron resultados relacionados.' : `No se encontraron coincidencias para "${query}".`}
             </div>
           ) : (
             filtered.map((item, idx) => (
@@ -160,6 +170,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
                   <div>
                     <div className="text-xs font-semibold leading-tight">{item.title}</div>
                     <div className="text-[10px] text-gray-400 capitalize">{item.subtitle}</div>
+                    {searchMode === 'contextual' && contextualSnippets[item.id] && <div className="text-[10px] text-gray-500 mt-1 max-w-[420px] line-clamp-2">{contextualSnippets[item.id]}</div>}
                   </div>
                 </div>
 
@@ -229,7 +240,7 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
 
         {/* Keyboard Footer */}
         <div className="px-4 py-2 bg-[#121218] border-t border-[#232332] flex items-center justify-between text-[11px] text-gray-400">
-          <span>Navega con ↑ ↓</span>
+          <span>{searchMode === 'contextual' ? 'Búsqueda local por conceptos y contexto' : 'Navega con ↑ ↓'}</span>
           <span>Presiona Enter para navegar</span>
         </div>
       </div>
