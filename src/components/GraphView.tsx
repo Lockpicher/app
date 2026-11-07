@@ -29,6 +29,8 @@ interface Node {
   y: number;
   vx: number;
   vy: number;
+  knowledgeType?: string;
+  paraCategory?: string;
 }
 
 interface Edge {
@@ -52,6 +54,9 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [showProjects, setShowProjects] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
   const [showObjects, setShowObjects] = useState(true);
+  const [knowledgeTypeFilter, setKnowledgeTypeFilter] = useState('all');
+  const [paraFilter, setParaFilter] = useState('all');
+  const [showOrphansOnly, setShowOrphansOnly] = useState(false);
 
   // Pan & Zoom
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -88,10 +93,16 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
     if (showNotes) {
       notes.forEach(n => {
+        const knowledgeType = String(n.properties?.knowledge_type || 'unclassified');
+        const paraCategory = String(n.para_category || n.properties?.para_category || 'inbox');
+        if (knowledgeTypeFilter !== 'all' && knowledgeType !== knowledgeTypeFilter) return;
+        if (paraFilter !== 'all' && paraCategory !== paraFilter) return;
         rawNodes.push({
           id: n.id,
           title: n.title,
           type: 'note',
+          knowledgeType,
+          paraCategory,
           color: '#a855f7',
           radius: 10,
           x: (Math.random() - 0.5) * width,
@@ -167,9 +178,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
       }
     });
 
-    nodesRef.current = rawNodes;
-    edgesRef.current = rawEdges;
-  }, [notes, projects, tasks, objects, links, showNotes, showProjects, showTasks, showObjects]);
+    const visibleNodes = showOrphansOnly
+      ? rawNodes.filter(node => !rawEdges.some(edge => edge.source === node.id || edge.target === node.id))
+      : rawNodes;
+    const visibleIds = new Set(visibleNodes.map(node => node.id));
+    nodesRef.current = visibleNodes;
+    edgesRef.current = showOrphansOnly ? [] : rawEdges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+  }, [notes, projects, tasks, objects, links, showNotes, showProjects, showTasks, showObjects, knowledgeTypeFilter, paraFilter, showOrphansOnly]);
 
   // Simulation Loop
   useEffect(() => {
@@ -440,6 +455,23 @@ export const GraphView: React.FC<GraphViewProps> = ({
             Objetos
           </button>
         </div>
+        {showNotes && (
+          <div className="flex flex-wrap items-center gap-2 w-full border-t border-[#2e2e40] pt-2">
+            <label className="text-[10px] text-gray-400 flex items-center gap-1.5">Tipo
+              <select value={knowledgeTypeFilter} onChange={e => setKnowledgeTypeFilter(e.target.value)} className="bg-[#12121b] border border-[#343442] rounded-md px-2 py-1 text-[11px] text-gray-200">
+                <option value="all">Todos</option><option value="fleeting">Fugaces</option><option value="literature">Literatura</option><option value="permanent">Permanentes</option><option value="structure">Estructurales</option><option value="unclassified">Sin clasificar</option>
+              </select>
+            </label>
+            <label className="text-[10px] text-gray-400 flex items-center gap-1.5">PARA
+              <select value={paraFilter} onChange={e => setParaFilter(e.target.value)} className="bg-[#12121b] border border-[#343442] rounded-md px-2 py-1 text-[11px] text-gray-200">
+                <option value="all">Todas</option><option value="inbox">Inbox</option><option value="project">Proyectos</option><option value="area">Áreas</option><option value="resource">Recursos</option><option value="archive">Archivo</option>
+              </select>
+            </label>
+          </div>
+        )}
+        <button type="button" onClick={() => setShowOrphansOnly(value => !value)} className={`text-[11px] px-2.5 py-1.5 rounded-lg border transition ${showOrphansOnly ? 'bg-rose-950/50 text-rose-200 border-rose-700/50' : 'bg-[#12121b] text-gray-400 border-[#343442]'}`}>
+          {showOrphansOnly ? 'Mostrar todas las conexiones' : 'Solo nodos aislados'}
+        </button>
       </div>
 
       {/* Zoom / Reset Controls */}
@@ -485,6 +517,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         <div className="absolute bottom-6 left-6 z-10 bg-[#1c1c28] border border-purple-500/40 p-3 rounded-lg shadow-2xl text-xs space-y-1">
           <div className="font-semibold text-white">{hoveredNode.title}</div>
           <div className="text-[10px] text-gray-400 uppercase font-mono">Tipo: {hoveredNode.type}</div>
+          {hoveredNode.type === 'note' && <div className="text-[10px] text-gray-400">Zettelkasten: {hoveredNode.knowledgeType || 'Sin clasificar'} · PARA: {hoveredNode.paraCategory || 'Inbox'}</div>}
           <div className="text-[10px] text-purple-300 font-medium">Haz clic para abrir</div>
         </div>
       )}
