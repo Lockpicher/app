@@ -136,6 +136,7 @@ export function App() {
   const [canvases, setCanvases] = useState<AppCanvas[]>([]);
   const [bookmarks, setBookmarks] = useState<AppBookmark[]>([]);
   const [bookmarkCollections, setBookmarkCollections] = useState<AppBookmarkCollection[]>([]);
+  const [bookmarkQuickCreate, setBookmarkQuickCreate] = useState(false);
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
@@ -1122,7 +1123,13 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas' | 'bookmark') => {
+    if (type === 'bookmark') {
+      setIsEditingNote(false);
+      setBookmarkQuickCreate(true);
+      setCurrentView('bookmarks');
+      return;
+    }
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
     } else if (type === 'voice') {
@@ -1919,6 +1926,8 @@ export function App() {
             {currentView === 'bookmarks' && (
               <BookmarksView
                 bookmarks={bookmarks}
+                openCreateOnMount={bookmarkQuickCreate}
+                onQuickCreateConsumed={() => setBookmarkQuickCreate(false)}
                 collections={bookmarkCollections}
                 onBookmarkCreated={(bm) => setBookmarks(prev => [bm, ...prev])}
                 onBookmarkUpdated={(bm) => setBookmarks(prev => prev.map(b => b.id === bm.id ? bm : b))}
