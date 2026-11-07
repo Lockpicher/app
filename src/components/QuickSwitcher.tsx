@@ -41,8 +41,6 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
     setSearchMode('exact');
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const allItems = useMemo(() => [
     ...notebooks.map(nb => ({ id: nb.id, title: nb.name, type: 'notebook' as const, subtitle: 'Cuaderno de notas' })),
     ...notes.map(n => ({ id: n.id, title: n.title, type: 'note' as const, subtitle: `Nota • ${n.note_type || 'texto'}` })),
@@ -111,6 +109,8 @@ export const QuickSwitcher: React.FC<QuickSwitcherProps> = ({
       default: return <Search className="w-4 h-4 text-gray-400" />;
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div 
