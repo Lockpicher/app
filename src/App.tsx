@@ -1934,6 +1934,7 @@ export function App() {
             {currentView === 'bookmarks' && (
               <BookmarksView
                 bookmarks={bookmarks}
+                notes={notes}
                 openCreateOnMount={bookmarkQuickCreate}
                 quickCreateUrl={bookmarkQuickCreateUrl}
                 onQuickCreateConsumed={() => { setBookmarkQuickCreate(false); setBookmarkQuickCreateUrl(''); }}
