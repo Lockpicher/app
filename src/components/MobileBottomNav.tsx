@@ -19,14 +19,15 @@ import {
   Paperclip,
   Mic,
   Image as ImageIcon,
-  Palette
+  Palette,
+  Bookmark
 } from 'lucide-react';
 import { ViewMode } from '../lib/types';
 
 interface MobileBottomNavProps {
   currentView: ViewMode;
   onSelectView: (view: ViewMode) => void;
-  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas') => void;
+  onOpenQuickCreate: (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas' | 'bookmark') => void;
   onOpenSearch: () => void;
   onOpenMore?: () => void;
   isMoreOpen?: boolean;
@@ -67,7 +68,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   // Creation options for Capacities-style "+" button (responsive grid)
   const createOptions: {
-    id: 'note' | 'task' | 'voice' | 'file' | 'media' | 'notebook' | 'page' | 'project' | 'person' | 'object' | 'canvas';
+    id: 'note' | 'task' | 'voice' | 'file' | 'media' | 'notebook' | 'page' | 'project' | 'person' | 'object' | 'canvas' | 'bookmark';
     label: string;
     icon: any;
     color: string;
@@ -79,6 +80,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       icon: Palette,
       color: 'text-pink-400',
       bg: 'bg-pink-950/40 border-pink-800/40 hover:border-pink-600/50'
+    },
+    {
+      id: 'bookmark',
+      label: 'Guardar enlace',
+      icon: Bookmark,
+      color: 'text-cyan-400',
+      bg: 'bg-cyan-950/40 border-cyan-800/40 hover:border-cyan-600/50'
     },
     {
       id: 'note',

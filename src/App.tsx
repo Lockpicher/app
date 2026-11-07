@@ -136,6 +136,8 @@ export function App() {
   const [canvases, setCanvases] = useState<AppCanvas[]>([]);
   const [bookmarks, setBookmarks] = useState<AppBookmark[]>([]);
   const [bookmarkCollections, setBookmarkCollections] = useState<AppBookmarkCollection[]>([]);
+  const [bookmarkQuickCreate, setBookmarkQuickCreate] = useState(false);
+  const [bookmarkQuickCreateUrl, setBookmarkQuickCreateUrl] = useState('');
 
   // Selection & Editor States
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
@@ -1122,7 +1124,20 @@ export function App() {
   };
 
   // Quick creation sheet dispatcher from mobile '+' button
-  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas') => {
+  const handleMobileQuickCreate = async (type: 'note' | 'task' | 'page' | 'project' | 'notebook' | 'person' | 'object' | 'file' | 'media' | 'voice' | 'canvas' | 'bookmark') => {
+    if (type === 'bookmark') {
+      let clipboardUrl = '';
+      try {
+        const clipboardText = (await navigator.clipboard.readText()).trim();
+        const candidate = new URL(clipboardText);
+        if (candidate.protocol === 'http:' || candidate.protocol === 'https:') clipboardUrl = candidate.toString();
+      } catch { /* El usuario puede pegar la URL manualmente si el portapapeles no está disponible. */ }
+      setIsEditingNote(false);
+      setBookmarkQuickCreateUrl(clipboardUrl);
+      setBookmarkQuickCreate(true);
+      setCurrentView('bookmarks');
+      return;
+    }
     if (type === 'note') {
       await handleNewNote({ note_type: 'text', title: 'Nueva Nota' });
     } else if (type === 'voice') {
@@ -1919,6 +1934,10 @@ export function App() {
             {currentView === 'bookmarks' && (
               <BookmarksView
                 bookmarks={bookmarks}
+                notes={notes}
+                openCreateOnMount={bookmarkQuickCreate}
+                quickCreateUrl={bookmarkQuickCreateUrl}
+                onQuickCreateConsumed={() => { setBookmarkQuickCreate(false); setBookmarkQuickCreateUrl(''); }}
                 collections={bookmarkCollections}
                 onBookmarkCreated={(bm) => setBookmarks(prev => [bm, ...prev])}
                 onBookmarkUpdated={(bm) => setBookmarks(prev => prev.map(b => b.id === bm.id ? bm : b))}
