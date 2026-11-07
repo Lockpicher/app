@@ -62,6 +62,10 @@ export interface AppNotebook {
 
 export type NoteType = 'text' | 'image' | 'audio' | 'tasks' | 'file' | 'link';
 
+// Zettelkasten knowledge layer. Stored inside app_notes.properties to avoid schema migrations.
+export type KnowledgeNoteType = 'fleeting' | 'literature' | 'permanent' | 'structure';
+export type KnowledgeNoteStatus = 'inbox' | 'processing' | 'linked';
+
 export interface AppNote {
   id: string;
   notebook_id?: string | null;
