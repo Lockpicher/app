@@ -133,6 +133,14 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   const [title, setTitle] = useState(note.title);
   const [notebookId, setNotebookId] = useState(note.notebook_id || '');
   const [projectId, setProjectId] = useState(note.project_id || '');
+  const [paraCategory, setParaCategory] = useState(note.para_category || 'inbox');
+  const [knowledgeType, setKnowledgeType] = useState<'fleeting' | 'literature' | 'permanent' | 'structure'>(
+    (note.properties?.knowledge_type as 'fleeting' | 'literature' | 'permanent' | 'structure') || 'fleeting'
+  );
+  const [knowledgeStatus, setKnowledgeStatus] = useState<'inbox' | 'processing' | 'linked'>(
+    (note.properties?.knowledge_status as 'inbox' | 'processing' | 'linked') || 'inbox'
+  );
+  const [knowledgeSource, setKnowledgeSource] = useState(String(note.properties?.knowledge_source || ''));
   const [isFavorite, setIsFavorite] = useState(!!note.is_favorite);
   const [isPinned, setIsPinned] = useState(!!note.is_pinned);
   const [isLocked, setIsLocked] = useState(!!note.is_locked);
@@ -442,6 +450,13 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         plain_text: plainText,
         notebook_id: notebookId || null,
         project_id: projectId || undefined,
+        para_category: paraCategory as AppNote['para_category'],
+        properties: {
+          ...(note.properties || {}),
+          knowledge_type: knowledgeType,
+          knowledge_status: knowledgeStatus,
+          knowledge_source: knowledgeSource.trim()
+        },
         is_favorite: isFavorite,
         is_pinned: isPinned,
         is_locked: isLocked,
@@ -491,7 +506,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       }
     }, delay);
     return () => clearTimeout(timer);
-  }, [saveStatus, title, notebookId, projectId, isFavorite, isPinned, isLocked, passwordInput, tagsInput, showPasswordBox]);
+  }, [saveStatus, title, notebookId, projectId, paraCategory, knowledgeType, knowledgeStatus, knowledgeSource, isFavorite, isPinned, isLocked, passwordInput, tagsInput, showPasswordBox]);
 
   // Close table dropdown menu when clicking outside
   useEffect(() => {
@@ -1609,6 +1624,76 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
             >
               <EditorContent editor={editor} className="outline-none" />
             </div>
+
+            {/* PARA + Zettelkasten metadata: organizational context and knowledge lifecycle */}
+            <section className="mb-4 rounded-2xl border border-[#2b2b3e] bg-[#14141f] p-3 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold text-white">Organización y conocimiento</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">PARA define dónde se utiliza; Zettelkasten define qué tipo de conocimiento contiene.</p>
+                </div>
+                <span className="text-[10px] uppercase tracking-wider text-cyan-300 border border-cyan-500/20 bg-cyan-500/10 rounded-full px-2 py-1">Zettelkasten</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <label className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500">Ubicación PARA</span>
+                  <select
+                    value={paraCategory}
+                    onChange={(e) => { setParaCategory(e.target.value as typeof paraCategory); setSaveStatus('dirty'); }}
+                    className="w-full rounded-lg border border-[#343449] bg-[#1a1a28] px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-blue-500"
+                  >
+                    <option value="inbox">Inbox · Por procesar</option>
+                    <option value="project">Proyecto</option>
+                    <option value="area">Área</option>
+                    <option value="resource">Recurso</option>
+                    <option value="archive">Archivo</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500">Tipo de nota</span>
+                  <select
+                    value={knowledgeType}
+                    onChange={(e) => { setKnowledgeType(e.target.value as typeof knowledgeType); setSaveStatus('dirty'); }}
+                    className="w-full rounded-lg border border-[#343449] bg-[#1a1a28] px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-cyan-500"
+                  >
+                    <option value="fleeting">Fugaz · Captura rápida</option>
+                    <option value="literature">Fuente · Lectura o referencia</option>
+                    <option value="permanent">Permanente · Idea propia</option>
+                    <option value="structure">Estructural · Índice de ideas</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500">Estado de procesamiento</span>
+                  <select
+                    value={knowledgeStatus}
+                    onChange={(e) => { setKnowledgeStatus(e.target.value as typeof knowledgeStatus); setSaveStatus('dirty'); }}
+                    className="w-full rounded-lg border border-[#343449] bg-[#1a1a28] px-2.5 py-2 text-xs text-gray-200 outline-none focus:border-cyan-500"
+                  >
+                    <option value="inbox">Pendiente</option>
+                    <option value="processing">En elaboración</option>
+                    <option value="linked">Procesada y conectada</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-gray-500">Fuente / referencia de origen</span>
+                <input
+                  type="text"
+                  value={knowledgeSource}
+                  onChange={(e) => { setKnowledgeSource(e.target.value); setSaveStatus('dirty'); }}
+                  placeholder="Libro, autor, URL, conversación o documento..."
+                  className="w-full rounded-lg border border-[#343449] bg-[#1a1a28] px-3 py-2 text-xs text-gray-200 placeholder-gray-500 outline-none focus:border-cyan-500"
+                />
+              </label>
+
+              <p className="text-[11px] leading-relaxed text-gray-500">
+                Para conectar ideas, escribe <code className="text-cyan-300">[[</code> en el editor y selecciona otra nota. Las conexiones alimentan los enlaces y el grafo existentes. Una nota permanente debe expresar una idea central con palabras propias.
+              </p>
+            </section>
 
             {/* Editor Bottom Actions Row: Left "+ Agregar elemento de tarea" | Right "Añadir etiquetas..." */}
             <div className="pt-3 pb-32 border-t border-[#20202e] flex flex-col gap-3">
