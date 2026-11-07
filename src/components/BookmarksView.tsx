@@ -33,6 +33,8 @@ import { db } from '../lib/insforge';
 
 interface BookmarksViewProps {
   bookmarks: AppBookmark[];
+  openCreateOnMount?: boolean;
+  onQuickCreateConsumed?: () => void;
   collections: AppBookmarkCollection[];
   onBookmarkCreated: (bookmark: AppBookmark) => void;
   onBookmarkUpdated: (bookmark: AppBookmark) => void;
@@ -41,6 +43,61 @@ interface BookmarksViewProps {
   onCollectionUpdated: (collection: AppBookmarkCollection) => void;
   onCollectionDeleted: (id: string) => void;
 }
+
+const RESOURCE_TYPES = [
+  { value: 'article', label: 'Artículo' },
+  { value: 'video', label: 'Vídeo' },
+  { value: 'tool', label: 'Herramienta' },
+  { value: 'documentation', label: 'Documentación' },
+  { value: 'repository', label: 'Repositorio' },
+  { value: 'course', label: 'Curso' },
+  { value: 'product', label: 'Producto' },
+  { value: 'other', label: 'Otro' }
+] as const;
+const RESOURCE_STATUSES = [
+  { value: 'unread', label: 'Pendiente' },
+  { value: 'reading', label: 'En revisión' },
+  { value: 'read', label: 'Leído' },
+  { value: 'reference', label: 'Referencia' },
+  { value: 'archived', label: 'Archivado' }
+] as const;
+const TYPE_TAG_PREFIX = '__resource_type:';
+const STATUS_TAG_PREFIX = '__resource_status:';
+const getResourceMeta = (tags: string[] | undefined, prefix: string, fallback: string) =>
+  tags?.find(tag => tag.startsWith(prefix))?.slice(prefix.length) || fallback;
+const getVisibleTags = (tags: string[] | undefined) =>
+  (tags || []).filter(tag => !tag.startsWith(TYPE_TAG_PREFIX) && !tag.startsWith(STATUS_TAG_PREFIX));
+const normalizeBookmarkUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'].forEach(key => url.searchParams.delete(key));
+    url.hostname = url.hostname.replace(/^www\\./, '').toLowerCase();
+    return url.toString().replace(/\\/$/, '');
+  } catch { return value.trim().replace(/\\/$/, '').toLowerCase(); }
+};
+const expandResourceQuery = (query: string) => {
+  const normalized = query.toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  const groups: Record<string, string[]> = {
+    r2: ['cloudflare', 'storage', 'almacenamiento', 'bucket', 'archivos'],
+    almacenamiento: ['storage', 'r2', 's3', 'cloudflare', 'archivos', 'bucket'],
+    archivos: ['files', 'storage', 'almacenamiento', 'r2'],
+    repositorio: ['github', 'gitlab', 'codigo', 'source', 'repo'],
+    codigo: ['github', 'gitlab', 'repositorio', 'programacion'],
+    tutorial: ['guia', 'curso', 'video', 'aprendizaje'],
+    automatizacion: ['n8n', 'workflow', 'flujo', 'integracion'],
+    ia: ['inteligencia artificial', 'ai', 'modelo', 'llm', 'gemini'],
+    diseno: ['design', 'ux', 'ui', 'interfaz']
+  };
+  const terms = new Set([normalized, ...normalized.split(/\\s+/).filter(term => term.length > 2)]);
+  Object.entries(groups).forEach(([key, values]) => {
+    if (normalized.includes(key) || values.some(value => normalized.includes(value))) {
+      terms.add(key);
+      values.forEach(value => terms.add(value));
+    }
+  });
+  return Array.from(terms).filter(term => term.length > 2);
+};
 
 const PRESET_COLORS = [
   '#3b82f6', // Azul
@@ -74,7 +131,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onBookmarkDeleted,
   onCollectionCreated,
   onCollectionUpdated,
-  onCollectionDeleted
+  onCollectionDeleted,
+  openCreateOnMount = false,
+  onQuickCreateConsumed
 }) => {
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +161,10 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const [formNotes, setFormNotes] = useState('');
   const [formIsFavorite, setFormIsFavorite] = useState(false);
   const [formIsPinned, setFormIsPinned] = useState(false);
+  const [formResourceType, setFormResourceType] = useState<string>('other');
+  const [formResourceStatus, setFormResourceStatus] = useState<string>('unread');
+  const [activeResourceType, setActiveResourceType] = useState('all');
+  const [activeResourceStatus, setActiveResourceStatus] = useState('all');
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
   const [isSavingBookmark, setIsSavingBookmark] = useState(false);
 
@@ -139,6 +202,8 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     setFormNotes('');
     setFormIsFavorite(false);
     setFormIsPinned(false);
+    setFormResourceType('other');
+    setFormResourceStatus('unread');
     setIsBookmarkModalOpen(true);
   };
 
@@ -156,8 +221,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     setFormNotes(bm.notes || '');
     setFormIsFavorite(Boolean(bm.is_favorite));
     setFormIsPinned(Boolean(bm.is_pinned));
+    setFormResourceType(getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other'));
+    setFormResourceStatus(getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread'));
     setIsBookmarkModalOpen(true);
   };
+
+  useEffect(() => {
+    if (openCreateOnMount) {
+      handleOpenNewBookmarkModal();
+      onQuickCreateConsumed?.();
+    }
+  }, [openCreateOnMount]);
 
   // Open Collection Modal
   const handleOpenNewCollectionModal = () => {
@@ -233,12 +307,21 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
     }
 
     const title = formTitle.trim() || url;
-    const tagsArray = formTags
-      .split(',')
-      .map(t => t.trim().replace(/^#/, ''))
-      .filter(Boolean);
+    const tagsArray = [
+      ...formTags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean),
+      `${TYPE_TAG_PREFIX}${formResourceType}`,
+      `${STATUS_TAG_PREFIX}${formResourceStatus}`
+    ];
 
     try {
+      if (!editingBookmark) {
+        const duplicate = bookmarks.find(item => normalizeBookmarkUrl(item.url) === normalizeBookmarkUrl(url));
+        if (duplicate) {
+          handleOpenEditBookmarkModal(duplicate);
+          showToast('Este recurso ya existe. Abrí el registro guardado para actualizarlo.');
+          return;
+        }
+      }
       setIsSavingBookmark(true);
       const payload: Partial<AppBookmark> = {
         collection_id: formCollectionId || null,
@@ -394,35 +477,31 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
   // Filtering
   const filteredBookmarks = useMemo(() => {
+    const queryTerms = searchQuery.trim() ? expandResourceQuery(searchQuery) : [];
     return bookmarks.filter(bm => {
-      // Tab filter
       if (activeTab === 'favorites' && !bm.is_favorite) return false;
       if (activeTab === 'pinned' && !bm.is_pinned) return false;
       if (activeTab === 'unorganized' && bm.collection_id) return false;
-      if (activeTab !== 'all' && activeTab !== 'favorites' && activeTab !== 'pinned' && activeTab !== 'unorganized') {
-        if (bm.collection_id !== activeTab) return false;
+      if (activeTab !== 'all' && activeTab !== 'favorites' && activeTab !== 'pinned' && activeTab !== 'unorganized' && bm.collection_id !== activeTab) return false;
+      if (selectedTag && !getVisibleTags(bm.tags).includes(selectedTag)) return false;
+      if (activeResourceType !== 'all' && getResourceMeta(bm.tags, TYPE_TAG_PREFIX, 'other') !== activeResourceType) return false;
+      if (activeResourceStatus !== 'all' && getResourceMeta(bm.tags, STATUS_TAG_PREFIX, 'unread') !== activeResourceStatus) return false;
+      if (queryTerms.length) {
+        const corpus = [bm.title, bm.url, bm.description, bm.site_name, bm.notes, ...getVisibleTags(bm.tags)].filter(Boolean).join(' ').toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+        if (!queryTerms.some(term => corpus.includes(term))) return false;
       }
-
-      // Tag filter
-      if (selectedTag && (!bm.tags || !bm.tags.includes(selectedTag))) {
-        return false;
-      }
-
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const inTitle = bm.title.toLowerCase().includes(q);
-        const inUrl = bm.url.toLowerCase().includes(q);
-        const inDesc = bm.description?.toLowerCase().includes(q);
-        const inSite = bm.site_name?.toLowerCase().includes(q);
-        const inTags = bm.tags?.some(t => t.toLowerCase().includes(q));
-        const inNotes = bm.notes?.toLowerCase().includes(q);
-        return inTitle || inUrl || inDesc || inSite || inTags || inNotes;
-      }
-
       return true;
+    }).sort((a, b) => {
+      if (!searchQuery.trim()) return Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned));
+      const score = (item: AppBookmark) => {
+        const q = searchQuery.toLocaleLowerCase('es');
+        const title = item.title.toLocaleLowerCase('es');
+        const tags = getVisibleTags(item.tags).join(' ').toLocaleLowerCase('es');
+        return (title === q ? 100 : title.includes(q) ? 60 : 0) + (tags.includes(q) ? 35 : 0) + (item.site_name?.toLocaleLowerCase('es').includes(q) ? 20 : 0) + (item.description?.toLocaleLowerCase('es').includes(q) ? 12 : 0) + (item.notes?.toLocaleLowerCase('es').includes(q) ? 10 : 0) + (item.is_pinned ? 5 : 0);
+      };
+      return score(b) - score(a);
     });
-  }, [bookmarks, activeTab, selectedTag, searchQuery]);
+  }, [bookmarks, activeTab, selectedTag, searchQuery, activeResourceType, activeResourceStatus]);
 
   // Counts
   const counts = useMemo(() => {
@@ -496,7 +575,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título, dominio, descripción o etiqueta..."
+              placeholder="Busca por lo que recuerdas: tema, utilidad, contenido o dominio..."
               className="w-full bg-[#161622] border border-[#272738] rounded-xl pl-9 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition"
             />
             {searchQuery && (
@@ -507,6 +586,17 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2">
+            <select value={activeResourceType} onChange={e => setActiveResourceType(e.target.value)} aria-label="Filtrar por tipo de recurso" className="bg-[#161622] border border-[#272738] rounded-lg px-2 py-1.5 text-[11px] text-gray-300">
+              <option value="all">Todos los tipos</option>
+              {RESOURCE_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+            <select value={activeResourceStatus} onChange={e => setActiveResourceStatus(e.target.value)} aria-label="Filtrar por estado" className="bg-[#161622] border border-[#272738] rounded-lg px-2 py-1.5 text-[11px] text-gray-300">
+              <option value="all">Todos los estados</option>
+              {RESOURCE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
+            </select>
           </div>
 
           {/* View mode toggle */}
@@ -818,9 +908,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
                     {/* Tags & Action Bar */}
                     <div className="pt-2 border-t border-[#1f1f2e] space-y-2">
-                      {bm.tags && bm.tags.length > 0 && (
+                      {getVisibleTags(bm.tags).length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {bm.tags.slice(0, 3).map(t => (
+                          {getVisibleTags(bm.tags).slice(0, 3).map(t => (
                             <span
                               key={t}
                               onClick={(e) => {
@@ -832,9 +922,9 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                               #{t}
                             </span>
                           ))}
-                          {bm.tags.length > 3 && (
+                          {getVisibleTags(bm.tags).length > 3 && (
                             <span className="text-[9px] text-gray-500 font-mono">
-                              +{bm.tags.length - 3}
+                              +{getVisibleTags(bm.tags).length - 3}
                             </span>
                           )}
                         </div>
@@ -948,7 +1038,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
                       <td className="py-3 px-4 hidden lg:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {bm.tags?.slice(0, 2).map(t => (
+                          {getVisibleTags(bm.tags).slice(0, 2).map(t => (
                             <span key={t} className="px-1.5 py-0.2 rounded text-[10px] bg-[#1a1a27] text-gray-400 border border-[#2a2a3c]">
                               #{t}
                             </span>
@@ -1093,6 +1183,21 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                     placeholder="ia, tutorial, diseño"
                     className="w-full bg-[#101018] border border-[#2a2a3c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-400 mb-1 font-semibold">Tipo de recurso</label>
+                  <select value={formResourceType} onChange={e => setFormResourceType(e.target.value)} className="w-full bg-[#101018] border border-[#2a2a3c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                    {RESOURCE_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-gray-400 mb-1 font-semibold">Estado de lectura</label>
+                  <select value={formResourceStatus} onChange={e => setFormResourceStatus(e.target.value)} className="w-full bg-[#101018] border border-[#2a2a3c] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                    {RESOURCE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
+                  </select>
                 </div>
               </div>
 
