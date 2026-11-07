@@ -735,7 +735,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
         .run();
 
       // Record link in database
-      await db.createUniversalLink(note.id, 'note', item.id, item.type, relationLabel);
+      const createdLink = await db.createUniversalLink(note.id, 'note', item.id, item.type, relationLabel);
+      if (createdLink && item.type === 'note') {
+        setNoteLinks(previous => ({
+          ...previous,
+          outgoing: previous.outgoing.some(link => link.id === createdLink.id)
+            ? previous.outgoing
+            : [createdLink, ...previous.outgoing]
+        }));
+      }
 
       setSaveStatus('dirty');
     } catch (err) {
