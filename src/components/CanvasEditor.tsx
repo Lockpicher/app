@@ -28,7 +28,9 @@ import {
   Share2,
   Trash2,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Group,
+  Ungroup
 } from 'lucide-react';
 import { AppCanvas, AppProject, AppNotebook, AppArea, AppAttachment } from '../lib/types';
 import { useTheme } from '../lib/themeContext';
@@ -87,6 +89,10 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Grouping state
+  const [selectedCount, setSelectedCount] = useState<number>(0);
+  const [hasGroupSelected, setHasGroupSelected] = useState<boolean>(false);
 
   // Convert base64 dataURL to Blob for R2 upload
   const dataURLtoBlob = (dataURL: string): { blob: Blob; mime: string; ext: string } => {
@@ -241,6 +247,103 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     latestElementsRef.current = [...elements];
     latestAppStateRef.current = { ...appState };
     latestFilesRef.current = { ...files };
+
+    // Update selection count and group presence
+    const selectedIds = Object.keys(appState?.selectedElementIds || {}).filter(
+      id => appState.selectedElementIds[id]
+    );
+    setSelectedCount(selectedIds.length);
+
+    const hasGroup = selectedIds.some(id => {
+      const el = elements.find((e: any) => e.id === id);
+      return el && Array.isArray(el.groupIds) && el.groupIds.length > 0;
+    });
+    setHasGroupSelected(hasGroup);
+
+    scheduleAutoSave();
+  };
+
+  // Group selected elements
+  const handleGroupSelection = () => {
+    if (!excalidrawAPI) return;
+    const appState = excalidrawAPI.getAppState();
+    const elements = excalidrawAPI.getSceneElements();
+    const selectedIds = Object.keys(appState?.selectedElementIds || {}).filter(
+      id => appState.selectedElementIds[id]
+    );
+
+    if (selectedIds.length < 2) {
+      alert('Para agrupar, selecciona al menos 2 elementos en el lienzo (mantén presionada la tecla Shift o arrastra un recuadro de selección).');
+      return;
+    }
+
+    const newGroupId = `group_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const updatedElements = elements.map((el: any) => {
+      if (selectedIds.includes(el.id)) {
+        return {
+          ...el,
+          groupIds: [...(el.groupIds || []), newGroupId]
+        };
+      }
+      return el;
+    });
+
+    excalidrawAPI.updateScene({
+      elements: updatedElements,
+      appState: {
+        ...appState,
+        selectedGroupIds: { [newGroupId]: true }
+      }
+    });
+    setHasGroupSelected(true);
+    scheduleAutoSave();
+  };
+
+  // Ungroup selected elements
+  const handleUngroupSelection = () => {
+    if (!excalidrawAPI) return;
+    const appState = excalidrawAPI.getAppState();
+    const elements = excalidrawAPI.getSceneElements();
+    const selectedIds = Object.keys(appState?.selectedElementIds || {}).filter(
+      id => appState.selectedElementIds[id]
+    );
+
+    if (selectedIds.length === 0) {
+      alert('Selecciona un objeto agrupado para desagruparlo.');
+      return;
+    }
+
+    // Collect all groupIds of the selected elements
+    const groupIdsToRemove = new Set<string>();
+    elements.forEach((el: any) => {
+      if (selectedIds.includes(el.id) && Array.isArray(el.groupIds)) {
+        el.groupIds.forEach((gid: string) => groupIdsToRemove.add(gid));
+      }
+    });
+
+    if (groupIdsToRemove.size === 0) {
+      alert('Los objetos seleccionados no están agrupados.');
+      return;
+    }
+
+    const updatedElements = elements.map((el: any) => {
+      if (el.groupIds && el.groupIds.some((gid: string) => groupIdsToRemove.has(gid))) {
+        return {
+          ...el,
+          groupIds: el.groupIds.filter((gid: string) => !groupIdsToRemove.has(gid))
+        };
+      }
+      return el;
+    });
+
+    excalidrawAPI.updateScene({
+      elements: updatedElements,
+      appState: {
+        ...appState,
+        selectedGroupIds: {}
+      }
+    });
+    setHasGroupSelected(false);
     scheduleAutoSave();
   };
 
@@ -543,8 +646,42 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
           </div>
         </div>
 
-        {/* Right: Actions (R2 Images, Export, Import, Relations, Save) */}
+        {/* Right: Actions (Grouping, R2 Images, Export, Import, Relations, Save) */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Group / Ungroup Actions */}
+          <div className="flex items-center gap-1 bg-[#14141d] p-0.5 rounded-xl border border-[#272738]">
+            <button
+              type="button"
+              onClick={handleGroupSelection}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                selectedCount >= 2
+                  ? 'bg-purple-600 text-white shadow-sm hover:bg-purple-500 font-semibold'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f1f2e]'
+              }`}
+              title="Agrupar objetos seleccionados (Ctrl + G o Clic derecho)"
+            >
+              <Group className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Agrupar</span>
+              {selectedCount >= 2 && (
+                <span className="text-[10px] bg-purple-700 text-white px-1.5 py-0.2 rounded-full font-bold">
+                  {selectedCount}
+                </span>
+              )}
+            </button>
+
+            {hasGroupSelected && (
+              <button
+                type="button"
+                onClick={handleUngroupSelection}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-600/20 text-amber-300 border border-amber-500/40 hover:bg-amber-600/30 transition animate-in fade-in"
+                title="Desagrupar objetos (Ctrl + Shift + G o Clic derecho)"
+              >
+                <Ungroup className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Desagrupar</span>
+              </button>
+            )}
+          </div>
+
           {/* Relations (Project, Notebook, Area) */}
           <div className="relative">
             <button
@@ -823,6 +960,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
         <Excalidraw
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           theme={theme === 'dark' ? THEME.DARK : THEME.LIGHT}
+          langCode="es-ES"
           initialData={{
             elements: canvas.elements || [],
             appState: {
