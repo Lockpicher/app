@@ -27,6 +27,9 @@ import { HomeView } from './components/HomeView';
 import { NotebookModal } from './components/NotebookModal';
 
 import { TaskModal } from './components/TaskModal';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 
 
@@ -456,6 +459,62 @@ export function App() {
       reminderService.stopListening();
     };
   }, [reminders]);
+
+  // Native Android configuration (Capacitor)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      StatusBar.setStyle({ style: Style.Dark });
+      StatusBar.setBackgroundColor({ color: '#090d16' });
+    } catch {}
+
+    const backListener = CapacitorApp.addListener('backButton', () => {
+      if (selectedNoteId) {
+        setSelectedNoteId(null);
+        setIsEditingNote(false);
+        return;
+      }
+      if (selectedCanvasId) {
+        setSelectedCanvasId(null);
+        setIsEditingCanvas(false);
+        return;
+      }
+      if (isNotebookModalOpen) {
+        setIsNotebookModalOpen(false);
+        return;
+      }
+      if (isGlobalTaskModalOpen) {
+        setIsGlobalTaskModalOpen(false);
+        return;
+      }
+      if (isQuickSwitcherOpen) {
+        setIsQuickSwitcherOpen(false);
+        return;
+      }
+      if (isUploadModalOpen) {
+        setIsUploadModalOpen(false);
+        return;
+      }
+      if (currentView !== 'home' && currentView !== 'notebooks') {
+        setCurrentView('home');
+        return;
+      }
+      CapacitorApp.exitApp();
+    });
+
+    return () => {
+      backListener.then(l => l.remove());
+    };
+  }, [
+    selectedNoteId,
+    selectedCanvasId,
+    isNotebookModalOpen,
+    isGlobalTaskModalOpen,
+    isQuickSwitcherOpen,
+    isUploadModalOpen,
+    currentView
+  ]);
 
   // Global Ctrl+K / Cmd+K listener & 'N' shortcut for new note
   useEffect(() => {
