@@ -120,8 +120,18 @@ export function App() {
   }, [currentView]);
 
   // Core Data
-  const [notebooks, setNotebooks] = useState<AppNotebook[]>([]);
-  const [notes, setNotes] = useState<AppNote[]>([]);
+  const [notebooks, setNotebooks] = useState<AppNotebook[]>(() => {
+    try {
+      const c = localStorage.getItem('sc_cache_notebooks');
+      return c ? JSON.parse(c) : [];
+    } catch { return []; }
+  });
+  const [notes, setNotes] = useState<AppNote[]>(() => {
+    try {
+      const c = localStorage.getItem('sc_cache_notes');
+      return c ? JSON.parse(c) : [];
+    } catch { return []; }
+  });
   const [reminders, setReminders] = useState<AppReminder[]>([]);
   const [projects, setProjects] = useState<AppProject[]>([]);
   const [tasks, setTasks] = useState<AppTask[]>([]);
@@ -133,7 +143,12 @@ export function App() {
   const [areas, setAreas] = useState<AppArea[]>([]);
   const [habits, setHabits] = useState<AppHabit[]>([]);
   const [habitLogs, setHabitLogs] = useState<AppHabitLog[]>([]);
-  const [canvases, setCanvases] = useState<AppCanvas[]>([]);
+  const [canvases, setCanvases] = useState<AppCanvas[]>(() => {
+    try {
+      const c = localStorage.getItem('sc_cache_canvases');
+      return c ? JSON.parse(c) : [];
+    } catch { return []; }
+  });
   const [bookmarks, setBookmarks] = useState<AppBookmark[]>([]);
   const [bookmarkCollections, setBookmarkCollections] = useState<AppBookmarkCollection[]>([]);
   const [bookmarkQuickCreate, setBookmarkQuickCreate] = useState(false);
@@ -228,78 +243,73 @@ export function App() {
   // Load initial data from InsForge in progressive stages for instant startup
   const loadData = async () => {
     try {
-      setLoading(true);
+      // Si no hay datos en caché aún, mostrar estado de carga suave
+      if (notes.length === 0 && canvases.length === 0 && notebooks.length === 0) {
+        setLoading(true);
+      }
 
-      // Establece la cookie de sesión ANTES de cargar datos: los adjuntos
-      // se renderizan como <img loading="lazy" decoding="async" src="/api/r2/stream?..."> y fallarían con 401.
-      try { await r2Storage.syncSession(); } catch {}
+      // Sincronizar cookie de sesión de medios R2 en segundo plano (sin bloquear las consultas a la DB)
+      r2Storage.syncSession().catch(() => {});
 
-      // Phase 1: Critical data for first screen (Notebooks and Notes)
-      const [nbs, n] = await Promise.all([
-        db.getNotebooks(),
-        db.getNotes()
+      // Phase 1: Critical core data (Notebooks, Notes y Lienzos en paralelo)
+      const [nbs, n, cvs] = await Promise.all([
+        db.getNotebooks().catch(() => []),
+        db.getNotes().catch(() => []),
+        db.getCanvases().catch(() => [])
       ]);
 
-      // If no notebooks exist yet, create a default one
+      // Si aún no existen cuadernos, crear el primero
       let finalNbs = nbs;
-      if (nbs.length === 0) {
-        const defaultNb = await db.createNotebook({
-          name: 'Mi Primer Cuaderno',
-          description: 'Cuaderno principal para tus notas, ideas y proyectos',
-          cover_type: 'gallery',
-          cover_url: 'classic-minimal',
-          color: '#3b82f6',
-          is_default: true,
-          is_archived: false
-        });
-        if (defaultNb) finalNbs = [defaultNb];
+      if (nbs.length === 0 && n.length === 0 && notebooks.length === 0) {
+        try {
+          const defaultNb = await db.createNotebook({
+            name: 'Mi Primer Cuaderno',
+            description: 'Cuaderno principal para tus notas, ideas y proyectos',
+            cover_type: 'gallery',
+            cover_url: 'classic-minimal',
+            color: '#3b82f6',
+            is_default: true,
+            is_archived: false
+          });
+          if (defaultNb) finalNbs = [defaultNb];
+        } catch {}
       }
 
-      setNotebooks(finalNbs);
-      setNotes(n);
-      if (n.length > 0 && !selectedNoteId) {
-        setSelectedNoteId(n[0].id);
+      if (finalNbs.length > 0) {
+        setNotebooks(finalNbs);
+        try { localStorage.setItem('sc_cache_notebooks', JSON.stringify(finalNbs)); } catch {}
+      }
+      if (n.length > 0) {
+        setNotes(n);
+        try { localStorage.setItem('sc_cache_notes', JSON.stringify(n)); } catch {}
+        if (!selectedNoteId) {
+          setSelectedNoteId(n[0].id);
+        }
+      }
+      if (cvs.length > 0) {
+        setCanvases(cvs);
+        try { localStorage.setItem('sc_cache_canvases', JSON.stringify(cvs)); } catch {}
       }
 
-      // Dismiss full-screen blocking loader right away!
+      // Desactivar el cargador inmediatamente
       setLoading(false);
 
-      // Phase 2: Deferred load for other views (Projects, Tasks, Objects, Reminders, Files, Links, Habits)
-      Promise.all([
-        db.getReminders().catch(() => []),
-        db.getProjects().catch(() => []),
-        db.getTasks().catch(() => []),
-        db.getObjects().catch(() => []),
-        db.getLinks().catch(() => []),
-        db.getAttachments().catch(() => []),
-        db.getFileFolders().catch(() => []),
-        db.getTaskCategories().catch(() => []),
-        db.getCustomObjectTypes().catch(() => []),
-        db.getAreas().catch(() => []),
-        db.getHabits().catch(() => []),
-        db.getHabitLogs().catch(() => []),
-        db.getCanvases().catch(() => []),
-        db.getBookmarks().catch(() => []),
-        db.getBookmarkCollections().catch(() => [])
-      ]).then(([rems, p, t, o, l, a, flds, cats, cTypes, ars, hbs, hLogs, cvs, bms, bCols]) => {
-        setReminders(rems);
-        setProjects(p);
-        setTasks(t);
-        setObjects(o);
-        setLinks(l);
-        setAttachments(a);
-        setFolders(flds);
-        setCategories(cats);
-        setCustomObjectTypes(cTypes);
-        setAreas(ars);
-        setHabits(hbs);
-        setHabitLogs(hLogs);
-        setCanvases(cvs);
-        setBookmarks(bms);
-        setBookmarkCollections(bCols);
-      }).catch(err => {
-        console.warn('Background sync error (non-fatal):', err);
-      });
+      // Phase 2: Transmitir los demás módulos de manera concurrente e independiente
+      // para que ninguno bloquee a los demás
+      db.getProjects().then(p => { if (p?.length) { setProjects(p); try { localStorage.setItem('sc_cache_projects', JSON.stringify(p)); } catch {} } }).catch(() => {});
+      db.getTasks().then(t => { if (t?.length) { setTasks(t); try { localStorage.setItem('sc_cache_tasks', JSON.stringify(t)); } catch {} } }).catch(() => {});
+      db.getObjects().then(setObjects).catch(() => {});
+      db.getReminders().then(setReminders).catch(() => {});
+      db.getAttachments().then(setAttachments).catch(() => {});
+      db.getFileFolders().then(setFolders).catch(() => {});
+      db.getTaskCategories().then(setCategories).catch(() => {});
+      db.getCustomObjectTypes().then(setCustomObjectTypes).catch(() => {});
+      db.getAreas().then(setAreas).catch(() => {});
+      db.getHabits().then(setHabits).catch(() => {});
+      db.getHabitLogs().then(setHabitLogs).catch(() => {});
+      db.getBookmarks().then(setBookmarks).catch(() => {});
+      db.getBookmarkCollections().then(setBookmarkCollections).catch(() => {});
+      db.getLinks().then(setLinks).catch(() => {});
 
     } catch (err) {
       console.error('Error cargando datos de InsForge:', err);

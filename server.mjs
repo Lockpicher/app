@@ -258,7 +258,10 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, auth.status, { error: auth.error });
         }
 
-        const isSecure = req.socket?.encrypted === true || req.headers['x-forwarded-proto'] === 'https';
+        const isSecure = req.socket?.encrypted === true ||
+          req.headers['x-forwarded-proto'] === 'https' ||
+          req.headers['x-forwarded-ssl'] === 'on' ||
+          (req.headers['host'] || '').includes('kubbonet.com');
         let cookieStr = `sb_session=${body.token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=43200`;
         if (isSecure) {
           cookieStr += '; Secure';
@@ -274,7 +277,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === 'DELETE') {
-        const isSecure = req.socket?.encrypted === true || req.headers['x-forwarded-proto'] === 'https';
+        const isSecure = req.socket?.encrypted === true ||
+          req.headers['x-forwarded-proto'] === 'https' ||
+          req.headers['x-forwarded-ssl'] === 'on' ||
+          (req.headers['host'] || '').includes('kubbonet.com');
         let cookieStr = 'sb_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0';
         if (isSecure) {
           cookieStr += '; Secure';

@@ -11,6 +11,7 @@ const DEFAULT_WORKSPACE_EMAIL = 'usuario@segundocerebro.com';
 const DEFAULT_WORKSPACE_PASSWORD = 'SegundoCerebro2026!';
 const LOGGED_OUT_KEY = 'sc_user_explicitly_logged_out';
 const CACHED_USER_KEY = 'sc_current_user';
+const TOKEN_KEY = 'sc_access_token';
 
 /**
  * Normaliza el identificador ingresado por el usuario:
@@ -44,6 +45,35 @@ class AuthService {
   private isSessionChecked = false;
 
   constructor() {
+    // Restaurar inmediatamente el token de acceso guardado en el cliente InsForge
+    // para que las consultas a la base de datos no dependan de cookies de terceros
+    if (typeof window !== 'undefined' && localStorage.getItem(LOGGED_OUT_KEY) !== 'true') {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      if (savedToken) {
+        try {
+          insforge.setAccessToken(savedToken);
+        } catch (e) {
+          console.warn('Error restaurando access token en InsForge:', e);
+        }
+      }
+    }
+
+    // Escuchar cambios de token automáticos del SDK para mantener localStorage sincronizado
+    try {
+      (insforge.auth as any)?.onAuthStateChange?.((event: any) => {
+        if (event === 'signedOut') {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(TOKEN_KEY);
+          }
+          return;
+        }
+        const currentToken = (insforge.auth as any)?.tokenManager?.getAccessToken?.();
+        if (currentToken && typeof window !== 'undefined') {
+          localStorage.setItem(TOKEN_KEY, currentToken);
+        }
+      });
+    } catch {}
+
     this.initSession();
   }
 
@@ -89,7 +119,9 @@ class AuthService {
             name: (data.user.profile as any)?.name || data.user.email.split('@')[0],
             createdAt: data.user.createdAt
           };
+          const token = (insforge as any).tokenManager?.getAccessToken?.();
           if (typeof window !== 'undefined') {
+            if (token) localStorage.setItem(TOKEN_KEY, token);
             localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
           }
           this.isSessionChecked = true;
@@ -188,18 +220,25 @@ class AuthService {
         return { user: null, error: error || new Error('Usuario/contraseña incorrectos') };
       }
 
-      // Eliminar bandera de logout explícito y guardar en cache
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(LOGGED_OUT_KEY);
-        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
-      }
-
       this.currentUser = {
         id: data.user.id,
         email: data.user.email,
         name: (data.user.profile as any)?.name || data.user.email.split('@')[0],
         createdAt: data.user.createdAt
       };
+
+      // Guardar token y usuario en localStorage de forma síncrona
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOGGED_OUT_KEY);
+        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
+        if (data.accessToken) {
+          localStorage.setItem(TOKEN_KEY, data.accessToken);
+          try {
+            insforge.setAccessToken(data.accessToken);
+          } catch {}
+        }
+      }
+
       this.notifyListeners();
       return { user: this.currentUser, error: null };
     } catch (err: any) {
@@ -216,17 +255,25 @@ class AuthService {
         return { user: null, error: error || new Error('No se pudo registrar la cuenta') };
       }
 
-      // Eliminar bandera de logout explícito
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(LOGGED_OUT_KEY);
-      }
-
       this.currentUser = {
         id: data.user.id,
         email: data.user.email,
         name: displayName,
         createdAt: data.user.createdAt
       };
+
+      // Eliminar bandera de logout explícito y guardar token
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOGGED_OUT_KEY);
+        localStorage.setItem(CACHED_USER_KEY, JSON.stringify(this.currentUser));
+        if (data.accessToken) {
+          localStorage.setItem(TOKEN_KEY, data.accessToken);
+          try {
+            insforge.setAccessToken(data.accessToken);
+          } catch {}
+        }
+      }
+
       this.notifyListeners();
       return { user: this.currentUser, error: null };
     } catch (err: any) {
@@ -239,8 +286,12 @@ class AuthService {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_OUT_KEY, 'true');
         localStorage.removeItem(CACHED_USER_KEY);
+        localStorage.removeItem(TOKEN_KEY);
       }
       this.initPromise = null;
+      try {
+        insforge.setAccessToken(null);
+      } catch {}
       await insforge.auth.signOut();
     } catch (e) {
       console.warn('Error durante signOut:', e);

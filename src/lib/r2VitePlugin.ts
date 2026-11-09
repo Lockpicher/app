@@ -72,7 +72,10 @@ export async function r2Middleware(req: IncomingMessage, res: ServerResponse, ne
         return sendJson(res, auth.status, { error: auth.error });
       }
 
-      const isSecure = (req.socket as any)?.encrypted === true || req.headers['x-forwarded-proto'] === 'https';
+      const isSecure = (req.socket as any)?.encrypted === true ||
+        req.headers['x-forwarded-proto'] === 'https' ||
+        req.headers['x-forwarded-ssl'] === 'on' ||
+        (req.headers['host'] || '').includes('kubbonet.com');
       let cookieStr = `sb_session=${body.token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=43200`;
       if (isSecure) cookieStr += '; Secure';
       res.setHeader('Set-Cookie', cookieStr);
@@ -86,7 +89,10 @@ export async function r2Middleware(req: IncomingMessage, res: ServerResponse, ne
     }
 
     if (req.method === 'DELETE') {
-      const isSecure = (req.socket as any)?.encrypted === true || req.headers['x-forwarded-proto'] === 'https';
+      const isSecure = (req.socket as any)?.encrypted === true ||
+        req.headers['x-forwarded-proto'] === 'https' ||
+        req.headers['x-forwarded-ssl'] === 'on' ||
+        (req.headers['host'] || '').includes('kubbonet.com');
       let cookieStr = 'sb_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0';
       if (isSecure) cookieStr += '; Secure';
       res.setHeader('Set-Cookie', cookieStr);
