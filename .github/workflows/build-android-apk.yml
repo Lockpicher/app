@@ -41,13 +41,26 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Android Debug APK with Gradle
+        id: gradle_step
         run: |
+          set -o pipefail
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          echo "=== Generated APK Files ==="
-          ls -la app/build/outputs/apk/debug/
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../build.log
+
+      - name: Publish Gradle Output to Step Summary
+        if: always()
+        run: |
+          echo "### Gradle Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          if [ -f build.log ]; then
+            tail -n 100 build.log >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No build.log found" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload APK Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: konnect-android-apk
