@@ -1679,8 +1679,8 @@ export function App() {
         onOpenQuickSwitcher={() => setIsQuickSwitcherOpen(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
-        isMobileOpen={isMobileMenuOpen}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        isMobileOpen={false}
+        onCloseMobile={() => {}}
         objectTypes={[...DEFAULT_OBJECT_TYPES, ...customObjectTypes]}
         activeObjectType={activeObjectType}
         onSelectObjectType={(typeId) => {
