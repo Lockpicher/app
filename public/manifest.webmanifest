@@ -11,6 +11,15 @@
   "orientation": "any",
   "background_color": "#111827",
   "theme_color": "#111827",
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/icons/app-icon.svg",

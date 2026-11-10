@@ -516,6 +516,129 @@ export function App() {
     currentView
   ]);
 
+  // Handle shared content from Android Native Share / Web Share Target
+  const handleIncomingShare = async (shared: { text?: string; title?: string; url?: string }) => {
+    const rawText = (shared.text || shared.url || '').trim();
+    if (!rawText) return;
+
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = rawText.match(urlRegex);
+    const foundUrl = shared.url || (match ? match[0] : null);
+
+    let title = (shared.title || '').trim();
+    if (!title) {
+      if (foundUrl) {
+        try {
+          const u = new URL(foundUrl);
+          title = u.hostname.replace('www.', '') + (u.pathname.length > 1 ? u.pathname.slice(0, 30) : '');
+        } catch {
+          title = foundUrl.slice(0, 45);
+        }
+      } else {
+        title = rawText.slice(0, 45);
+      }
+    }
+
+    const targetNotebookId =
+      selectedNotebookId ||
+      notebooks.find(n => n.is_default)?.id ||
+      notebooks[0]?.id ||
+      null;
+
+    let contentHtml = '';
+    if (foundUrl) {
+      contentHtml = `<p><a href="${foundUrl}" target="_blank" rel="noopener noreferrer"><strong>${title}</strong></a></p>`;
+      if (rawText !== foundUrl) {
+        contentHtml += `<p>${rawText}</p>`;
+      }
+    } else {
+      contentHtml = `<p>${rawText.replace(/\n/g, '<br/>')}</p>`;
+    }
+
+    try {
+      const created = await db.createNote({
+        title: title || 'Enlace compartido',
+        content: contentHtml,
+        plain_text: rawText,
+        notebook_id: targetNotebookId,
+        note_type: 'text',
+        category: 'Inbox',
+        para_category: 'inbox',
+        tags: ['inbox', 'compartido']
+      });
+
+      // Also create a bookmark if it's a valid URL
+      if (foundUrl) {
+        try {
+          const b = await db.createBookmark({
+            title,
+            url: foundUrl,
+            description: rawText !== foundUrl ? rawText : undefined,
+            tags: ['inbox', 'compartido']
+          });
+          if (b) setBookmarks(prev => [b, ...prev]);
+        } catch {}
+      }
+
+      if (created) {
+        setNotes(prev => [created, ...prev]);
+        setCurrentView('para_inbox');
+        setIsEditingNote(false);
+        setSelectedNoteId(null);
+        alert(`📥 Guardado en Inbox:\n"${title}"\nListo para clasificar en Proyectos o Áreas.`);
+      }
+    } catch (err: any) {
+      console.error('Error guardando elemento compartido en Inbox:', err);
+    }
+  };
+
+  // Listener for Android Native Share & Web Share Target
+  useEffect(() => {
+    let lastHandled = '';
+
+    const processShare = (data: { text?: string; title?: string; url?: string }) => {
+      const key = `${data.title || ''}::${data.text || ''}::${data.url || ''}`;
+      if (!key || key === lastHandled) return;
+      lastHandled = key;
+      handleIncomingShare(data);
+    };
+
+    // 1. Check if window has pending share from Android MainActivity
+    if ((window as any).__PENDING_SHARED_CONTENT__) {
+      processShare((window as any).__PENDING_SHARED_CONTENT__);
+      (window as any).__PENDING_SHARED_CONTENT__ = null;
+    }
+
+    // 2. Listen to custom event emitted by Android MainActivity
+    const onAndroidShare = (e: any) => {
+      if (e.detail) {
+        processShare(e.detail);
+      }
+    };
+    window.addEventListener('appShareReceived', onAndroidShare);
+
+    // 3. Web Share Target (PWA query parameters: ?title=...&text=...&url=...)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sharedUrl = params.get('url');
+      const sharedText = params.get('text');
+      const sharedTitle = params.get('title');
+      if (sharedUrl || sharedText || sharedTitle) {
+        processShare({
+          title: sharedTitle || undefined,
+          text: sharedText || undefined,
+          url: sharedUrl || undefined
+        });
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener('appShareReceived', onAndroidShare);
+    };
+  }, [notebooks]);
+
   // Global Ctrl+K / Cmd+K listener & 'N' shortcut for new note
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -624,7 +747,8 @@ export function App() {
         audio_url: initialData?.audio_url || null,
         audio_duration: initialData?.audio_duration || null,
         audio_transcription: initialData?.audio_transcription || null,
-        thumbnail_url: initialData?.thumbnail_url || null
+        thumbnail_url: initialData?.thumbnail_url || null,
+        para_category: initialData?.para_category || 'inbox'
       });
 
       if (created) {
