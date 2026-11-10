@@ -45,30 +45,15 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Android Debug APK with Gradle
-        id: gradle_build
-        continue-on-error: true
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-
-      - name: Upload Gradle Build Log on Failure
-        if: steps.gradle_build.outcome != 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: android/gradle-build.log
-
-      - name: Inspect Gradle Failure
-        if: steps.gradle_build.outcome != 'success'
-        run: |
-          echo "=== LAST 200 LINES OF GRADLE LOG ==="
-          tail -n 200 android/gradle-build.log
-          exit 1
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "=== Generated APK Files ==="
+          ls -la app/build/outputs/apk/debug/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: konnect-android-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 14
