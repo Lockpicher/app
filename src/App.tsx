@@ -98,7 +98,9 @@ import {
   Plus,
   UploadCloud,
   Upload,
-  CheckCircle2
+  CheckCircle2,
+  Inbox,
+  X
 } from 'lucide-react';
 
 export function App() {
@@ -231,6 +233,8 @@ export function App() {
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
   const [isGlobalUploading, setIsGlobalUploading] = useState(false);
   const [globalUploadToast, setGlobalUploadToast] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState<{ title: string; url?: string } | null>(null);
+  const lastHandledShareRef = useRef<{ key: string; time: number }>({ key: '', time: 0 });
   const globalDragCounterRef = useRef(0);
 
   const toggleSidebarCollapse = () => {
@@ -521,18 +525,41 @@ export function App() {
     const rawText = (shared.text || shared.url || '').trim();
     if (!rawText) return;
 
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const match = rawText.match(urlRegex);
-    const foundUrl = shared.url || (match ? match[0] : null);
+    // Extract HTTP/HTTPS URL
+    const urlMatch = rawText.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/i);
+    let foundUrl = shared.url || (urlMatch ? urlMatch[0] : null);
+    if (foundUrl) {
+      // Strip trailing punctuation often appended by social apps
+      foundUrl = foundUrl.replace(/[.,;:!?)]+$/, '');
+    }
+
+    const surroundingText = foundUrl ? rawText.replace(foundUrl, '').trim() : '';
 
     let title = (shared.title || '').trim();
-    if (!title) {
+    if (!title || title === rawText || title === foundUrl) {
       if (foundUrl) {
         try {
           const u = new URL(foundUrl);
-          title = u.hostname.replace('www.', '') + (u.pathname.length > 1 ? u.pathname.slice(0, 30) : '');
+          const domain = u.hostname.replace(/^www\./, '');
+          if (domain.includes('instagram.com')) {
+            title = surroundingText ? `Instagram: ${surroundingText.slice(0, 45)}` : 'Publicación de Instagram';
+          } else if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+            title = surroundingText ? `YouTube: ${surroundingText.slice(0, 45)}` : 'Video de YouTube';
+          } else if (domain.includes('tiktok.com')) {
+            title = surroundingText ? `TikTok: ${surroundingText.slice(0, 45)}` : 'Video de TikTok';
+          } else if (domain.includes('twitter.com') || domain.includes('x.com')) {
+            title = surroundingText ? `X (Twitter): ${surroundingText.slice(0, 45)}` : 'Publicación de X';
+          } else if (domain.includes('facebook.com')) {
+            title = surroundingText ? `Facebook: ${surroundingText.slice(0, 45)}` : 'Publicación de Facebook';
+          } else if (domain.includes('reddit.com')) {
+            title = surroundingText ? `Reddit: ${surroundingText.slice(0, 45)}` : 'Publicación de Reddit';
+          } else if (domain.includes('linkedin.com')) {
+            title = surroundingText ? `LinkedIn: ${surroundingText.slice(0, 45)}` : 'Publicación de LinkedIn';
+          } else {
+            title = surroundingText ? `${domain}: ${surroundingText.slice(0, 40)}` : domain;
+          }
         } catch {
-          title = foundUrl.slice(0, 45);
+          title = surroundingText ? surroundingText.slice(0, 45) : 'Enlace compartido';
         }
       } else {
         title = rawText.slice(0, 45);
@@ -547,9 +574,9 @@ export function App() {
 
     let contentHtml = '';
     if (foundUrl) {
-      contentHtml = `<p><a href="${foundUrl}" target="_blank" rel="noopener noreferrer"><strong>${title}</strong></a></p>`;
-      if (rawText !== foundUrl) {
-        contentHtml += `<p>${rawText}</p>`;
+      contentHtml = `<p><a href="${foundUrl}" target="_blank" rel="noopener noreferrer"><strong>${title}</strong></a></p><p><a href="${foundUrl}">${foundUrl}</a></p>`;
+      if (surroundingText) {
+        contentHtml += `<blockquote style="border-left: 3px solid #3b82f6; padding-left: 8px; color: #9ca3af; margin: 8px 0;">${surroundingText.replace(/\n/g, '<br/>')}</blockquote>`;
       }
     } else {
       contentHtml = `<p>${rawText.replace(/\n/g, '<br/>')}</p>`;
@@ -564,7 +591,7 @@ export function App() {
         note_type: 'text',
         category: 'Inbox',
         para_category: 'inbox',
-        tags: ['inbox', 'compartido']
+        tags: ['inbox', 'compartido', 'redes-sociales']
       });
 
       // Also create a bookmark if it's a valid URL
@@ -573,11 +600,13 @@ export function App() {
           const b = await db.createBookmark({
             title,
             url: foundUrl,
-            description: rawText !== foundUrl ? rawText : undefined,
-            tags: ['inbox', 'compartido']
+            description: surroundingText || (rawText !== foundUrl ? rawText : undefined),
+            tags: ['inbox', 'compartido', 'redes-sociales']
           });
           if (b) setBookmarks(prev => [b, ...prev]);
-        } catch {}
+        } catch (bErr) {
+          console.error('Error guardando bookmark:', bErr);
+        }
       }
 
       if (created) {
@@ -585,7 +614,8 @@ export function App() {
         setCurrentView('para_inbox');
         setIsEditingNote(false);
         setSelectedNoteId(null);
-        alert(`📥 Guardado en Inbox:\n"${title}"\nListo para clasificar en Proyectos o Áreas.`);
+        setShareToast({ title: title || 'Enlace compartido', url: foundUrl || undefined });
+        setTimeout(() => setShareToast(null), 5000);
       }
     } catch (err: any) {
       console.error('Error guardando elemento compartido en Inbox:', err);
@@ -594,14 +624,19 @@ export function App() {
 
   // Listener for Android Native Share & Web Share Target
   useEffect(() => {
-    let lastHandled = '';
-
     const processShare = (data: { text?: string; title?: string; url?: string }) => {
-      const key = `${data.title || ''}::${data.text || ''}::${data.url || ''}`;
-      if (!key || key === lastHandled) return;
-      lastHandled = key;
+      const key = `${data.title || ''}::${data.text || ''}::${data.url || ''}`.trim();
+      const now = Date.now();
+      // Ignore identical triggers within 5 seconds to prevent multi-call Android delay duplicates
+      if (!key || (key === lastHandledShareRef.current.key && now - lastHandledShareRef.current.time < 5000)) {
+        return;
+      }
+      lastHandledShareRef.current = { key, time: now };
       handleIncomingShare(data);
     };
+
+    // Register global function for direct invocation from MainActivity
+    (window as any).__handleIncomingShare = processShare;
 
     // 1. Check if window has pending share from Android MainActivity
     if ((window as any).__PENDING_SHARED_CONTENT__) {
@@ -636,6 +671,9 @@ export function App() {
 
     return () => {
       window.removeEventListener('appShareReceived', onAndroidShare);
+      if ((window as any).__handleIncomingShare === processShare) {
+        delete (window as any).__handleIncomingShare;
+      }
     };
   }, [notebooks]);
 
@@ -2345,6 +2383,29 @@ export function App() {
             setIsEditingNote(true);
           }}
         />
+      )}
+
+      {/* Floating Notification Toast for Shared Links / Content */}
+      {shareToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[92vw] sm:max-w-md w-full bg-[#181824]/95 backdrop-blur-md border border-blue-500/50 shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 bg-blue-500/20 text-blue-400 rounded-xl flex-shrink-0">
+              <Inbox className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-white tracking-wide uppercase">Guardado en Inbox</h4>
+              <p className="text-xs text-gray-300 truncate font-medium mt-0.5">{shareToast.title}</p>
+              <p className="text-[10px] text-emerald-400 mt-0.5">Listo para clasificar en el sistema PARA</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShareToast(null)}
+            className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#252535] transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       {/* Evernote-style Floating AI Assistant Button */}
