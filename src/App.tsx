@@ -1162,45 +1162,123 @@ export function App() {
     data: { title: string; content?: string }
   ) => {
     try {
+      const rawContent = (data.content || '').trim();
+      const rawTitle = (data.title || '').trim();
+      const fullText = `${rawTitle} ${rawContent}`.trim();
+      if (!fullText) return;
+
       if (type === 'note') {
-        const targetNotebookId = selectedNotebookId || notebooks[0]?.id || null;
+        // Detect URL in title or content
+        const urlMatch = fullText.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/i);
+        let foundUrl = urlMatch ? urlMatch[0].replace(/[.,;:!?)]+$/, '') : null;
+
+        // Auto-extract title if not provided or if it's the exact URL
+        let finalTitle = rawTitle;
+        const surroundingText = foundUrl ? fullText.replace(foundUrl, '').trim() : fullText;
+
+        if (!finalTitle || (foundUrl && finalTitle === foundUrl)) {
+          if (foundUrl) {
+            try {
+              const u = new URL(foundUrl);
+              const domain = u.hostname.replace(/^www\./, '');
+              if (domain.includes('instagram.com')) finalTitle = surroundingText ? `Instagram: ${surroundingText.slice(0, 45)}` : 'Publicación de Instagram';
+              else if (domain.includes('youtube.com') || domain.includes('youtu.be')) finalTitle = surroundingText ? `YouTube: ${surroundingText.slice(0, 45)}` : 'Video de YouTube';
+              else if (domain.includes('tiktok.com')) finalTitle = surroundingText ? `TikTok: ${surroundingText.slice(0, 45)}` : 'Video de TikTok';
+              else if (domain.includes('twitter.com') || domain.includes('x.com')) finalTitle = surroundingText ? `X (Twitter): ${surroundingText.slice(0, 45)}` : 'Publicación de X';
+              else if (domain.includes('facebook.com')) finalTitle = surroundingText ? `Facebook: ${surroundingText.slice(0, 45)}` : 'Publicación de Facebook';
+              else if (domain.includes('reddit.com')) finalTitle = surroundingText ? `Reddit: ${surroundingText.slice(0, 45)}` : 'Publicación de Reddit';
+              else if (domain.includes('github.com')) finalTitle = surroundingText ? `GitHub: ${surroundingText.slice(0, 45)}` : `GitHub: ${u.pathname.slice(1, 35)}`;
+              else finalTitle = surroundingText ? `${domain}: ${surroundingText.slice(0, 40)}` : domain;
+            } catch {
+              finalTitle = surroundingText ? surroundingText.slice(0, 45) : 'Enlace web';
+            }
+          } else if (rawContent) {
+            const firstLine = rawContent.split('\n')[0].trim();
+            finalTitle = firstLine.length > 50 ? `${firstLine.slice(0, 47)}...` : firstLine;
+          } else {
+            finalTitle = 'Nueva Nota';
+          }
+        }
+
+        let contentHtml = '';
+        if (foundUrl) {
+          contentHtml = `<p><a href="${foundUrl}" target="_blank" rel="noopener noreferrer"><strong>${finalTitle}</strong></a></p><p><a href="${foundUrl}">${foundUrl}</a></p>`;
+          if (surroundingText && surroundingText !== finalTitle) {
+            contentHtml += `<blockquote style="border-left: 3px solid #3b82f6; padding-left: 8px; color: #9ca3af; margin: 8px 0;">${surroundingText.replace(/\n/g, '<br/>')}</blockquote>`;
+          }
+        } else if (rawContent) {
+          contentHtml = `<p>${rawContent.replace(/\n/g, '<br/>')}</p>`;
+        }
+
+        const targetNotebookId =
+          selectedNotebookId ||
+          notebooks.find(n => n.is_default)?.id ||
+          notebooks[0]?.id ||
+          null;
+
         const created = await db.createNote({
-          title: data.title,
-          content: data.content ? `<p>${data.content}</p>` : '',
-          plain_text: data.content || '',
+          title: finalTitle,
+          content: contentHtml,
+          plain_text: rawContent || rawTitle,
           notebook_id: targetNotebookId,
-          para_category: 'inbox'
+          note_type: 'text',
+          category: 'Inbox',
+          para_category: 'inbox',
+          tags: foundUrl ? ['inbox', 'compartido', 'enlace'] : ['inbox']
         });
-        if (created) setNotes(prev => [created, ...prev]);
+
+        // Also create a bookmark if it's a URL
+        if (foundUrl) {
+          try {
+            const b = await db.createBookmark({
+              title: finalTitle,
+              url: foundUrl,
+              description: surroundingText || (rawContent !== foundUrl ? rawContent : undefined),
+              tags: ['inbox', 'compartido']
+            });
+            if (b) setBookmarks(prev => [b, ...prev]);
+          } catch {}
+        }
+
+        if (created) {
+          setNotes(prev => [created, ...prev]);
+          setShareToast({ title: finalTitle, url: foundUrl || undefined });
+          setTimeout(() => setShareToast(null), 4000);
+        }
       } else if (type === 'task') {
+        const finalTitle = rawTitle || (rawContent ? rawContent.split('\n')[0].slice(0, 50) : 'Nueva Tarea');
         const created = await db.createTask({
-          title: data.title,
+          title: finalTitle,
+          description: rawContent && rawContent !== finalTitle ? rawContent : undefined,
           status: 'todo',
           priority: 'medium',
           para_category: 'inbox'
         });
         if (created) setTasks(prev => [created, ...prev]);
       } else if (type === 'project') {
+        const finalTitle = rawTitle || (rawContent ? rawContent.split('\n')[0].slice(0, 50) : 'Nuevo Proyecto');
         const created = await db.createProject({
-          title: data.title,
-          description: data.content || undefined,
+          title: finalTitle,
+          description: rawContent || undefined,
           status: 'planning',
           para_category: 'project'
         });
         if (created) setProjects(prev => [created, ...prev]);
       } else if (type === 'person') {
+        const finalTitle = rawTitle || (rawContent ? rawContent.split('\n')[0].slice(0, 50) : 'Contacto');
         const created = await db.createObject({
-          title: data.title,
-          description: data.content || undefined,
+          title: finalTitle,
+          description: rawContent || undefined,
           object_type: 'person',
           properties: {},
           para_category: 'resource'
         });
         if (created) setObjects(prev => [created, ...prev]);
       } else if (type === 'resource') {
+        const finalTitle = rawTitle || (rawContent ? rawContent.split('\n')[0].slice(0, 50) : 'Recurso');
         const created = await db.createObject({
-          title: data.title,
-          description: data.content || undefined,
+          title: finalTitle,
+          description: rawContent || undefined,
           object_type: 'resource',
           properties: {},
           para_category: 'resource'

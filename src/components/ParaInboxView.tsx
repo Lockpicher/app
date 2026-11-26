@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Inbox, 
   Plus, 
@@ -17,7 +17,9 @@ import {
   Layers,
   Archive,
   BookOpen,
-  Trash2
+  Trash2,
+  Clipboard,
+  Globe
 } from 'lucide-react';
 import { 
   AppNote, 
@@ -56,9 +58,27 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
   onDeleteTask
 }) => {
   // Capture input state
+  const [captureContent, setCaptureContent] = useState('');
   const [captureTitle, setCaptureTitle] = useState('');
   const [captureType, setCaptureType] = useState<'note' | 'task' | 'project' | 'person' | 'resource'>('note');
   const [isCapturing, setIsCapturing] = useState(false);
+
+  // Detect if user pasted or typed a URL in either field
+  const isUrlDetected = useMemo(() => {
+    const text = `${captureContent} ${captureTitle}`.trim();
+    return /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/i.test(text);
+  }, [captureContent, captureTitle]);
+
+  const handlePasteClipboard = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          setCaptureContent(prev => prev ? `${prev} ${text}` : text);
+        }
+      }
+    } catch {}
+  };
 
   // Classification modal / inline drawer
   const [classifyingItem, setClassifyingItem] = useState<{
@@ -79,11 +99,17 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
 
   const handleCaptureSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!captureTitle.trim()) return;
+    const content = captureContent.trim();
+    const title = captureTitle.trim();
+    if (!content && !title) return;
 
     try {
       setIsCapturing(true);
-      await onQuickCreate(captureType, { title: captureTitle.trim() });
+      await onQuickCreate(captureType, {
+        title: title || content,
+        content: content && content !== title ? content : undefined
+      });
+      setCaptureContent('');
       setCaptureTitle('');
     } catch (err: any) {
       alert('Error capturando elemento: ' + err.message);
@@ -132,41 +158,72 @@ export const ParaInboxView: React.FC<ParaInboxViewProps> = ({
       </div>
 
       {/* Universal Quick Capture Bar */}
-      <div className="p-4 sm:p-6 bg-[#13131a] border-b border-[#232332]">
-        <form onSubmit={handleCaptureSubmit} className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-2.5">
-          <div className="flex items-center bg-[#191924] border border-[#2b2b3d] rounded-xl px-3 py-1 flex-shrink-0">
-            <select
-              value={captureType}
-              onChange={e => setCaptureType(e.target.value as any)}
-              className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer py-1.5"
+      <div className="p-4 sm:p-5 bg-[#13131a] border-b border-[#232332]">
+        <form onSubmit={handleCaptureSubmit} className="max-w-4xl mx-auto space-y-2.5">
+          {/* Fila Principal: Tipo + Contenido/Enlace + Botón Pegar + Botón Guardar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex items-center bg-[#191924] border border-[#2b2b3d] rounded-xl px-2.5 py-1 flex-shrink-0">
+              <select
+                value={captureType}
+                onChange={e => setCaptureType(e.target.value as any)}
+                className="bg-transparent text-xs text-gray-200 outline-none cursor-pointer py-1.5"
+              >
+                <option value="note">📝 Nota / Enlace</option>
+                <option value="task">✅ Tarea Pendiente</option>
+                <option value="resource">📚 Recurso / Enlace</option>
+                <option value="project">🚀 Nuevo Proyecto</option>
+                <option value="person">👤 Contacto / Persona</option>
+              </select>
+            </div>
+
+            <div className="flex-1 relative flex items-center">
+              <input
+                type="text"
+                placeholder={isUrlDetected ? 'Enlace web detectado...' : 'Pega un enlace web o escribe tu nota...'}
+                value={captureContent}
+                onChange={e => setCaptureContent(e.target.value)}
+                className="w-full pl-3.5 pr-20 py-2.5 bg-[#191924] border border-[#2b2b3d] rounded-xl text-xs sm:text-sm text-white placeholder-gray-500 outline-none focus:border-amber-500 transition"
+              />
+              <button
+                type="button"
+                onClick={handlePasteClipboard}
+                className="absolute right-1.5 px-2.5 py-1 rounded-lg bg-[#222234] hover:bg-[#2c2c42] active:bg-[#34344e] text-gray-300 hover:text-white text-[11px] font-medium border border-[#33334d] flex items-center gap-1 transition"
+                title="Pegar enlace o texto desde el portapapeles"
+              >
+                <Clipboard className="w-3.5 h-3.5 text-amber-400" />
+                <span>Pegar</span>
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isCapturing || (!captureContent.trim() && !captureTitle.trim())}
+              className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white transition shadow-md shadow-amber-950/40 flex-shrink-0"
             >
-              <option value="note">📝 Nota Rápida</option>
-              <option value="task">✅ Tarea Pendiente</option>
-              <option value="person">👤 Persona / Contacto</option>
-              <option value="resource">📚 Recurso / Enlace</option>
-              <option value="project">🚀 Nuevo Proyecto</option>
-            </select>
+              <Plus className="w-4 h-4" />
+              <span>{isCapturing ? 'Guardando...' : 'Capturar a Inbox'}</span>
+            </button>
           </div>
 
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              required
-              placeholder="¿Qué tienes en mente? Escribe y presiona Enter para capturar..."
-              value={captureTitle}
-              onChange={e => setCaptureTitle(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[#191924] border border-[#2b2b3d] rounded-xl text-xs sm:text-sm text-white placeholder-gray-500 outline-none focus:border-amber-500 transition"
-            />
-          </div>
+          {/* Fila Secundaria: Campo de TÍTULO OPCIONAL + Indicador de Enlace */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Título (opcional — si lo dejas vacío se asignará automáticamente)"
+                value={captureTitle}
+                onChange={e => setCaptureTitle(e.target.value)}
+                className="w-full px-3.5 py-2 bg-[#161622] border border-[#262638] focus:border-amber-500/70 rounded-xl text-xs text-gray-200 placeholder-gray-500 outline-none transition"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={isCapturing || !captureTitle.trim()}
-            className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white transition shadow-md shadow-amber-950/40 flex-shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{isCapturing ? 'Guardando...' : 'Capturar'}</span>
-          </button>
+            {isUrlDetected && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/60 border border-blue-800/40 text-blue-300 text-[11px] font-medium flex-shrink-0 animate-in fade-in duration-200">
+                <Globe className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                <span>Enlace web • Se guardará en Inbox y Marcadores</span>
+              </div>
+            )}
+          </div>
         </form>
       </div>
 
